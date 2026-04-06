@@ -3,6 +3,5 @@ client/node_modules
 client/dist
 .env
 uploads
-drizzle
 *.md
 .git
