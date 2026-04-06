@@ -9,8 +9,12 @@ const transport = nodemailer.createTransport({
   },
 });
 
-const FROM = process.env.FROM_EMAIL || '"Reviewer" <noreply@robinsonmarchtechnologies.com>';
-const APP_URL = process.env.APP_URL || "http://localhost:5173";
+const FROM = process.env.FROM_EMAIL || process.env.EMAIL_USER || "noreply@example.com";
+const APP_URL = (process.env.APP_URL || "").replace(/\/$/, "");
+
+if (!APP_URL) {
+  console.warn("WARNING: APP_URL is not set — email links will be broken.");
+}
 
 function send(to: string, subject: string, html: string) {
   return transport.sendMail({ from: FROM, to, subject, html });
