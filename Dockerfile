@@ -18,6 +18,7 @@ WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY src/ ./src/
+COPY drizzle/ ./drizzle/
 COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 COPY --from=client-build /app/client/dist ./client/dist
