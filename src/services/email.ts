@@ -1,11 +1,11 @@
 import nodemailer from "nodemailer";
 
 const transport = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.zeptomail.com",
-  port: Number(process.env.SMTP_PORT || 587),
+  host: process.env.EMAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com",
+  port: Number(process.env.EMAIL_PORT || process.env.SMTP_PORT || 587),
   auth: {
-    user: process.env.SMTP_USER || "emailapikey",
-    pass: process.env.SMTP_PASS,
+    user: process.env.EMAIL_USER || process.env.SMTP_USER,
+    pass: process.env.EMAIL_PASS || process.env.SMTP_PASS,
   },
 });
 
