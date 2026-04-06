@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Toaster } from "./Toast";
 
 type TeacherShellProps = {
   section: "dashboard" | "assignments" | "submissions" | "students";
@@ -157,6 +158,7 @@ export default function TeacherShell({
 
         <main className="main-content">{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }
