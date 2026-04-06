@@ -10,7 +10,7 @@ RUN npm run build
 FROM oven/bun:1 AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile --production
+RUN bun install --frozen-lockfile
 
 # Stage 3: Runtime
 FROM oven/bun:1 AS runner
