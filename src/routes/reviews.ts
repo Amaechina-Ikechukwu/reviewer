@@ -1,0 +1,173 @@
+import { eq } from "drizzle-orm";
+import { db } from "../db/connection";
+import { assignments, reviews, submissions } from "../db/schema";
+import type { AuthenticatedRequest } from "../middleware/auth";
+import { getAvailableProviders, reviewCode } from "../services/ai/reviewer";
+import { readCodeFiles } from "../services/code-reader";
+import { json } from "../utils/json";
+
+export const reviewRoutes = {
+  async providers() {
+    return json(getAvailableProviders());
+  },
+
+  async run(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "teacher") {
+      return json({ error: "Only teachers can trigger reviews." }, 403);
+    }
+
+    const body = await request.json().catch(() => ({})) as {
+      provider?: string;
+    };
+
+    const [submission] = await db.select().from(submissions).where(eq(submissions.id, params.submissionId)).limit(1);
+    if (!submission) {
+      return json({ error: "Submission not found." }, 404);
+    }
+
+    const [assignment] = await db.select().from(assignments).where(eq(assignments.id, submission.assignmentId)).limit(1);
+    if (!assignment) {
+      return json({ error: "Assignment not found." }, 404);
+    }
+
+    if (!submission.filePath) {
+      return json({ error: "Submission files are missing for this review." }, 400);
+    }
+
+    const codeFiles = await readCodeFiles(submission.filePath);
+    if (codeFiles.length === 0) {
+      return json({ error: "No readable code files were found in this submission." }, 400);
+    }
+
+    let [review] = await db.select().from(reviews).where(eq(reviews.submissionId, submission.id)).limit(1);
+
+    if (!review) {
+      [review] = await db
+        .insert(reviews)
+        .values({
+          submissionId: submission.id,
+          status: "reviewing",
+          maxScore: assignment.maxScore,
+        })
+        .returning();
+    } else {
+      await db
+        .update(reviews)
+        .set({
+          status: "reviewing",
+          rawAiResponse: null,
+        })
+        .where(eq(reviews.id, review.id));
+    }
+
+    const reviewInput = {
+      assignmentTitle: assignment.title,
+      assignmentDescription: assignment.description,
+      rubric: assignment.rubric,
+      maxScore: assignment.maxScore,
+      assignmentSourceType: assignment.sourceType,
+      assignmentSourceMarkdown: assignment.sourceMarkdown,
+      assignmentSourceUrl: assignment.sourceUrl,
+      codeFiles,
+    };
+
+    try {
+      const result = await reviewCode(reviewInput);
+
+      await db
+        .update(reviews)
+        .set({
+          status: "completed",
+          aiScore: result.totalScore,
+          maxScore: assignment.maxScore,
+          feedback: {
+            ...result.feedback,
+            provider: result.provider,
+            model: result.model,
+            durationMs: result.durationMs,
+          },
+          rawAiResponse: result.rawResponse,
+          reviewedAt: new Date(),
+        })
+        .where(eq(reviews.id, review.id));
+
+      const [updated] = await db.select().from(reviews).where(eq(reviews.submissionId, submission.id)).limit(1);
+      return json(updated);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "AI review failed.";
+
+      await db
+        .update(reviews)
+        .set({
+          status: "failed",
+          rawAiResponse: message,
+        })
+        .where(eq(reviews.id, review.id));
+
+      return json({ error: "AI review failed.", details: message }, 500);
+    }
+  },
+
+  async get(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+
+    const [review] = await db.select().from(reviews).where(eq(reviews.submissionId, params.submissionId)).limit(1);
+
+    if (!review) {
+      return json({ error: "Review not found." }, 404);
+    }
+
+    if (user.role === "student") {
+      const [submission] = await db
+        .select()
+        .from(submissions)
+        .where(eq(submissions.id, params.submissionId))
+        .limit(1);
+
+      if (!submission || submission.studentId !== user.userId) {
+        return json({ error: "Forbidden" }, 403);
+      }
+    }
+
+    return json(review);
+  },
+
+  async override(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "teacher") {
+      return json({ error: "Only teachers can override scores." }, 403);
+    }
+
+    const body = await request.json().catch(() => ({})) as { score?: number };
+    const score = Number(body.score);
+
+    if (!Number.isFinite(score) || score < 0) {
+      return json({ error: "Please provide a valid override score." }, 400);
+    }
+
+    const [existingReview] = await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.submissionId, params.submissionId))
+      .limit(1);
+
+    if (!existingReview) {
+      return json({ error: "Review not found." }, 404);
+    }
+
+    if (existingReview.maxScore != null && score > existingReview.maxScore) {
+      return json({ error: "Override score cannot exceed the assignment max score." }, 400);
+    }
+
+    const [review] = await db
+      .update(reviews)
+      .set({
+        teacherOverrideScore: Math.round(score),
+      })
+      .where(eq(reviews.submissionId, params.submissionId))
+      .returning();
+
+    return json(review);
+  },
+};

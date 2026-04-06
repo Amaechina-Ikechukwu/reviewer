@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+uploads/*
+!uploads/.gitkeep
+client/node_modules
+client/dist
+*.log
+ai-assignment-reviewer-guide
+multi-provider-ai-review
