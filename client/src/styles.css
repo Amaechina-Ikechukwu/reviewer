@@ -902,6 +902,26 @@ select {
   padding: 14px 16px;
 }
 
+.submit-page {
+  max-width: 560px;
+}
+
+.input-plain {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.97rem;
+  background: var(--bg-soft);
+  color: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.input-plain:focus {
+  border-color: var(--brand);
+}
+
 .history-list {
   display: grid;
   gap: 14px;
@@ -1480,5 +1500,9 @@ select {
   .main-content,
   .student-content {
     padding: 16px;
+  }
+
+  .student-layout-grid > aside.student-panel {
+    display: none;
   }
 }

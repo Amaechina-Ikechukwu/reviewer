@@ -37,7 +37,7 @@ export default function StudentResults() {
       <div className="page stack">
         <div>
           <h1 className="student-page-title">Past Submissions</h1>
-          <p className="muted" style={{ margin: 0, fontSize: "1rem" }}>See completed reviews, Gemini feedback, and released grades.</p>
+          <p className="muted" style={{ margin: 0, fontSize: "1rem" }}>See your completed reviews and grades.</p>
         </div>
 
         <div className="history-list">
@@ -53,7 +53,7 @@ export default function StudentResults() {
                 <div>
                   <div style={{ fontWeight: 800, fontSize: "1rem" }}>{row.assignmentTitle || "Assignment"}</div>
                   <div className="muted">
-                    Submitted {new Date(row.submission.submittedAt).toLocaleString()} • {review?.feedback?.provider || review?.status || "Awaiting review"}
+                    Submitted {new Date(row.submission.submittedAt).toLocaleString()}
                   </div>
                   {review?.feedback?.summary && (
                     <div className="muted" style={{ marginTop: 6 }}>{review.feedback.summary}</div>
