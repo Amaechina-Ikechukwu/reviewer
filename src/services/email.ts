@@ -1,15 +1,15 @@
 import nodemailer from "nodemailer";
 
 const transport = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com",
-  port: Number(process.env.EMAIL_PORT || process.env.SMTP_PORT || 587),
+  host: process.env.SMTP_HOST || process.env.EMAIL_HOST || "smtp.gmail.com",
+  port: Number(process.env.SMTP_PORT || process.env.EMAIL_PORT || 587),
   auth: {
-    user: process.env.EMAIL_USER || process.env.SMTP_USER,
-    pass: process.env.EMAIL_PASS || process.env.SMTP_PASS,
+    user: process.env.SMTP_USER || process.env.EMAIL_USER,
+    pass: process.env.SMTP_PASS || process.env.EMAIL_PASS,
   },
 });
 
-const FROM = process.env.FROM_EMAIL || process.env.EMAIL_USER || "noreply@example.com";
+const FROM = process.env.FROM_EMAIL || process.env.SMTP_USER || "noreply@example.com";
 const APP_URL = (process.env.APP_URL || "").replace(/\/$/, "");
 
 if (!APP_URL) {
