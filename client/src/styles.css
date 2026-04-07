@@ -1426,26 +1426,59 @@ select {
 }
 
 @media (max-width: 840px) {
-  .topbar,
-  .student-topbar {
-    padding: 16px;
-    height: auto;
-    display: grid;
+  .main-shell,
+  .student-shell {
+    grid-template-rows: auto 1fr;
   }
 
-  .topbar-left,
-  .topbar-actions,
-  .topbar-nav {
-    flex-wrap: wrap;
+  .topbar,
+  .student-topbar {
+    position: relative;
+    padding: 12px 56px 0 16px;
+    height: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .topbar-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    gap: 0;
+  }
+
+  .topbar-actions {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .search-pill {
-    min-width: 0;
+    display: none;
+  }
+
+  .topbar-nav {
+    display: flex;
     width: 100%;
+    border-top: 1px solid var(--border);
+    margin-top: 10px;
+    gap: 0;
+  }
+
+  .topbar-link {
+    flex: 1;
+    text-align: center;
+    padding: 10px 0 8px;
+    font-size: 0.95rem;
   }
 
   .main-content,
   .student-content {
-    padding: 18px;
+    padding: 16px;
   }
 }

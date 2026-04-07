@@ -41,7 +41,7 @@ export default function StudentShell({
     <div className="student-shell">
       <header className="student-topbar">
         <div className="topbar-left">
-          <Link className="topbar-logo" to="/student">ReviewAI</Link>
+          <Link className="topbar-logo" to="/student">Reviewer</Link>
           <nav className="topbar-nav">
             {topLinks.map((link) => (
               <Link key={link.key} className={`topbar-link ${section === link.key ? "active" : ""}`} to={link.to}>
