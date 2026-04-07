@@ -283,6 +283,53 @@ export const submissionRoutes = {
     return json({ files });
   },
 
+  async createForStudent(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "teacher") {
+      return json({ error: "Only teachers can submit on behalf of students." }, 403);
+    }
+
+    const body = await request.json() as { studentId?: string; assignmentId?: string; githubUrl?: string };
+    const { studentId, assignmentId } = body;
+    const githubUrl = body.githubUrl?.trim();
+
+    if (!studentId || !assignmentId || !githubUrl) {
+      return json({ error: "studentId, assignmentId, and githubUrl are required." }, 400);
+    }
+
+    const [student] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, studentId)).limit(1);
+    if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
+
+    const assignment = await getAssignment(assignmentId);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+    if (!assignment.allowGithub) return json({ error: "This assignment does not allow GitHub submissions." }, 400);
+
+    const normalizedUrl = normalizeGithubUrl(githubUrl);
+
+    const [previousSubmission] = await db
+      .select()
+      .from(submissions)
+      .where(and(eq(submissions.assignmentId, assignmentId), eq(submissions.studentId, studentId)))
+      .limit(1);
+
+    if (previousSubmission) {
+      await removeSubmissionFiles(previousSubmission.filePath);
+      await db.delete(reviews).where(eq(reviews.submissionId, previousSubmission.id));
+      await db.delete(submissions).where(eq(submissions.id, previousSubmission.id));
+    }
+
+    const submissionId = randomUUID();
+    const destDir = join(UPLOAD_DIR, submissionId);
+    await cloneGithubRepo(normalizedUrl, destDir);
+
+    const [submission] = await db
+      .insert(submissions)
+      .values({ id: submissionId, assignmentId: assignment.id, studentId, submissionType: "github", githubUrl: normalizedUrl, filePath: destDir, isLate: false })
+      .returning();
+
+    return json(submission, 201);
+  },
+
   async import(request: Request) {
     const user = (request as AuthenticatedRequest).user;
     if (user.role !== "teacher") {

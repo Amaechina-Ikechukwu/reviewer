@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import CreateAssignment from "./pages/CreateAssignment";
 import ImportSubmissions from "./pages/ImportSubmissions";
+import JoinClass from "./pages/JoinClass";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import SetupAccount from "./pages/SetupAccount";
@@ -51,6 +52,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/join/:code" element={<JoinClass />} />
       <Route path="/setup/:token" element={<SetupAccount />} />
       <Route path="/reset/:token" element={<ResetPassword />} />
       <Route path="/" element={<HomeRedirect />} />

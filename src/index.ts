@@ -10,6 +10,7 @@ import { authRoutes } from "./routes/auth";
 import { reviewRoutes } from "./routes/reviews";
 import { studentRoutes } from "./routes/students";
 import { submissionRoutes } from "./routes/submissions";
+import { teacherRoutes } from "./routes/teachers";
 
 type RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 
@@ -94,6 +95,7 @@ addRoute("GET", "/api/assignments", assignmentRoutes.list);
 addRoute("GET", "/api/assignments/:id", assignmentRoutes.get);
 
 addRoute("POST", "/api/submissions", submissionRoutes.create);
+addRoute("POST", "/api/submissions/for-student", submissionRoutes.createForStudent);
 addRoute("POST", "/api/submissions/import", submissionRoutes.import);
 addRoute("GET", "/api/submissions", submissionRoutes.list);
 addRoute("GET", "/api/submissions/:id", submissionRoutes.get);
@@ -102,6 +104,10 @@ addRoute("GET", "/api/submissions/:id/files", submissionRoutes.getFiles);
 addRoute("GET", "/api/students", studentRoutes.list);
 addRoute("POST", "/api/students", studentRoutes.create);
 addRoute("POST", "/api/students/reset-password", studentRoutes.resetPassword);
+
+addRoute("GET", "/api/teachers/join-link", teacherRoutes.getJoinLink);
+addRoute("GET", "/api/teachers/join/:code", teacherRoutes.getTeacherByCode, false);
+addRoute("POST", "/api/teachers/join/:code", teacherRoutes.joinViaLink, false);
 
 addRoute("POST", "/api/reviews/:submissionId/run", reviewRoutes.run);
 addRoute("GET", "/api/reviews/:submissionId", reviewRoutes.get);

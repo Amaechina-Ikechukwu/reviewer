@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { api } from "../api";
-import type { StudentRecord } from "../types";
+import type { Assignment, StudentRecord } from "../types";
 
 type StudentWithPending = StudentRecord & { pending?: boolean };
 
@@ -28,12 +28,23 @@ function getBadgePalette(name: string) {
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<StudentWithPending[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [confirmReset, setConfirmReset] = useState<StudentWithPending | null>(null);
+  const [submitFor, setSubmitFor] = useState<StudentWithPending | null>(null);
+
+  // Add student form
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
+  const [addError, setAddError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Submit for student form
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
+  const [submitError, setSubmitError] = useState("");
+  const [submittingFor, setSubmittingFor] = useState(false);
+
   const [resetting, setResetting] = useState(false);
 
   const sortedStudents = useMemo<StudentWithPending[]>(
@@ -43,23 +54,19 @@ export default function StudentsPage() {
 
   useEffect(() => {
     api<StudentWithPending[]>("/students").then(setStudents).catch(() => setStudents([]));
+    api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
   }, []);
 
-  function openModal() {
+  function openAddModal() {
     setFullName("");
     setEmail("");
-    setError("");
+    setAddError("");
     setShowModal(true);
-  }
-
-  function closeModal() {
-    setShowModal(false);
-    setError("");
   }
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    setError("");
+    setAddError("");
     setSubmitting(true);
     try {
       const response = await api<{ student: StudentWithPending }>("/students", {
@@ -67,12 +74,22 @@ export default function StudentsPage() {
         body: JSON.stringify({ fullName, email }),
       });
       setStudents((prev) => [...prev, response.student]);
-      closeModal();
+      setShowModal(false);
       toast().success(`Invite sent to ${email}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create student");
+      setAddError(err instanceof Error ? err.message : "Failed to create student");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleCopyJoinLink() {
+    try {
+      const { url } = await api<{ url: string }>("/teachers/join-link");
+      await navigator.clipboard.writeText(url);
+      toast().success("Join link copied to clipboard");
+    } catch {
+      toast().error("Failed to get join link");
     }
   }
 
@@ -93,23 +110,59 @@ export default function StudentsPage() {
     }
   }
 
+  function openSubmitFor(student: StudentWithPending) {
+    setSubmitFor(student);
+    setSelectedAssignmentId(assignments[0]?.id || "");
+    setGithubUrl("");
+    setSubmitError("");
+  }
+
+  async function handleSubmitForStudent(event: FormEvent) {
+    event.preventDefault();
+    if (!submitFor) return;
+    setSubmitError("");
+    setSubmittingFor(true);
+    try {
+      await api("/submissions/for-student", {
+        method: "POST",
+        body: JSON.stringify({ studentId: submitFor.id, assignmentId: selectedAssignmentId, githubUrl }),
+      });
+      toast().success(`Submission created for ${submitFor.fullName}`);
+      setSubmitFor(null);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Submission failed");
+    } finally {
+      setSubmittingFor(false);
+    }
+  }
+
   return (
     <TeacherShell section="students">
       <div className="page stack">
         <div className="section-header">
           <h1 className="page-title">Students</h1>
-          <button
-            className="button secondary"
-            style={{ padding: "8px 16px", fontSize: "0.9rem" }}
-            type="button"
-            onClick={openModal}
-          >
-            + Add student
-          </button>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              className="button secondary"
+              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+              type="button"
+              onClick={handleCopyJoinLink}
+            >
+              Copy join link
+            </button>
+            <button
+              className="button secondary"
+              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+              type="button"
+              onClick={openAddModal}
+            >
+              + Add student
+            </button>
+          </div>
         </div>
 
         <div className="card table-card">
-          <div className="table-head" style={{ gridTemplateColumns: "1.4fr 1fr 0.7fr 0.7fr" }}>
+          <div className="table-head" style={{ gridTemplateColumns: "1.4fr 1fr 0.7fr 1fr" }}>
             <span>Student</span>
             <span>Email</span>
             <span>Joined</span>
@@ -119,7 +172,7 @@ export default function StudentsPage() {
           {sortedStudents.map((student) => {
             const palette = getBadgePalette(student.fullName);
             return (
-              <div className="table-row" key={student.id} style={{ gridTemplateColumns: "1.4fr 1fr 0.7fr 0.7fr" }}>
+              <div className="table-row" key={student.id} style={{ gridTemplateColumns: "1.4fr 1fr 0.7fr 1fr" }}>
                 <div className="name-cell">
                   <div className="initials-badge" style={{ background: palette.bg, color: palette.color }}>
                     {student.fullName.slice(0, 2).toUpperCase()}
@@ -139,7 +192,14 @@ export default function StudentsPage() {
                 <div className="muted" style={{ fontSize: "0.88rem" }}>
                   {new Date(student.createdAt).toLocaleDateString()}
                 </div>
-                <div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    className="open-button"
+                    type="button"
+                    onClick={() => openSubmitFor(student)}
+                  >
+                    Open submission
+                  </button>
                   <button
                     className="open-button"
                     type="button"
@@ -162,11 +222,11 @@ export default function StudentsPage() {
 
       {/* Add student modal */}
       {showModal && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && closeModal()}>
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal">
             <div className="modal-header">
               <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Add student</h2>
-              <button className="modal-close" type="button" onClick={closeModal}>✕</button>
+              <button className="modal-close" type="button" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <form className="stack" style={{ gap: 14 }} onSubmit={handleCreate}>
               <label className="field">
@@ -180,11 +240,51 @@ export default function StudentsPage() {
               <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
                 An invite email will be sent so the student can set their own password.
               </p>
-              {error && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{error}</div>}
+              {addError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{addError}</div>}
               <div className="confirm-actions">
-                <button className="button subtle" type="button" onClick={closeModal}>Cancel</button>
+                <button className="button subtle" type="button" onClick={() => setShowModal(false)}>Cancel</button>
                 <button className="button" type="submit" disabled={submitting}>
                   {submitting ? "Sending..." : "Add & send invite"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Open submission for student modal */}
+      {submitFor && createPortal(
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setSubmitFor(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Open submission for {submitFor.fullName}</h2>
+              <button className="modal-close" type="button" onClick={() => setSubmitFor(null)}>✕</button>
+            </div>
+            <form className="stack" style={{ gap: 14 }} onSubmit={handleSubmitForStudent}>
+              <label className="field">
+                <span>Assignment</span>
+                <select value={selectedAssignmentId} onChange={(e) => setSelectedAssignmentId(e.target.value)} required>
+                  {assignments.map((a) => (
+                    <option key={a.id} value={a.id}>{a.title}</option>
+                  ))}
+                  {assignments.length === 0 && <option disabled value="">No assignments available</option>}
+                </select>
+              </label>
+              <label className="field">
+                <span>GitHub repository URL</span>
+                <input
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  placeholder="https://github.com/username/repo"
+                  required
+                />
+              </label>
+              {submitError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{submitError}</div>}
+              <div className="confirm-actions">
+                <button className="button subtle" type="button" onClick={() => setSubmitFor(null)}>Cancel</button>
+                <button className="button" type="submit" disabled={submittingFor || assignments.length === 0}>
+                  {submittingFor ? "Submitting..." : "Submit for student"}
                 </button>
               </div>
             </form>

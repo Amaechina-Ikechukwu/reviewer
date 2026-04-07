@@ -72,6 +72,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   role: userRoleEnum("role").notNull().default("student"),
+  joinCode: varchar("join_code", { length: 16 }).unique(),
+  teacherId: uuid("teacher_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
