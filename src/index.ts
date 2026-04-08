@@ -95,7 +95,6 @@ addRoute("GET", "/api/assignments", assignmentRoutes.list);
 addRoute("GET", "/api/assignments/:id", assignmentRoutes.get);
 
 addRoute("POST", "/api/submissions", submissionRoutes.create);
-addRoute("POST", "/api/submissions/for-student", submissionRoutes.createForStudent);
 addRoute("POST", "/api/submissions/import", submissionRoutes.import);
 addRoute("GET", "/api/submissions", submissionRoutes.list);
 addRoute("GET", "/api/submissions/:id", submissionRoutes.get);
@@ -104,6 +103,7 @@ addRoute("GET", "/api/submissions/:id/files", submissionRoutes.getFiles);
 addRoute("GET", "/api/students", studentRoutes.list);
 addRoute("POST", "/api/students", studentRoutes.create);
 addRoute("POST", "/api/students/reset-password", studentRoutes.resetPassword);
+addRoute("POST", "/api/students/:studentId/open-submission", studentRoutes.openSubmission);
 
 addRoute("GET", "/api/teachers/join-link", teacherRoutes.getJoinLink);
 addRoute("GET", "/api/teachers/join/:code", teacherRoutes.getTeacherByCode, false);

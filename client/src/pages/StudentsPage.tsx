@@ -39,11 +39,10 @@ export default function StudentsPage() {
   const [addError, setAddError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Submit for student form
+  // Open submission form
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
-  const [githubUrl, setGithubUrl] = useState("");
-  const [submitError, setSubmitError] = useState("");
-  const [submittingFor, setSubmittingFor] = useState(false);
+  const [openError, setOpenError] = useState("");
+  const [opening, setOpening] = useState(false);
 
   const [resetting, setResetting] = useState(false);
 
@@ -113,26 +112,25 @@ export default function StudentsPage() {
   function openSubmitFor(student: StudentWithPending) {
     setSubmitFor(student);
     setSelectedAssignmentId(assignments[0]?.id || "");
-    setGithubUrl("");
-    setSubmitError("");
+    setOpenError("");
   }
 
-  async function handleSubmitForStudent(event: FormEvent) {
+  async function handleOpenSubmission(event: FormEvent) {
     event.preventDefault();
     if (!submitFor) return;
-    setSubmitError("");
-    setSubmittingFor(true);
+    setOpenError("");
+    setOpening(true);
     try {
-      await api("/submissions/for-student", {
+      await api(`/students/${submitFor.id}/open-submission`, {
         method: "POST",
-        body: JSON.stringify({ studentId: submitFor.id, assignmentId: selectedAssignmentId, githubUrl }),
+        body: JSON.stringify({ assignmentId: selectedAssignmentId }),
       });
-      toast().success(`Submission created for ${submitFor.fullName}`);
+      toast().success(`Submission opened for ${submitFor.fullName}`);
       setSubmitFor(null);
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Submission failed");
+      setOpenError(err instanceof Error ? err.message : "Failed to open submission");
     } finally {
-      setSubmittingFor(false);
+      setOpening(false);
     }
   }
 
@@ -261,7 +259,10 @@ export default function StudentsPage() {
               <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Open submission for {submitFor.fullName}</h2>
               <button className="modal-close" type="button" onClick={() => setSubmitFor(null)}>✕</button>
             </div>
-            <form className="stack" style={{ gap: 14 }} onSubmit={handleSubmitForStudent}>
+            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
+              The student will be able to submit for this assignment themselves.
+            </p>
+            <form className="stack" style={{ gap: 14 }} onSubmit={handleOpenSubmission}>
               <label className="field">
                 <span>Assignment</span>
                 <select value={selectedAssignmentId} onChange={(e) => setSelectedAssignmentId(e.target.value)} required>
@@ -271,20 +272,11 @@ export default function StudentsPage() {
                   {assignments.length === 0 && <option disabled value="">No assignments available</option>}
                 </select>
               </label>
-              <label className="field">
-                <span>GitHub repository URL</span>
-                <input
-                  value={githubUrl}
-                  onChange={(e) => setGithubUrl(e.target.value)}
-                  placeholder="https://github.com/username/repo"
-                  required
-                />
-              </label>
-              {submitError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{submitError}</div>}
+              {openError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{openError}</div>}
               <div className="confirm-actions">
                 <button className="button subtle" type="button" onClick={() => setSubmitFor(null)}>Cancel</button>
-                <button className="button" type="submit" disabled={submittingFor || assignments.length === 0}>
-                  {submittingFor ? "Submitting..." : "Submit for student"}
+                <button className="button" type="submit" disabled={opening || assignments.length === 0}>
+                  {opening ? "Opening..." : "Open for student"}
                 </button>
               </div>
             </form>

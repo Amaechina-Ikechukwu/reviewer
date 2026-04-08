@@ -142,8 +142,19 @@ export const authTokens = pgTable("auth_tokens", {
   userTypeIdx: index("idx_auth_tokens_user_type").on(table.userId, table.type),
 }));
 
+export const submissionOverrides = pgTable("submission_overrides", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  studentId: uuid("student_id").references(() => users.id).notNull(),
+  assignmentId: uuid("assignment_id").references(() => assignments.id).notNull(),
+  grantedBy: uuid("granted_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  studentAssignmentUnique: uniqueIndex("uniq_overrides_student_assignment").on(table.studentId, table.assignmentId),
+}));
+
 export type User = typeof users.$inferSelect;
 export type Assignment = typeof assignments.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
 export type Review = typeof reviews.$inferSelect;
 export type AuthToken = typeof authTokens.$inferSelect;
+export type SubmissionOverride = typeof submissionOverrides.$inferSelect;

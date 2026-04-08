@@ -1,10 +1,10 @@
-import { and, between, desc, eq } from "drizzle-orm";
+import { and, between, desc, eq, isNull } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { db } from "../db/connection";
-import { assignments, reviews, submissions, users } from "../db/schema";
+import { assignments, reviews, submissionOverrides, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { readSubmissionFiles } from "../services/code-reader";
 import { extractZip } from "../services/file-extractor";
@@ -140,7 +140,14 @@ export const submissionRoutes = {
 
     const deadline = isWithinDeadline(assignment.opensAt, assignment.closesAt);
     if (!deadline.canSubmit) {
-      return json({ error: deadline.reason }, 400);
+      const [override] = await db
+        .select({ id: submissionOverrides.id })
+        .from(submissionOverrides)
+        .where(and(eq(submissionOverrides.studentId, user.userId), eq(submissionOverrides.assignmentId, assignmentId)))
+        .limit(1);
+      if (!override) {
+        return json({ error: deadline.reason }, 400);
+      }
     }
     const isLate = false;
 

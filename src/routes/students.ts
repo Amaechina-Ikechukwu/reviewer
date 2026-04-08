@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { db } from "../db/connection";
-import { authTokens, users } from "../db/schema";
+import { assignments, authTokens, submissionOverrides, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { sendInvite, sendPasswordReset } from "../services/email";
 import { json, parseJson } from "../utils/json";
@@ -77,6 +77,28 @@ export const studentRoutes = {
     }
 
     return json({ student: { ...student, pending: true }, inviteSent: true }, 201);
+  },
+
+  async openSubmission(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "teacher") return json({ error: "Only teachers can open submissions." }, 403);
+
+    const { studentId } = params;
+    const { assignmentId } = await parseJson<{ assignmentId?: string }>(request);
+    if (!assignmentId) return json({ error: "assignmentId required." }, 400);
+
+    const [student] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, studentId)).limit(1);
+    if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
+
+    const [assignment] = await db.select({ id: assignments.id }).from(assignments).where(eq(assignments.id, assignmentId)).limit(1);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    await db
+      .insert(submissionOverrides)
+      .values({ studentId, assignmentId, grantedBy: user.userId })
+      .onConflictDoNothing();
+
+    return json({ opened: true });
   },
 
   async resetPassword(request: Request) {
