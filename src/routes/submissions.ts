@@ -139,10 +139,10 @@ export const submissionRoutes = {
     }
 
     const deadline = isWithinDeadline(assignment.opensAt, assignment.closesAt);
-    const isLate = !deadline.canSubmit && new Date() > assignment.closesAt;
-    if (!deadline.canSubmit && !isLate) {
+    if (!deadline.canSubmit) {
       return json({ error: deadline.reason }, 400);
     }
+    const isLate = false;
 
     const [previousSubmission] = await db
       .select()
@@ -157,20 +157,20 @@ export const submissionRoutes = {
     }
 
     const submissionId = randomUUID();
-    const destDir = join(UPLOAD_DIR, submissionId);
+    let filePath: string | null = null;
 
     if (submissionType === "file_upload") {
       if (!uploadedFile) {
         return json({ error: "Please attach a ZIP file." }, 400);
       }
-
+      const destDir = join(UPLOAD_DIR, submissionId);
       await extractZip(uploadedFile, destDir);
+      filePath = destDir;
     } else {
       if (!githubUrl) {
         return json({ error: "Please provide a GitHub URL." }, 400);
       }
-
-      await cloneGithubRepo(githubUrl, destDir);
+      // GitHub repos are cloned at review time, not at submission time
     }
 
     const [submission] = await db
@@ -181,7 +181,7 @@ export const submissionRoutes = {
         studentId: user.userId,
         submissionType,
         githubUrl,
-        filePath: destDir,
+        filePath,
         isLate,
       })
       .returning();
@@ -319,12 +319,10 @@ export const submissionRoutes = {
     }
 
     const submissionId = randomUUID();
-    const destDir = join(UPLOAD_DIR, submissionId);
-    await cloneGithubRepo(normalizedUrl, destDir);
 
     const [submission] = await db
       .insert(submissions)
-      .values({ id: submissionId, assignmentId: assignment.id, studentId, submissionType: "github", githubUrl: normalizedUrl, filePath: destDir, isLate: false })
+      .values({ id: submissionId, assignmentId: assignment.id, studentId, submissionType: "github", githubUrl: normalizedUrl, filePath: null, isLate: false })
       .returning();
 
     return json(submission, 201);

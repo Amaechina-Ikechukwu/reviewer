@@ -1,10 +1,14 @@
 import { eq } from "drizzle-orm";
+import { join } from "node:path";
 import { db } from "../db/connection";
 import { assignments, reviews, submissions } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { getAvailableProviders, reviewCode } from "../services/ai/reviewer";
 import { readCodeFiles } from "../services/code-reader";
+import { cloneGithubRepo } from "../services/github";
 import { json } from "../utils/json";
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 
 export const reviewRoutes = {
   async providers() {
@@ -31,11 +35,19 @@ export const reviewRoutes = {
       return json({ error: "Assignment not found." }, 404);
     }
 
-    if (!submission.filePath) {
-      return json({ error: "Submission files are missing for this review." }, 400);
+    let filePath = submission.filePath;
+
+    if (!filePath) {
+      if (!submission.githubUrl) {
+        return json({ error: "Submission has no files and no GitHub URL." }, 400);
+      }
+      const destDir = join(UPLOAD_DIR, submission.id);
+      await cloneGithubRepo(submission.githubUrl, destDir);
+      filePath = destDir;
+      await db.update(submissions).set({ filePath }).where(eq(submissions.id, submission.id));
     }
 
-    const codeFiles = await readCodeFiles(submission.filePath);
+    const codeFiles = await readCodeFiles(filePath);
     if (codeFiles.length === 0) {
       return json({ error: "No readable code files were found in this submission." }, 400);
     }
