@@ -5,6 +5,7 @@ type ToastItem = {
   id: number;
   message: string;
   type: "success" | "error" | "info";
+  leaving: boolean;
 };
 
 type ToastAPI = {
@@ -14,7 +15,7 @@ type ToastAPI = {
 };
 
 let counter = 0;
-let globalAdd: ((item: Omit<ToastItem, "id">) => void) | null = null;
+let globalAdd: ((item: Omit<ToastItem, "id" | "leaving">) => void) | null = null;
 
 export function toast(): ToastAPI {
   return {
@@ -29,14 +30,16 @@ export function Toaster() {
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const remove = useCallback((id: number) => {
-    setItems((prev) => prev.filter((t) => t.id !== id));
     clearTimeout(timers.current.get(id));
     timers.current.delete(id);
+    // Mark as leaving so CSS exit animation plays
+    setItems((prev) => prev.map((t) => t.id === id ? { ...t, leaving: true } : t));
+    setTimeout(() => setItems((prev) => prev.filter((t) => t.id !== id)), 250);
   }, []);
 
-  const add = useCallback((item: Omit<ToastItem, "id">) => {
+  const add = useCallback((item: Omit<ToastItem, "id" | "leaving">) => {
     const id = ++counter;
-    setItems((prev) => [...prev, { ...item, id }]);
+    setItems((prev) => [...prev, { ...item, id, leaving: false }]);
     timers.current.set(id, setTimeout(() => remove(id), 3500));
   }, [remove]);
 
@@ -50,7 +53,11 @@ export function Toaster() {
   return createPortal(
     <div className="toaster">
       {items.map((item) => (
-        <div key={item.id} className={`toast toast-${item.type}`} onClick={() => remove(item.id)}>
+        <div
+          key={item.id}
+          className={`toast toast-${item.type}${item.leaving ? " toast-leaving" : ""}`}
+          onClick={() => remove(item.id)}
+        >
           <span className="toast-dot" />
           <span>{item.message}</span>
         </div>

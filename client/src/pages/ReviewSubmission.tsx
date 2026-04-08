@@ -43,14 +43,12 @@ function structureLabel(classification?: string) {
 }
 
 function buildPreviewDocument(files: CodeFile[]) {
-  const htmlFile = files.find((file) => file.filename.endsWith(".html"));
-  if (!htmlFile) {
-    return "<html><body><p style='font-family:sans-serif;padding:24px;'>No HTML preview available.</p></body></html>";
-  }
+  const htmlFile = files.find((f) => f.filename.toLowerCase().endsWith(".html"));
+  if (!htmlFile) return null;
 
   let html = htmlFile.content;
-  const css = files.filter((file) => file.filename.endsWith(".css")).map((file) => `<style>${file.content}</style>`).join("\n");
-  const js = files.filter((file) => file.filename.endsWith(".js")).map((file) => `<script>${file.content}<\/script>`).join("\n");
+  const css = files.filter((f) => f.filename.toLowerCase().endsWith(".css")).map((f) => `<style>${f.content}</style>`).join("\n");
+  const js = files.filter((f) => f.filename.toLowerCase().endsWith(".js")).map((f) => `<script>${f.content}<\/script>`).join("\n");
   html = html.includes("</head>") ? html.replace("</head>", `${css}</head>`) : `${css}${html}`;
   html = html.includes("</body>") ? html.replace("</body>", `${js}</body>`) : `${html}${js}`;
   return html;
@@ -66,6 +64,7 @@ export default function ReviewSubmission() {
   const [overrideScore, setOverrideScore] = useState("");
   const [finalFeedback, setFinalFeedback] = useState("");
   const [message, setMessage] = useState("");
+  const [viewMode, setViewMode] = useState<"code" | "preview">("code");
 
   useEffect(() => {
     if (!submissionId) return;
@@ -90,6 +89,7 @@ export default function ReviewSubmission() {
   }, [files, selectedFileIndex]);
 
   const previewDoc = useMemo(() => buildPreviewDocument(files), [files]);
+  const hasPreview = previewDoc !== null;
   const selectedFile = files[selectedFileIndex] || files[0];
   const geminiSummary = review?.feedback?.summary || "No Gemini review has been run for this submission yet.";
   const geminiSuggestions = review?.feedback?.suggestions || [];
@@ -219,32 +219,59 @@ export default function ReviewSubmission() {
                 <div className="file-selector-bar">
                   {files.map((file, index) => (
                     <button
-                      className={`file-selector-chip ${index === selectedFileIndex ? "active" : ""}`}
+                      className={`file-selector-chip ${viewMode === "code" && index === selectedFileIndex ? "active" : ""}`}
                       key={file.path || file.filename}
-                      onClick={() => setSelectedFileIndex(index)}
+                      onClick={() => { setViewMode("code"); setSelectedFileIndex(index); }}
                       type="button"
                     >
                       {file.filename}
                     </button>
                   ))}
+                  {hasPreview && (
+                    <button
+                      className={`file-selector-chip preview-chip ${viewMode === "preview" ? "active" : ""}`}
+                      onClick={() => setViewMode("preview")}
+                      type="button"
+                    >
+                      ▶ Preview
+                    </button>
+                  )}
                 </div>
               )}
-              <div className="code-preview-head">
-                <span>Code Preview: {selectedFile?.filename || "submission preview"}</span>
-                <span>
-                  {selectedFile
-                    ? `Lines 1-${Math.min(45, selectedFileLineCount)} of ${selectedFileLineCount}`
-                    : "Interactive preview"}
-                </span>
-              </div>
-              {selectedFile ? (
-                <div className="code-box">
-                  <pre>{selectedFile.content}</pre>
+
+              {viewMode === "preview" && previewDoc ? (
+                <div className="mini-browser">
+                  <div className="mini-browser-bar">
+                    <span className="mini-browser-dot red" />
+                    <span className="mini-browser-dot yellow" />
+                    <span className="mini-browser-dot green" />
+                    <div className="mini-browser-url">
+                      <span>🔒</span>
+                      <span>{submission.studentName} — {submission.assignment.title}</span>
+                    </div>
+                  </div>
+                  <iframe
+                    className="mini-browser-frame"
+                    sandbox="allow-scripts"
+                    srcDoc={previewDoc}
+                    title="Student preview"
+                  />
                 </div>
               ) : (
-                <iframe className="preview-frame" sandbox="allow-scripts" srcDoc={previewDoc} title="Student preview" />
+                <>
+                  <div className="code-preview-head">
+                    <span>Code Preview: {selectedFile?.filename || "—"}</span>
+                    <span>{selectedFile ? `${selectedFileLineCount} lines` : ""}</span>
+                  </div>
+                  {selectedFile && (
+                    <div className="code-box">
+                      <pre>{selectedFile.content}</pre>
+                    </div>
+                  )}
+                </>
               )}
-              {selectedFileScore && (
+
+              {viewMode === "code" && selectedFileScore && (
                 <div className="file-score-strip">
                   <div className="row" style={{ justifyContent: "space-between" }}>
                     <strong>{selectedFileScore.filename}</strong>
