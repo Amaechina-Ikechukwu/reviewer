@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { db } from "../db/connection";
-import { assignments, authTokens, submissionOverrides, users } from "../db/schema";
+import { assignments, authTokens, reviews, submissionOverrides, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { sendInvite, sendPasswordReset } from "../services/email";
 import { json, parseJson } from "../utils/json";
@@ -111,6 +111,66 @@ export const studentRoutes = {
       .onConflictDoNothing();
 
     return json({ opened: true });
+  },
+
+  async merge(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "teacher") return json({ error: "Only teachers can merge students." }, 403);
+
+    const { sourceId, targetId } = await parseJson<{ sourceId?: string; targetId?: string }>(request);
+    if (!sourceId || !targetId) return json({ error: "sourceId and targetId required." }, 400);
+    if (sourceId === targetId) return json({ error: "Cannot merge a student with themselves." }, 400);
+
+    const [source] = await db.select({ id: users.id, role: users.role, fullName: users.fullName })
+      .from(users).where(eq(users.id, sourceId)).limit(1);
+    const [target] = await db.select({ id: users.id, role: users.role })
+      .from(users).where(eq(users.id, targetId)).limit(1);
+
+    if (!source || source.role !== "student") return json({ error: "Source student not found." }, 404);
+    if (!target || target.role !== "student") return json({ error: "Target student not found." }, 404);
+
+    // Find which assignments target already has submissions for (to detect conflicts)
+    const targetSubs = await db
+      .select({ assignmentId: submissions.assignmentId })
+      .from(submissions)
+      .where(eq(submissions.studentId, targetId));
+    const targetAssignmentIds = new Set(targetSubs.map((s) => s.assignmentId));
+
+    // Transfer non-conflicting submissions; collect conflicting ones
+    const sourceSubs = await db.select().from(submissions).where(eq(submissions.studentId, sourceId));
+    const conflictSubIds: string[] = [];
+    for (const sub of sourceSubs) {
+      if (!targetAssignmentIds.has(sub.assignmentId)) {
+        await db.update(submissions).set({ studentId: targetId }).where(eq(submissions.id, sub.id));
+      } else {
+        conflictSubIds.push(sub.id);
+      }
+    }
+
+    // Delete conflicting submissions and their reviews
+    for (const subId of conflictSubIds) {
+      await db.delete(reviews).where(eq(reviews.submissionId, subId));
+      await db.delete(submissions).where(eq(submissions.id, subId));
+    }
+
+    // Transfer overrides (non-conflicting)
+    const sourceOverrides = await db
+      .select()
+      .from(submissionOverrides)
+      .where(eq(submissionOverrides.studentId, sourceId));
+    for (const override of sourceOverrides) {
+      await db
+        .insert(submissionOverrides)
+        .values({ studentId: targetId, assignmentId: override.assignmentId, grantedBy: override.grantedBy })
+        .onConflictDoNothing();
+    }
+
+    // Delete all remaining source records
+    await db.delete(submissionOverrides).where(eq(submissionOverrides.studentId, sourceId));
+    await db.delete(authTokens).where(eq(authTokens.userId, sourceId));
+    await db.delete(users).where(eq(users.id, sourceId));
+
+    return json({ merged: true, targetId, transferredSubmissions: sourceSubs.length - conflictSubIds.length, skipped: conflictSubIds.length });
   },
 
   async resetPassword(request: Request) {

@@ -103,6 +103,7 @@ addRoute("GET", "/api/submissions/:id/files", submissionRoutes.getFiles);
 addRoute("GET", "/api/students", studentRoutes.list);
 addRoute("GET", "/api/students/my-overrides", studentRoutes.myOverrides);
 addRoute("POST", "/api/students", studentRoutes.create);
+addRoute("POST", "/api/students/merge", studentRoutes.merge);
 addRoute("POST", "/api/students/reset-password", studentRoutes.resetPassword);
 addRoute("POST", "/api/students/:studentId/open-submission", studentRoutes.openSubmission);
 

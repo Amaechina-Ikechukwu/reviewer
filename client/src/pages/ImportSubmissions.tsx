@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import TeacherShell from "../components/TeacherShell";
 import { api } from "../api";
-import type { Assignment } from "../types";
 
 type ImportRow = {
   id: string;
@@ -116,20 +115,12 @@ function parsePastedDoc(input: string): ImportRow[] {
 }
 
 export default function ImportSubmissions() {
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [assignmentId, setAssignmentId] = useState("");
+  const [assignmentTitle, setAssignmentTitle] = useState("");
   const [pastedDoc, setPastedDoc] = useState("");
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [message, setMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<Array<{ email?: string; fullName: string; githubUrl: string; createdStudent: boolean; submissionId: string }> | null>(null);
-
-  useEffect(() => {
-    api<Assignment[]>("/assignments").then((data) => {
-      setAssignments(data);
-      if (data[0]) setAssignmentId(data[0].id);
-    }).catch(() => setAssignments([]));
-  }, []);
 
   const missingFields = useMemo(() => rows.filter((row) => !row.fullName || !row.githubUrl).length, [rows]);
 
@@ -165,7 +156,7 @@ export default function ImportSubmissions() {
       const response = await api<{ imported: Array<{ email?: string; fullName: string; githubUrl: string; createdStudent: boolean; submissionId: string }> }>("/submissions/import", {
         method: "POST",
         body: JSON.stringify({
-          assignmentId,
+          assignmentTitle: assignmentTitle.trim(),
           entries: rows.map((row) => ({ fullName: row.fullName, email: row.email, githubUrl: row.githubUrl })),
         }),
       });
@@ -186,12 +177,12 @@ export default function ImportSubmissions() {
           <div className="stack">
             <div className="card stack">
               <label className="field">
-                <span>Assignment</span>
-                <select value={assignmentId} onChange={(event) => setAssignmentId(event.target.value)}>
-                  {assignments.map((assignment) => (
-                    <option key={assignment.id} value={assignment.id}>{assignment.title}</option>
-                  ))}
-                </select>
+                <span>Assignment title / topic</span>
+                <input
+                  placeholder="e.g. HTML Portfolio Project"
+                  value={assignmentTitle}
+                  onChange={(event) => setAssignmentTitle(event.target.value)}
+                />
               </label>
               <label className="field">
                 <span>Pasted docs content</span>
@@ -234,7 +225,7 @@ export default function ImportSubmissions() {
                   </div>
                 ))}
                 <div className="row" style={{ justifyContent: "flex-end" }}>
-                  <button className="button" disabled={!assignmentId || missingFields > 0 || isImporting} onClick={importRows} type="button">
+                  <button className="button" disabled={!assignmentTitle.trim() || missingFields > 0 || isImporting} onClick={importRows} type="button">
                     {isImporting ? "Importing submissions..." : "Import submissions"}
                   </button>
                 </div>

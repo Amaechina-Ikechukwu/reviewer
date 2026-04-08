@@ -1,4 +1,4 @@
-import { and, between, desc, eq, isNull } from "drizzle-orm";
+import { and, between, desc, eq, ilike, isNull } from "drizzle-orm";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -341,19 +341,32 @@ export const submissionRoutes = {
 
     const body = await request.json().catch(() => ({})) as {
       assignmentId?: string;
+      assignmentTitle?: string;
       entries?: ImportEntry[];
     };
 
-    const assignmentId = body.assignmentId?.trim();
     const entries = body.entries || [];
 
-    if (!assignmentId || entries.length === 0) {
-      return json({ error: "Assignment and at least one import entry are required." }, 400);
+    if (entries.length === 0) {
+      return json({ error: "At least one import entry is required." }, 400);
     }
 
-    const assignment = await getAssignment(assignmentId);
-    if (!assignment) {
-      return json({ error: "Assignment not found." }, 404);
+    let assignment;
+
+    if (body.assignmentId?.trim()) {
+      assignment = await getAssignment(body.assignmentId.trim());
+      if (!assignment) return json({ error: "Assignment not found." }, 404);
+    } else if (body.assignmentTitle?.trim()) {
+      const titleSearch = body.assignmentTitle.trim();
+      const [found] = await db
+        .select()
+        .from(assignments)
+        .where(ilike(assignments.title, `%${titleSearch}%`))
+        .limit(1);
+      if (!found) return json({ error: `No assignment found matching "${titleSearch}".` }, 404);
+      assignment = found;
+    } else {
+      return json({ error: "Provide assignmentTitle to identify the assignment." }, 400);
     }
 
     if (!assignment.allowGithub) {

@@ -46,6 +46,13 @@ export default function StudentsPage() {
 
   const [resetting, setResetting] = useState(false);
 
+  // Merge students
+  const [showMerge, setShowMerge] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergeError, setMergeError] = useState("");
+  const [merging, setMerging] = useState(false);
+
   const sortedStudents = useMemo<StudentWithPending[]>(
     () => [...students].sort((a, b) => a.fullName.localeCompare(b.fullName)),
     [students],
@@ -115,6 +122,26 @@ export default function StudentsPage() {
     setOpenError("");
   }
 
+  async function handleMerge(event: FormEvent) {
+    event.preventDefault();
+    if (!mergeSourceId || !mergeTargetId) return;
+    setMergeError("");
+    setMerging(true);
+    try {
+      const res = await api<{ merged: boolean; transferredSubmissions: number; skipped: number }>("/students/merge", {
+        method: "POST",
+        body: JSON.stringify({ sourceId: mergeSourceId, targetId: mergeTargetId }),
+      });
+      setStudents((prev) => prev.filter((s) => s.id !== mergeSourceId));
+      toast().success(`Students merged. ${res.transferredSubmissions} submission(s) transferred${res.skipped > 0 ? `, ${res.skipped} skipped (conflict)` : ""}.`);
+      setShowMerge(false);
+    } catch (err) {
+      setMergeError(err instanceof Error ? err.message : "Merge failed");
+    } finally {
+      setMerging(false);
+    }
+  }
+
   async function handleOpenSubmission(event: FormEvent) {
     event.preventDefault();
     if (!submitFor) return;
@@ -147,6 +174,14 @@ export default function StudentsPage() {
               onClick={handleCopyJoinLink}
             >
               Copy join link
+            </button>
+            <button
+              className="button secondary"
+              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+              type="button"
+              onClick={() => { setMergeSourceId(""); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}
+            >
+              Merge students
             </button>
             <button
               className="button secondary"
@@ -204,6 +239,13 @@ export default function StudentsPage() {
                     onClick={() => setConfirmReset(student)}
                   >
                     Reset password
+                  </button>
+                  <button
+                    className="open-button"
+                    type="button"
+                    onClick={() => { setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}
+                  >
+                    Merge
                   </button>
                 </div>
               </div>
@@ -277,6 +319,54 @@ export default function StudentsPage() {
                 <button className="button subtle" type="button" onClick={() => setSubmitFor(null)}>Cancel</button>
                 <button className="button" type="submit" disabled={opening || assignments.length === 0}>
                   {opening ? "Opening..." : "Open for student"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Merge students modal */}
+      {showMerge && createPortal(
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowMerge(false)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Merge students</h2>
+              <button className="modal-close" type="button" onClick={() => setShowMerge(false)}>✕</button>
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
+              All submissions from the <strong>source</strong> student will be transferred to the <strong>target</strong> student. The source record will be permanently deleted. Submissions that would conflict (same assignment) are skipped.
+            </p>
+            <form className="stack" style={{ gap: 14 }} onSubmit={handleMerge}>
+              <label className="field">
+                <span>Source student <span className="muted">(will be deleted)</span></span>
+                <select value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)} required>
+                  <option value="">— Select source —</option>
+                  {sortedStudents.filter((s) => s.id !== mergeTargetId).map((s) => (
+                    <option key={s.id} value={s.id}>{s.fullName}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Target student <span className="muted">(will be kept)</span></span>
+                <select value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)} required>
+                  <option value="">— Select target —</option>
+                  {sortedStudents.filter((s) => s.id !== mergeSourceId).map((s) => (
+                    <option key={s.id} value={s.id}>{s.fullName}</option>
+                  ))}
+                </select>
+              </label>
+              {mergeError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{mergeError}</div>}
+              <div className="confirm-actions">
+                <button className="button subtle" type="button" onClick={() => setShowMerge(false)}>Cancel</button>
+                <button
+                  className="button"
+                  type="submit"
+                  disabled={!mergeSourceId || !mergeTargetId || merging}
+                  style={{ background: "var(--danger, #b91c1c)" }}
+                >
+                  {merging ? "Merging..." : "Merge & delete source"}
                 </button>
               </div>
             </form>
