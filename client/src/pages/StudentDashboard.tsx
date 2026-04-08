@@ -83,7 +83,13 @@ export default function StudentDashboard() {
                         {assignment.description}
                       </p>
                       <div className="pill-row">
-                        <span className="tag">{assignment.sourceType}</span>
+                        {assignment.sourceUrl ? (
+                          <a className="tag tag-link" href={assignment.sourceUrl} target="_blank" rel="noreferrer">
+                            {assignment.sourceType} ↗
+                          </a>
+                        ) : (
+                          <span className="tag">{assignment.sourceType}</span>
+                        )}
                         {assignment.allowGithub && <span className="tag">GitHub</span>}
                         {assignment.allowFileUpload && <span className="tag">ZIP Upload</span>}
                       </div>

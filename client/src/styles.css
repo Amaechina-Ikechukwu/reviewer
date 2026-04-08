@@ -926,6 +926,37 @@ select {
   padding: 28px;
 }
 
+.tag-link {
+  color: #1d4dd8;
+  background: #e8eeff;
+  border: 1px solid #c3cffa;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tag-link:hover {
+  background: #d0dbff;
+}
+
+.notion-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f5f5f5;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.notion-link-btn:hover {
+  background: #ebebeb;
+}
+
 .due-badge {
   display: inline-flex;
   flex-direction: column;

@@ -79,6 +79,17 @@ export default function SubmitAssignment() {
               )}
             </div>
 
+            {assignment.sourceUrl && (
+              <a
+                className="notion-link-btn"
+                href={assignment.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open assignment brief ↗
+              </a>
+            )}
+
             <div className={`due-badge ${isPast ? "due-badge--closed" : ""}`}>
               <div className="eyebrow">{isPast ? "Closed" : "Due"}</div>
               <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>{dueDate}</div>
