@@ -9,6 +9,7 @@ export default function SubmitAssignment() {
   const navigate = useNavigate();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [hasOverride, setHasOverride] = useState(false);
+  const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string } | null>(null);
   const [submissionType, setSubmissionType] = useState<"github" | "file_upload">("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [notes, setNotes] = useState("");
@@ -26,6 +27,12 @@ export default function SubmitAssignment() {
     api<{ assignmentIds: string[] }>("/students/my-overrides")
       .then((r) => setHasOverride(r.assignmentIds.includes(assignmentId!)))
       .catch(() => setHasOverride(false));
+
+    api<Array<{ submission: { id: string; submittedAt: string } }>>(`/submissions?assignment_id=${assignmentId}`)
+      .then((rows) => {
+        if (rows.length > 0) setAlreadySubmitted({ submittedAt: rows[0].submission.submittedAt });
+      })
+      .catch(() => {});
   }, [assignmentId]);
 
   async function handleSubmit(event: FormEvent) {
@@ -89,7 +96,15 @@ export default function SubmitAssignment() {
           <div className="submit-form-panel stack">
             <h2 style={{ margin: 0, fontSize: "1.25rem" }}>Your submission</h2>
 
-            {isPast ? (
+            {alreadySubmitted ? (
+              <div className="submitted-box">
+                <div style={{ fontSize: "2rem" }}>✓</div>
+                <strong style={{ fontSize: "1.1rem" }}>Already submitted</strong>
+                <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.9rem" }}>
+                  Submitted on {new Date(alreadySubmitted.submittedAt).toLocaleString()}
+                </p>
+              </div>
+            ) : isPast ? (
               <div className="deadline-passed-box">
                 <strong>Submission closed</strong>
                 <p style={{ margin: "6px 0 0" }}>
@@ -139,6 +154,8 @@ export default function SubmitAssignment() {
               </form>
             )}
           </div>
+
+
 
         </div>
       </div>

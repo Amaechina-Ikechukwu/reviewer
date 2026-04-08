@@ -953,6 +953,19 @@ select {
   }
 }
 
+.submitted-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 20px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 14px;
+  gap: 4px;
+  color: #166534;
+}
+
 .deadline-passed-box {
   background: #fff5f5;
   border: 1.5px solid #fca5a5;

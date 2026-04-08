@@ -152,15 +152,13 @@ export const submissionRoutes = {
     const isLate = false;
 
     const [previousSubmission] = await db
-      .select()
+      .select({ id: submissions.id })
       .from(submissions)
       .where(and(eq(submissions.assignmentId, assignmentId), eq(submissions.studentId, user.userId)))
       .limit(1);
 
     if (previousSubmission) {
-      await removeSubmissionFiles(previousSubmission.filePath);
-      await db.delete(reviews).where(eq(reviews.submissionId, previousSubmission.id));
-      await db.delete(submissions).where(eq(submissions.id, previousSubmission.id));
+      return json({ error: "You have already submitted for this assignment." }, 409);
     }
 
     const submissionId = randomUUID();
