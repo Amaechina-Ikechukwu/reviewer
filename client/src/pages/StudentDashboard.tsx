@@ -40,8 +40,11 @@ export default function StudentDashboard() {
     });
   }, []);
 
+  const now = new Date();
   const openAssignments = useMemo(
-    () => [...assignments].sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()),
+    () => assignments
+      .filter((a) => new Date(a.closesAt) > now && new Date(a.opensAt) <= now)
+      .sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()),
     [assignments],
   );
   const recentSubmissions = useMemo(() => submissions.slice(0, 4), [submissions]);

@@ -49,6 +49,10 @@ export default function SubmitAssignment() {
 
   if (!assignment) return <div className="auth-shell">Loading...</div>;
 
+  const now = new Date();
+  const isOpen = new Date(assignment.opensAt) <= now && new Date(assignment.closesAt) > now;
+  const isPast = new Date(assignment.closesAt) <= now;
+
   return (
     <StudentShell section="submissions">
       <div className="page">
@@ -67,7 +71,14 @@ export default function SubmitAssignment() {
             </div>
           )}
 
-          <form className="stack" onSubmit={handleSubmit}>
+          {isPast && (
+            <div className="deadline-passed-box">
+              <strong>Submission closed</strong>
+              <p style={{ margin: "4px 0 0" }}>The deadline for this assignment was {new Date(assignment.closesAt).toLocaleString()}. Contact your teacher if you need an extension.</p>
+            </div>
+          )}
+
+          <form className="stack" onSubmit={handleSubmit} style={{ display: isPast ? "none" : undefined }}>
             {(assignment.allowGithub && assignment.allowFileUpload) && (
               <div className="submission-toggle">
                 <button className={submissionType === "github" ? "active" : ""} onClick={() => setSubmissionType("github")} type="button">GitHub Repo</button>
