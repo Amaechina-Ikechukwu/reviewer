@@ -16,6 +16,7 @@ export default function CreateAssignment() {
   const [allowGithub, setAllowGithub] = useState(true);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [maxScore, setMaxScore] = useState(100);
+  const [classNotes, setClassNotes] = useState("");
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Assignment | null>(null);
   const [copied, setCopied] = useState(false);
@@ -46,6 +47,7 @@ export default function CreateAssignment() {
           allowGithub,
           allowFileUpload,
           defaultProvider: "gemini",
+          classNotes: classNotes || null,
         }),
       });
 
@@ -195,6 +197,16 @@ export default function CreateAssignment() {
               type="number"
               value={maxScore}
               onChange={(e) => setMaxScore(Number(e.target.value))}
+            />
+          </label>
+
+          <label className="field">
+            <span>Class notes <span className="muted">(optional — shown to students when submitting)</span></span>
+            <textarea
+              placeholder="Paste any notes, instructions, or resources students should read before submitting..."
+              rows={5}
+              value={classNotes}
+              onChange={(e) => setClassNotes(e.target.value)}
             />
           </label>
 

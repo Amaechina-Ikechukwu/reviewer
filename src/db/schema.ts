@@ -92,6 +92,7 @@ export const assignments = pgTable("assignments", {
   allowGithub: boolean("allow_github").notNull().default(true),
   allowFileUpload: boolean("allow_file_upload").notNull().default(true),
   defaultProvider: varchar("default_provider", { length: 20 }).notNull().default("gemini"),
+  classNotes: text("class_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   createdByIdx: index("idx_assignments_created_by").on(table.createdBy),

@@ -60,6 +60,13 @@ export default function SubmitAssignment() {
             )}
           </div>
 
+          {assignment.classNotes && (
+            <div className="class-notes-box">
+              <div className="eyebrow" style={{ marginBottom: 8 }}>Class notes</div>
+              <pre className="class-notes-content">{assignment.classNotes}</pre>
+            </div>
+          )}
+
           <form className="stack" onSubmit={handleSubmit}>
             {(assignment.allowGithub && assignment.allowFileUpload) && (
               <div className="submission-toggle">

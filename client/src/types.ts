@@ -24,6 +24,7 @@ export type Assignment = {
   allowGithub: boolean;
   allowFileUpload: boolean;
   defaultProvider: ProviderName;
+  classNotes: string | null;
   createdAt: string;
 };
 

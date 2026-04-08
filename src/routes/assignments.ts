@@ -18,6 +18,7 @@ type AssignmentBody = {
   allowGithub?: boolean;
   allowFileUpload?: boolean;
   defaultProvider?: "gemini";
+  classNotes?: string;
 };
 
 export const assignmentRoutes = {
@@ -61,6 +62,7 @@ export const assignmentRoutes = {
         allowGithub: body.allowGithub ?? true,
         allowFileUpload: body.allowFileUpload ?? true,
         defaultProvider: "gemini",
+        classNotes: body.classNotes?.trim() || null,
       })
       .returning();
 

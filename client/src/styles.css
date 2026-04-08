@@ -906,6 +906,23 @@ select {
   max-width: 560px;
 }
 
+.class-notes-box {
+  background: #f5f7ff;
+  border: 1.5px solid #dde5ff;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.class-notes-content {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #2d3a52;
+}
+
 .input-plain {
   width: 100%;
   padding: 10px 14px;
