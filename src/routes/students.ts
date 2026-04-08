@@ -129,16 +129,15 @@ export const studentRoutes = {
     if (!source || source.role !== "student") return json({ error: "Source student not found." }, 404);
     if (!target || target.role !== "student") return json({ error: "Target student not found." }, 404);
 
-    // If the target has a placeholder/historical email but source has a real one, promote source's identity to target.
+    // If the target has a placeholder/historical email but source has a real one,
+    // copy ONLY the email over — keep the target's own name intact.
     // Must clear source email first (unique constraint) before setting it on target.
     const targetHasPlaceholder = target.email.endsWith("@historical.reviewai.local");
     const sourceHasRealEmail = !source.email.endsWith("@historical.reviewai.local");
     if (targetHasPlaceholder && sourceHasRealEmail) {
       const tempEmail = `merging.${Date.now()}@historical.reviewai.local`;
       await db.update(users).set({ email: tempEmail }).where(eq(users.id, sourceId));
-      await db.update(users)
-        .set({ email: source.email, fullName: source.fullName })
-        .where(eq(users.id, targetId));
+      await db.update(users).set({ email: source.email }).where(eq(users.id, targetId));
     }
 
     // Find which assignments target already has submissions for (to detect conflicts)
