@@ -93,6 +93,7 @@ addRoute("POST", "/api/auth/reset/:token", authRoutes.resetPassword, false);
 addRoute("POST", "/api/assignments", assignmentRoutes.create);
 addRoute("GET", "/api/assignments", assignmentRoutes.list);
 addRoute("GET", "/api/assignments/:id", assignmentRoutes.get);
+addRoute("DELETE", "/api/assignments/:id", assignmentRoutes.remove);
 
 addRoute("POST", "/api/submissions", submissionRoutes.create);
 addRoute("POST", "/api/submissions/import", submissionRoutes.import);

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 import type { Assignment, Review } from "../types";
 
@@ -48,6 +50,14 @@ export default function TeacherDashboard() {
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
 
+  // Delete assignment
+  const [deleteTarget, setDeleteTarget] = useState<Assignment | null>(null);
+  const [deleteAction, setDeleteAction] = useState<"delete_all" | "move">("delete_all");
+  const [moveTargetId, setMoveTargetId] = useState("");
+  const [moveNewTitle, setMoveNewTitle] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
   useEffect(() => {
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
 
@@ -66,6 +76,28 @@ export default function TeacherDashboard() {
       setReviews({});
     });
   }, []);
+
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      const body: Record<string, string> = { action: deleteAction };
+      if (deleteAction === "move") {
+        if (moveTargetId) body.targetAssignmentId = moveTargetId;
+        else if (moveNewTitle.trim()) body.newAssignmentTitle = moveNewTitle.trim();
+        else { setDeleteError("Pick an assignment or type a new title to move submissions to."); setDeleting(false); return; }
+      }
+      await api(`/assignments/${deleteTarget.id}`, { method: "DELETE", body: JSON.stringify(body) });
+      setAssignments((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      toast().success(`"${deleteTarget.title}" deleted.`);
+      setDeleteTarget(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const recentSubmissions = useMemo(() => submissions.slice(0, 6), [submissions]);
   const upcomingAssignments = useMemo(
@@ -113,7 +145,15 @@ export default function TeacherDashboard() {
                   <article className="card assignment-card" key={assignment.id}>
                     <div className="row" style={{ justifyContent: "space-between" }}>
                       <span className="tag">{assignment.sourceType}</span>
-                      <span className="muted">{new Date(assignment.closesAt).toLocaleDateString()}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span className="muted">{new Date(assignment.closesAt).toLocaleDateString()}</span>
+                        <button
+                          type="button"
+                          title="Delete assignment"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", fontSize: "1rem", lineHeight: 1, padding: "2px 4px" }}
+                          onClick={() => { setDeleteTarget(assignment); setDeleteAction("delete_all"); setMoveTargetId(""); setMoveNewTitle(""); setDeleteError(""); }}
+                        >✕</button>
+                      </div>
                     </div>
                     <div className="stack" style={{ gap: 6 }}>
                       <h3 style={{ margin: 0, fontSize: "1.5rem", lineHeight: 1.2 }}>{assignment.title}</h3>
@@ -196,6 +236,76 @@ export default function TeacherDashboard() {
           </aside>
         </div>
       </div>
+      {deleteTarget && createPortal(
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setDeleteTarget(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Delete "{deleteTarget.title}"</h2>
+              <button className="modal-close" type="button" onClick={() => setDeleteTarget(null)}>✕</button>
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
+              What should happen to the submissions for this assignment?
+            </p>
+
+            <div className="stack" style={{ gap: 10 }}>
+              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="radio" name="del-action" value="delete_all" checked={deleteAction === "delete_all"} onChange={() => setDeleteAction("delete_all")} style={{ marginTop: 3 }} />
+                <div>
+                  <strong>Delete all submissions</strong>
+                  <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>Permanently removes the assignment and every submission under it.</p>
+                </div>
+              </label>
+
+              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="radio" name="del-action" value="move" checked={deleteAction === "move"} onChange={() => setDeleteAction("move")} style={{ marginTop: 3 }} />
+                <div style={{ flex: 1 }}>
+                  <strong>Move submissions to another assignment</strong>
+                  <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>Submissions are re-linked; then this assignment is deleted.</p>
+                </div>
+              </label>
+
+              {deleteAction === "move" && (
+                <div className="stack" style={{ gap: 8, paddingLeft: 26 }}>
+                  <label className="field">
+                    <span>Pick existing assignment</span>
+                    <select value={moveTargetId} onChange={(e) => { setMoveTargetId(e.target.value); setMoveNewTitle(""); }}>
+                      <option value="">— Select —</option>
+                      {assignments.filter((a) => a.id !== deleteTarget.id).map((a) => (
+                        <option key={a.id} value={a.id}>{a.title}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="muted" style={{ textAlign: "center", fontSize: "0.8rem" }}>— or —</div>
+                  <label className="field">
+                    <span>Create new assignment with title</span>
+                    <input
+                      placeholder="e.g. Final Project Archive"
+                      value={moveNewTitle}
+                      onChange={(e) => { setMoveNewTitle(e.target.value); setMoveTargetId(""); }}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {deleteError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{deleteError}</div>}
+
+            <div className="confirm-actions">
+              <button className="button subtle" type="button" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button
+                className="button"
+                type="button"
+                disabled={deleting}
+                style={{ background: "var(--danger)" }}
+                onClick={handleDelete}
+              >
+                {deleting ? "Deleting..." : "Confirm delete"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </TeacherShell>
   );
 }
