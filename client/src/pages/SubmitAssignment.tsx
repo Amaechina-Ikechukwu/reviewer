@@ -4,7 +4,6 @@ import StudentShell from "../components/StudentShell";
 import { api } from "../api";
 import type { Assignment } from "../types";
 
-
 export default function SubmitAssignment() {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
@@ -34,7 +33,6 @@ export default function SubmitAssignment() {
     if (!assignmentId) return;
     setSubmitting(true);
     setError("");
-
     try {
       if (submissionType === "github") {
         await api("/submissions", { method: "POST", body: JSON.stringify({ assignmentId, githubUrl, notes }) });
@@ -57,72 +55,91 @@ export default function SubmitAssignment() {
 
   const now = new Date();
   const isPast = new Date(assignment.closesAt) <= now && !hasOverride;
+  const dueDate = new Date(assignment.closesAt).toLocaleString();
 
   return (
     <StudentShell section="submissions">
       <div className="page">
-        <div className="submit-page stack">
-          <div className="stack" style={{ gap: 4 }}>
-            <h1 className="student-page-title">{assignment.title}</h1>
-            {assignment.description && (
-              <p className="muted" style={{ fontSize: "1rem", margin: 0 }}>{assignment.description}</p>
+        <div className="submit-layout">
+
+          {/* Left: assignment info */}
+          <div className="submit-info stack">
+            <div className="stack" style={{ gap: 6 }}>
+              <div className="eyebrow">Assignment</div>
+              <h1 style={{ margin: 0, fontSize: "2rem", lineHeight: 1.2 }}>{assignment.title}</h1>
+              {assignment.description && (
+                <p className="muted" style={{ margin: 0, fontSize: "0.97rem", lineHeight: 1.6 }}>{assignment.description}</p>
+              )}
+            </div>
+
+            <div className={`due-badge ${isPast ? "due-badge--closed" : ""}`}>
+              <div className="eyebrow">{isPast ? "Closed" : "Due"}</div>
+              <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>{dueDate}</div>
+            </div>
+
+            {assignment.classNotes && (
+              <div className="class-notes-box">
+                <div className="eyebrow" style={{ marginBottom: 8 }}>Class notes</div>
+                <pre className="class-notes-content">{assignment.classNotes}</pre>
+              </div>
             )}
           </div>
 
-          {assignment.classNotes && (
-            <div className="class-notes-box">
-              <div className="eyebrow" style={{ marginBottom: 8 }}>Class notes</div>
-              <pre className="class-notes-content">{assignment.classNotes}</pre>
-            </div>
-          )}
+          {/* Right: submission form */}
+          <div className="submit-form-panel stack">
+            <h2 style={{ margin: 0, fontSize: "1.25rem" }}>Your submission</h2>
 
-          {isPast && (
-            <div className="deadline-passed-box">
-              <strong>Submission closed</strong>
-              <p style={{ margin: "4px 0 0" }}>The deadline for this assignment was {new Date(assignment.closesAt).toLocaleString()}. Contact your teacher if you need an extension.</p>
-            </div>
-          )}
-
-          <form className="stack" onSubmit={handleSubmit} style={{ display: isPast ? "none" : undefined }}>
-            {(assignment.allowGithub && assignment.allowFileUpload) && (
-              <div className="submission-toggle">
-                <button className={submissionType === "github" ? "active" : ""} onClick={() => setSubmissionType("github")} type="button">GitHub Repo</button>
-                <button className={submissionType === "file_upload" ? "active" : ""} onClick={() => setSubmissionType("file_upload")} type="button">ZIP Upload</button>
+            {isPast ? (
+              <div className="deadline-passed-box">
+                <strong>Submission closed</strong>
+                <p style={{ margin: "6px 0 0" }}>
+                  The deadline was {dueDate}. Contact your teacher if you need an extension.
+                </p>
               </div>
-            )}
-
-            {submissionType === "github" ? (
-              <label className="field">
-                <span>Repository URL</span>
-                <input
-                  className="input-plain"
-                  placeholder="https://github.com/username/repo"
-                  value={githubUrl}
-                  onChange={(e) => setGithubUrl(e.target.value)}
-                />
-              </label>
             ) : (
-              <label className="field">
-                <span>ZIP file</span>
-                <input accept=".zip" onChange={(e) => setFile(e.target.files?.[0] || null)} type="file" />
-              </label>
+              <form className="stack" onSubmit={handleSubmit}>
+                {(assignment.allowGithub && assignment.allowFileUpload) && (
+                  <div className="submission-toggle">
+                    <button className={submissionType === "github" ? "active" : ""} onClick={() => setSubmissionType("github")} type="button">GitHub Repo</button>
+                    <button className={submissionType === "file_upload" ? "active" : ""} onClick={() => setSubmissionType("file_upload")} type="button">ZIP Upload</button>
+                  </div>
+                )}
+
+                {submissionType === "github" ? (
+                  <label className="field">
+                    <span>Repository URL</span>
+                    <input
+                      className="input-plain"
+                      placeholder="https://github.com/username/repo"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                    />
+                  </label>
+                ) : (
+                  <label className="field">
+                    <span>ZIP file</span>
+                    <input accept=".zip" onChange={(e) => setFile(e.target.files?.[0] || null)} type="file" />
+                  </label>
+                )}
+
+                <label className="field">
+                  <span>Notes <span className="muted">(optional)</span></span>
+                  <textarea
+                    placeholder="Any specific areas you'd like feedback on?"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </label>
+
+                {error && <div className="soft-card" style={{ color: "#b91c1c" }}>{error}</div>}
+
+                <button className="button" disabled={submitting} type="submit">
+                  {submitting ? "Submitting..." : "Submit for Review"}
+                </button>
+              </form>
             )}
+          </div>
 
-            <label className="field">
-              <span>Notes <span className="muted">(optional)</span></span>
-              <textarea
-                placeholder="Any specific areas you'd like feedback on?"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </label>
-
-            {error && <div className="soft-card" style={{ color: "#b91c1c" }}>{error}</div>}
-
-            <button className="button" disabled={submitting} type="submit">
-              {submitting ? "Submitting..." : "Submit for Review"}
-            </button>
-          </form>
         </div>
       </div>
     </StudentShell>
