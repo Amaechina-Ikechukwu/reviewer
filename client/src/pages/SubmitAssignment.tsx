@@ -65,7 +65,7 @@ export default function SubmitAssignment() {
   const dueDate = new Date(assignment.closesAt).toLocaleString();
 
   return (
-    <StudentShell section="submissions">
+    <StudentShell section="dashboard">
       <div className="page">
         <div className="submit-layout">
 

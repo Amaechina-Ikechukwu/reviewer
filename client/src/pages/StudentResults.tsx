@@ -35,9 +35,8 @@ export default function StudentResults() {
   return (
     <StudentShell section="submissions">
       <div className="page stack">
-        <div>
-          <h1 className="student-page-title">Past Submissions</h1>
-          <p className="muted" style={{ margin: 0, fontSize: "1rem" }}>See your completed reviews and grades.</p>
+        <div className="section-header">
+          <h1 className="page-title">Submissions</h1>
         </div>
 
         <div className="history-list">

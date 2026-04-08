@@ -5,10 +5,7 @@ import { api } from "../api";
 import type { Assignment, Review } from "../types";
 
 type SubmissionRow = {
-  submission: {
-    id: string;
-    submittedAt: string;
-  };
+  submission: { id: string; submittedAt: string };
   assignmentTitle: string | null;
 };
 
@@ -30,157 +27,159 @@ export default function StudentDashboard() {
 
     api<SubmissionRow[]>("/submissions").then(async (rows) => {
       setSubmissions(rows);
-      const reviewEntries = await Promise.all(rows.map(async (row) => {
+      const entries = await Promise.all(rows.map(async (row) => {
         try {
           return [row.submission.id, await api<Review>(`/reviews/${row.submission.id}`)] as const;
-        } catch {
-          return null;
-        }
+        } catch { return null; }
       }));
-      setReviews(Object.fromEntries(reviewEntries.filter(Boolean) as Array<readonly [string, Review]>));
-    }).catch(() => {
-      setSubmissions([]);
-      setReviews({});
-    });
+      setReviews(Object.fromEntries(entries.filter(Boolean) as Array<readonly [string, Review]>));
+    }).catch(() => { setSubmissions([]); setReviews({}); });
   }, []);
 
   const now = new Date();
   const openAssignments = useMemo(
-    () => assignments
-      .filter((a) => {
-        const withinWindow = new Date(a.opensAt) <= now && new Date(a.closesAt) > now;
-        const hasOverride = overrideIds.has(a.id);
-        return withinWindow || hasOverride;
-      })
-      .sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()),
+    () => assignments.filter((a) => {
+      const withinWindow = new Date(a.opensAt) <= now && new Date(a.closesAt) > now;
+      return withinWindow || overrideIds.has(a.id);
+    }).sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()),
     [assignments, overrideIds],
   );
+
+  const upcomingDeadlines = useMemo(
+    () => openAssignments.slice(0, 5),
+    [openAssignments],
+  );
+
+  const completedReviews = Object.values(reviews).filter((r) => r.status === "completed").length;
   const recentSubmissions = useMemo(() => submissions.slice(0, 4), [submissions]);
-  const selectedAssignment = openAssignments[0] || null;
 
   return (
     <StudentShell section="dashboard">
       <div className="page">
-        <div className="student-layout-grid">
-          <div className="stack">
-            <div className="stack" style={{ gap: 6 }}>
-              <h1 className="student-page-title">My Learning Portal</h1>
-              <p className="muted" style={{ margin: 0, fontSize: "1rem" }}>Track open assignments and check the status of your submitted work.</p>
+        <div className="dashboard-grid">
+          <div className="dashboard-main">
+
+            {/* Hero + stats */}
+            <div className="stats-row">
+              <section className="hero-card">
+                <div className="stack">
+                  <h1>{submissions.length} submissions · {openAssignments.length} open</h1>
+                  <div className="hero-actions">
+                    <Link className="button secondary" to="/student/results">My Submissions</Link>
+                  </div>
+                </div>
+              </section>
+              <div className="stats-row">
+                <section className="card stat-card">
+                  <p className="eyebrow">Open</p>
+                  <p className="metric">{openAssignments.length}</p>
+                </section>
+                <section className="card stat-card">
+                  <p className="eyebrow">Graded</p>
+                  <p className="metric">{completedReviews}</p>
+                </section>
+              </div>
             </div>
 
+            {/* Open assignments grid */}
             <section className="stack">
               <div className="section-header">
                 <h2 className="section-title">Open Assignments</h2>
                 <span className="tag">{openAssignments.length} Active</span>
               </div>
-
-              <div className="assignment-list">
+              <div className="assignment-strip">
                 {openAssignments.map((assignment) => (
-                  <article className="student-assignment-card" key={assignment.id}>
-                    <div className="stack" style={{ gap: 10 }}>
-                      <h3 style={{ margin: 0, fontSize: "1.45rem", lineHeight: 1.2 }}>{assignment.title}</h3>
-                      <p style={{ margin: 0, fontSize: "0.98rem", lineHeight: 1.65 }}>
-                        {assignment.description}
-                      </p>
-                      <div className="pill-row">
-                        {assignment.sourceUrl ? (
-                          <a className="tag tag-link" href={assignment.sourceUrl} target="_blank" rel="noreferrer">
-                            {assignment.sourceType} ↗
-                          </a>
-                        ) : (
-                          <span className="tag">{assignment.sourceType}</span>
-                        )}
-                        {assignment.allowGithub && <span className="tag">GitHub</span>}
-                        {assignment.allowFileUpload && <span className="tag">ZIP Upload</span>}
-                      </div>
+                  <article className="card assignment-card" key={assignment.id}>
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      {assignment.sourceUrl ? (
+                        <a className="tag tag-link" href={assignment.sourceUrl} target="_blank" rel="noreferrer">
+                          {assignment.sourceType} ↗
+                        </a>
+                      ) : (
+                        <span className="tag">{assignment.sourceType}</span>
+                      )}
+                      <span className="muted">{new Date(assignment.closesAt).toLocaleDateString()}</span>
                     </div>
-                    <div className="student-status-block">
-                      <div style={{ color: "#d62828", fontWeight: 800, fontSize: "1.15rem" }}>
-                        Due
+                    <div className="stack" style={{ gap: 6 }}>
+                      <h3 style={{ margin: 0, fontSize: "1.4rem", lineHeight: 1.2 }}>{assignment.title}</h3>
+                      {assignment.description && (
+                        <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>{assignment.description}</p>
+                      )}
+                    </div>
+                    <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: "auto" }}>
+                      <div className="pill-row">
+                        {assignment.allowGithub && <span className="tag">GitHub</span>}
+                        {assignment.allowFileUpload && <span className="tag">ZIP</span>}
                       </div>
-                      <div className="muted" style={{ marginTop: 8 }}>{formatDateTime(assignment.closesAt)}</div>
-                      <Link className="action-link" to={`/student/submit/${assignment.id}`}>Submit</Link>
+                      <Link className="action-link" to={`/student/submit/${assignment.id}`}>Submit →</Link>
                     </div>
                   </article>
                 ))}
-
                 {openAssignments.length === 0 && (
-                  <article className="card">
-                    <strong>No assignments available</strong>
-                    <p className="muted" style={{ margin: 0 }}>Assignments from your teacher will appear here.</p>
+                  <article className="card assignment-card">
+                    <h3 style={{ margin: 0 }}>No open assignments</h3>
+                    <p className="muted">Your teacher hasn't opened any assignments yet.</p>
                   </article>
                 )}
               </div>
             </section>
 
+            {/* Recent submissions */}
             <section className="stack">
               <div className="section-header">
-                <h2 className="section-title">Past Submissions</h2>
+                <h2 className="section-title">Recent Submissions</h2>
                 <Link className="action-link" to="/student/results">View All</Link>
               </div>
-
-              <div className="history-list">
+              <div className="card table-card">
+                <div className="table-head" style={{ gridTemplateColumns: "1.5fr 1fr 0.8fr 0.6fr" }}>
+                  <span>Assignment</span>
+                  <span>Submitted</span>
+                  <span>Grade</span>
+                  <span>Status</span>
+                </div>
                 {recentSubmissions.map((row) => {
                   const review = reviews[row.submission.id];
                   const score = review?.teacherOverrideScore ?? review?.aiScore;
-
                   return (
-                    <article className="history-card" key={row.submission.id}>
-                      <div className="initials-badge" style={{ background: review?.status === "completed" ? "#efe4ff" : "#dfe7f4", color: review?.status === "completed" ? "#6a1fd2" : "#4a5975" }}>
-                        {review?.status === "completed" ? "OK" : "..."}
+                    <div className="table-row" key={row.submission.id} style={{ gridTemplateColumns: "1.5fr 1fr 0.8fr 0.6fr" }}>
+                      <div style={{ fontWeight: 700 }}>{row.assignmentTitle || "Assignment"}</div>
+                      <div className="muted" style={{ fontSize: "0.88rem" }}>{formatDateTime(row.submission.submittedAt)}</div>
+                      <div style={{ fontWeight: 800, color: "#1848b8" }}>
+                        {typeof score === "number" ? `${score}/${review?.maxScore}` : "—"}
                       </div>
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: "1rem" }}>{row.assignmentTitle || "Assignment"}</div>
-                        <div className="muted">Submitted {formatDateTime(row.submission.submittedAt)}</div>
-                      </div>
-                      <div>
-                        <div className="eyebrow">Grade</div>
-                        <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#1848b8" }}>
-                          {typeof score === "number" ? `${score}/${review?.maxScore}` : "--"}
-                        </div>
-                      </div>
-                      <div className="tag">{review?.status || "pending"}</div>
-                    </article>
+                      <span className={`status-pill ${review?.status || "pending"}`}>{review?.status || "pending"}</span>
+                    </div>
                   );
                 })}
-
                 {recentSubmissions.length === 0 && (
-                  <article className="card">
-                    <strong>No submissions yet</strong>
-                    <p className="muted" style={{ margin: 0 }}>Your submitted assignments will appear here after you send them.</p>
-                  </article>
+                  <div className="table-row"><span className="muted">No submissions yet.</span></div>
                 )}
               </div>
             </section>
+
           </div>
 
-          <aside className="student-panel stack">
-            <div className="stack" style={{ gap: 10 }}>
-              <h2 style={{ margin: 0, fontSize: "1.6rem" }}>Quick Submit</h2>
-              {selectedAssignment ? (
-                <>
-                  <div className="field">
-                    <span>Selected Assignment</span>
-                    <div className="input-shell">{selectedAssignment.title}</div>
-                  </div>
-                  <div className="feedback-box">
-                    <strong>Due</strong>
-                    <p style={{ marginTop: 8 }}>{formatDateTime(selectedAssignment.closesAt)}</p>
-                    <strong>Submission Methods</strong>
-                    <div className="pill-row" style={{ marginTop: 8 }}>
-                      {selectedAssignment.allowGithub && <span className="tag">GitHub Repo</span>}
-                      {selectedAssignment.allowFileUpload && <span className="tag">ZIP Upload</span>}
-                    </div>
-                  </div>
-                  <Link className="button" to={`/student/submit/${selectedAssignment.id}`}>Open Submission Form</Link>
-                </>
-              ) : (
-                <div className="feedback-box">
-                  No assignment is ready for submission yet.
-                </div>
+          {/* Right sidebar — upcoming deadlines */}
+          <aside className="dashboard-sidebar">
+            <section className="queue-panel">
+              <h3 className="eyebrow" style={{ margin: 0 }}>Upcoming Deadlines</h3>
+              {upcomingDeadlines.map((assignment) => (
+                <Link
+                  className="history-card deadline-item"
+                  key={assignment.id}
+                  to={`/student/submit/${assignment.id}`}
+                  style={{ gridTemplateColumns: "1fr", background: "#fff", textDecoration: "none" }}
+                >
+                  <strong>{assignment.title}</strong>
+                  <span className="muted">Due {formatDateTime(assignment.closesAt)}</span>
+                </Link>
+              ))}
+              {upcomingDeadlines.length === 0 && (
+                <p className="muted" style={{ margin: 0 }}>No upcoming deadlines.</p>
               )}
-            </div>
+            </section>
           </aside>
+
         </div>
       </div>
     </StudentShell>
