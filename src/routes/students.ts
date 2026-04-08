@@ -121,13 +121,22 @@ export const studentRoutes = {
     if (!sourceId || !targetId) return json({ error: "sourceId and targetId required." }, 400);
     if (sourceId === targetId) return json({ error: "Cannot merge a student with themselves." }, 400);
 
-    const [source] = await db.select({ id: users.id, role: users.role, fullName: users.fullName })
+    const [source] = await db.select({ id: users.id, role: users.role, fullName: users.fullName, email: users.email })
       .from(users).where(eq(users.id, sourceId)).limit(1);
-    const [target] = await db.select({ id: users.id, role: users.role })
+    const [target] = await db.select({ id: users.id, role: users.role, fullName: users.fullName, email: users.email })
       .from(users).where(eq(users.id, targetId)).limit(1);
 
     if (!source || source.role !== "student") return json({ error: "Source student not found." }, 404);
     if (!target || target.role !== "student") return json({ error: "Target student not found." }, 404);
+
+    // If the target has a placeholder/historical email but source has a real one, promote source's identity to target
+    const targetHasPlaceholder = target.email.endsWith("@historical.reviewai.local");
+    const sourceHasRealEmail = !source.email.endsWith("@historical.reviewai.local");
+    if (targetHasPlaceholder && sourceHasRealEmail) {
+      await db.update(users)
+        .set({ email: source.email, fullName: source.fullName })
+        .where(eq(users.id, targetId));
+    }
 
     // Find which assignments target already has submissions for (to detect conflicts)
     const targetSubs = await db
