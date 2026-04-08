@@ -18,11 +18,15 @@ function formatDateTime(value: string) {
 
 export default function StudentDashboard() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [overrideIds, setOverrideIds] = useState<Set<string>>(new Set());
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
 
   useEffect(() => {
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
+    api<{ assignmentIds: string[] }>("/students/my-overrides")
+      .then((r) => setOverrideIds(new Set(r.assignmentIds)))
+      .catch(() => setOverrideIds(new Set()));
 
     api<SubmissionRow[]>("/submissions").then(async (rows) => {
       setSubmissions(rows);
@@ -43,9 +47,13 @@ export default function StudentDashboard() {
   const now = new Date();
   const openAssignments = useMemo(
     () => assignments
-      .filter((a) => new Date(a.closesAt) > now && new Date(a.opensAt) <= now)
+      .filter((a) => {
+        const withinWindow = new Date(a.opensAt) <= now && new Date(a.closesAt) > now;
+        const hasOverride = overrideIds.has(a.id);
+        return withinWindow || hasOverride;
+      })
       .sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()),
-    [assignments],
+    [assignments, overrideIds],
   );
   const recentSubmissions = useMemo(() => submissions.slice(0, 4), [submissions]);
   const selectedAssignment = openAssignments[0] || null;

@@ -4,10 +4,12 @@ import StudentShell from "../components/StudentShell";
 import { api } from "../api";
 import type { Assignment } from "../types";
 
+
 export default function SubmitAssignment() {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [hasOverride, setHasOverride] = useState(false);
   const [submissionType, setSubmissionType] = useState<"github" | "file_upload">("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [notes, setNotes] = useState("");
@@ -21,6 +23,10 @@ export default function SubmitAssignment() {
       setAssignment(data);
       if (!data.allowGithub && data.allowFileUpload) setSubmissionType("file_upload");
     }).catch((err) => setError(err instanceof Error ? err.message : "Failed to load assignment"));
+
+    api<{ assignmentIds: string[] }>("/students/my-overrides")
+      .then((r) => setHasOverride(r.assignmentIds.includes(assignmentId!)))
+      .catch(() => setHasOverride(false));
   }, [assignmentId]);
 
   async function handleSubmit(event: FormEvent) {
@@ -50,8 +56,7 @@ export default function SubmitAssignment() {
   if (!assignment) return <div className="auth-shell">Loading...</div>;
 
   const now = new Date();
-  const isOpen = new Date(assignment.opensAt) <= now && new Date(assignment.closesAt) > now;
-  const isPast = new Date(assignment.closesAt) <= now;
+  const isPast = new Date(assignment.closesAt) <= now && !hasOverride;
 
   return (
     <StudentShell section="submissions">

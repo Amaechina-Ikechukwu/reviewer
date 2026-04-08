@@ -79,6 +79,18 @@ export const studentRoutes = {
     return json({ student: { ...student, pending: true }, inviteSent: true }, 201);
   },
 
+  async myOverrides(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "student") return json({ assignmentIds: [] });
+
+    const rows = await db
+      .select({ assignmentId: submissionOverrides.assignmentId })
+      .from(submissionOverrides)
+      .where(eq(submissionOverrides.studentId, user.userId));
+
+    return json({ assignmentIds: rows.map((r) => r.assignmentId) });
+  },
+
   async openSubmission(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
     if (user.role !== "teacher") return json({ error: "Only teachers can open submissions." }, 403);
