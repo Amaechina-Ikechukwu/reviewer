@@ -84,6 +84,46 @@ async function getAssignment(assignmentId: string) {
   return assignment;
 }
 
+/** Normalize a name for fuzzy comparison: lowercase, collapse spaces, strip punctuation */
+function normalizeName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Score how well two names match (0–1). Uses token overlap so "Abuoma David" matches "David Abuoma" etc. */
+function nameMatchScore(a: string, b: string): number {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (na === nb) return 1;
+
+  const tokensA = new Set(na.split(" "));
+  const tokensB = new Set(nb.split(" "));
+  const intersection = [...tokensA].filter((t) => tokensB.has(t)).length;
+  const union = new Set([...tokensA, ...tokensB]).size;
+  return intersection / union;
+}
+
+/** Find the best-matching existing student for a given name. Returns null if no good match. */
+async function findStudentByFuzzyName(fullName: string) {
+  const allStudents = await db
+    .select({ id: users.id, email: users.email, fullName: users.fullName, role: users.role, passwordHash: users.passwordHash })
+    .from(users)
+    .where(eq(users.role, "student"));
+
+  let best: (typeof allStudents)[0] | null = null;
+  let bestScore = 0;
+
+  for (const student of allStudents) {
+    const score = nameMatchScore(fullName, student.fullName);
+    if (score > bestScore) {
+      bestScore = score;
+      best = student;
+    }
+  }
+
+  // Require at least first-name match (score ≥ 0.4) to count as a match
+  return bestScore >= 0.4 ? best : null;
+}
+
 async function removeSubmissionFiles(filePath?: string | null) {
   if (!filePath || !existsSync(filePath)) {
     return;
@@ -392,21 +432,35 @@ export const submissionRoutes = {
 
       let student;
       let resolvedEmail = email || "";
+      let mappedByFuzzy = false;
 
       if (email) {
+        // 1. Try exact email match
         [student] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-      } else {
+      }
+
+      if (!student) {
+        // 2. Try exact name match (case-insensitive)
         [student] = await db
           .select()
           .from(users)
-          .where(and(eq(users.fullName, fullName), eq(users.role, "student")))
+          .where(and(ilike(users.fullName, fullName), eq(users.role, "student")))
           .limit(1);
+      }
 
-        if (student) {
-          resolvedEmail = student.email;
-        } else {
-          resolvedEmail = await createHistoricalEmail(fullName);
+      if (!student) {
+        // 3. Fuzzy name match — catches "Abuoma David" vs "David Abuoma", initials, typos etc.
+        const fuzzyMatch = await findStudentByFuzzyName(fullName);
+        if (fuzzyMatch) {
+          student = fuzzyMatch;
+          mappedByFuzzy = true;
         }
+      }
+
+      if (student) {
+        resolvedEmail = student.email;
+      } else {
+        resolvedEmail = email || await createHistoricalEmail(fullName);
       }
 
       let createdStudent = false;
@@ -463,9 +517,10 @@ export const submissionRoutes = {
 
       results.push({
         email: email || (resolvedEmail && !isHistoricalEmail(resolvedEmail) ? resolvedEmail : undefined),
-        fullName,
+        fullName: student.fullName, // use the matched student's canonical name
         githubUrl,
         createdStudent,
+        mappedByFuzzy,
         submissionId: submission.id,
       });
     }

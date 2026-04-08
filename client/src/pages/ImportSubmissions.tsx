@@ -120,7 +120,7 @@ export default function ImportSubmissions() {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [message, setMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
-  const [result, setResult] = useState<Array<{ email?: string; fullName: string; githubUrl: string; createdStudent: boolean; submissionId: string }> | null>(null);
+  const [result, setResult] = useState<Array<{ email?: string; fullName: string; githubUrl: string; createdStudent: boolean; mappedByFuzzy?: boolean; submissionId: string }> | null>(null);
 
   const missingFields = useMemo(() => rows.filter((row) => !row.fullName || !row.githubUrl).length, [rows]);
 
@@ -254,7 +254,13 @@ export default function ImportSubmissions() {
                     <strong>{item.fullName}</strong>
                     {item.email && <span className="muted">{item.email}</span>}
                     <span className="muted">{item.githubUrl}</span>
-                    <span>{item.createdStudent ? "Student record created." : "Used existing student record."}</span>
+                    <span>
+                      {item.createdStudent
+                        ? "New student record created."
+                        : item.mappedByFuzzy
+                          ? `Auto-matched to existing student "${item.fullName}".`
+                          : "Matched to existing student."}
+                    </span>
                   </div>
                 ))}
               </div>
