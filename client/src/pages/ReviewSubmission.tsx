@@ -86,11 +86,10 @@ export default function ReviewSubmission() {
     api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => setFiles([]));
     api<Review>(`/reviews/${submissionId}`).then((data) => {
       setReview(data);
-      // Only pre-fill score if teacher has explicitly overridden, or AI gave a non-zero score
-      const score = data.teacherOverrideScore ?? (data.aiScore && data.aiScore > 0 ? data.aiScore : null);
+      // Always pre-fill score from teacher override if set, else from AI score
+      const score = data.teacherOverrideScore ?? data.aiScore;
       setOverrideScore(typeof score === "number" ? String(score) : "");
-      // Only pre-fill feedback if teacher has already released a grade
-      setFinalFeedback(typeof data.teacherOverrideScore === "number" ? (data.feedback?.summary || "") : "");
+      setFinalFeedback(data.feedback?.summary || "");
     }).catch(() => setReview(null));
   }, [submissionId]);
 
@@ -138,9 +137,9 @@ export default function ReviewSubmission() {
         body: JSON.stringify({ provider: "gemini" }),
       });
       setReview(nextReview);
-      const score = nextReview.teacherOverrideScore ?? (nextReview.aiScore && nextReview.aiScore > 0 ? nextReview.aiScore : null);
+      const score = nextReview.teacherOverrideScore ?? nextReview.aiScore;
       setOverrideScore(typeof score === "number" ? String(score) : "");
-      setFinalFeedback(typeof nextReview.teacherOverrideScore === "number" ? (nextReview.feedback?.summary || "") : "");
+      setFinalFeedback(nextReview.feedback?.summary || "");
       toast().success("Review completed");
       // Re-fetch files now that the repo has been cloned
       api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => {});
@@ -205,7 +204,7 @@ export default function ReviewSubmission() {
                     <strong style={{ fontSize: "1.02rem" }}>Gemini Review</strong>
                     <span className="muted">{geminiModel}</span>
                   </div>
-                  <span className="score-pill blue">{typeof geminiScore === "number" && geminiScore > 0 ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
+                  <span className="score-pill blue">{typeof geminiScore === "number" ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
                 </div>
 
                 <p style={{ fontSize: "0.98rem", lineHeight: 1.65 }}>{geminiSummary}</p>
@@ -253,28 +252,11 @@ export default function ReviewSubmission() {
                 </div>
               )}
 
-              {viewMode === "preview" && previewDoc !== null ? (
-                <div className="mini-browser">
-                  <div className="mini-browser-bar">
-                    <span className="mini-browser-dot red" />
-                    <span className="mini-browser-dot yellow" />
-                    <span className="mini-browser-dot green" />
-                    <div className="mini-browser-url">
-                      <span>🔒</span>
-                      <span>{submission.studentName} — {submission.assignment.title}</span>
-                    </div>
-                  </div>
-                  <iframe
-                    className="mini-browser-frame"
-                    sandbox="allow-scripts"
-                    srcDoc={previewDoc}
-                    title="Student preview"
-                  />
-                </div>
-              ) : (
-                <>
+              <div className={`code-split-panel${previewDoc !== null ? " has-preview" : ""}`}>
+                {/* Left: code */}
+                <div className="code-split-left">
                   <div className="code-preview-head">
-                    <span>Code Preview: {selectedFile?.filename || "—"}</span>
+                    <span>Code: {selectedFile?.filename || "—"}</span>
                     <span>{selectedFile ? `${selectedFileLineCount} lines` : ""}</span>
                   </div>
                   {selectedFile && (
@@ -282,8 +264,31 @@ export default function ReviewSubmission() {
                       <pre>{selectedFile.content}</pre>
                     </div>
                   )}
-                </>
-              )}
+                </div>
+
+                {/* Right: mini browser — only when an HTML file is selected */}
+                {previewDoc !== null && (
+                  <div className="code-split-right">
+                    <div className="mini-browser">
+                      <div className="mini-browser-bar">
+                        <span className="mini-browser-dot red" />
+                        <span className="mini-browser-dot yellow" />
+                        <span className="mini-browser-dot green" />
+                        <div className="mini-browser-url">
+                          <span>🔒</span>
+                          <span>{submission.studentName} — {submission.assignment.title}</span>
+                        </div>
+                      </div>
+                      <iframe
+                        className="mini-browser-frame"
+                        sandbox="allow-scripts"
+                        srcDoc={previewDoc}
+                        title="Student preview"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {viewMode === "code" && selectedFileScore && (
                 <div className="file-score-strip">
