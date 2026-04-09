@@ -64,22 +64,10 @@ export async function ensureSchema() {
     await db.execute(sqlTag`CREATE INDEX IF NOT EXISTS "idx_audit_logs_created_at" ON "audit_logs" ("created_at")`);
     await db.execute(sqlTag`CREATE INDEX IF NOT EXISTS "idx_audit_logs_actor" ON "audit_logs" ("actor_id")`);
 
-    // Unique constraints (idempotent — check if they exist first)
-    await db.execute(sqlTag`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uniq_overrides_student_assignment') THEN
-          ALTER TABLE "submission_overrides" ADD CONSTRAINT "uniq_overrides_student_assignment" UNIQUE ("student_id", "assignment_id");
-        END IF;
-      END $$;
-    `);
+    // Unique indexes (CREATE INDEX IF NOT EXISTS is truly idempotent)
+    await db.execute(sqlTag`CREATE UNIQUE INDEX IF NOT EXISTS "uniq_overrides_student_assignment" ON "submission_overrides" ("student_id", "assignment_id")`);
+    await db.execute(sqlTag`CREATE UNIQUE INDEX IF NOT EXISTS "users_join_code_unique" ON "users" ("join_code")`);
 
-    await db.execute(sqlTag`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_join_code_unique') THEN
-          ALTER TABLE "users" ADD CONSTRAINT "users_join_code_unique" UNIQUE ("join_code");
-        END IF;
-      END $$;
-    `);
 
     console.log("[schema] Production schema sync complete");
   } catch (err) {
