@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
@@ -45,6 +45,20 @@ export default function StudentsPage() {
   const [opening, setOpening] = useState(false);
 
   const [resetting, setResetting] = useState(false);
+
+  // Row action popover
+  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpenPopoverId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   // Merge students
   const [showMerge, setShowMerge] = useState(false);
@@ -225,28 +239,21 @@ export default function StudentsPage() {
                 <div className="muted" style={{ fontSize: "0.88rem" }}>
                   {new Date(student.createdAt).toLocaleDateString()}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ position: "relative" }} ref={openPopoverId === student.id ? popoverRef : undefined}>
                   <button
-                    className="open-button"
                     type="button"
-                    onClick={() => openSubmitFor(student)}
+                    style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700, fontSize: "1rem", color: "#5d6d89", lineHeight: 1 }}
+                    onClick={() => setOpenPopoverId(openPopoverId === student.id ? null : student.id)}
                   >
-                    Open submission
+                    ···
                   </button>
-                  <button
-                    className="open-button"
-                    type="button"
-                    onClick={() => setConfirmReset(student)}
-                  >
-                    Reset password
-                  </button>
-                  <button
-                    className="open-button"
-                    type="button"
-                    onClick={() => { setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}
-                  >
-                    Merge
-                  </button>
+                  {openPopoverId === student.id && (
+                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 8px 24px rgba(13,40,100,0.13)", zIndex: 200, minWidth: 180, overflow: "hidden" }}>
+                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); openSubmitFor(student); }}>Open submission</button>
+                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setConfirmReset(student); }}>Reset password</button>
+                      <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}>Merge student</button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
