@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 import type { CodeFile, Review } from "../types";
 
@@ -125,8 +126,11 @@ export default function ReviewSubmission() {
       const score = nextReview.teacherOverrideScore ?? nextReview.aiScore;
       setOverrideScore(typeof score === "number" ? String(score) : "");
       setFinalFeedback(nextReview.feedback?.summary || "");
+      toast().success("Review completed");
+      // Re-fetch files now that the repo has been cloned
+      api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => {});
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Review failed");
+      toast().error(err instanceof Error ? err.message : "Review failed");
     } finally {
       setReviewing(false);
     }
@@ -138,11 +142,12 @@ export default function ReviewSubmission() {
     try {
       const nextReview = await api<Review>(`/reviews/${submissionId}/override`, {
         method: "PATCH",
-        body: JSON.stringify({ score: Number(overrideScore) }),
+        body: JSON.stringify({ score: Number(overrideScore), feedback: finalFeedback }),
       });
       setReview(nextReview);
+      toast().success("Grade released");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Override failed");
+      toast().error(err instanceof Error ? err.message : "Failed to release grade");
     }
   }
 
@@ -174,7 +179,7 @@ export default function ReviewSubmission() {
           )}
         </div>
 
-        {message && <div className="card" style={{ color: "#b91c1c" }}>{message}</div>}
+        {message && <div className="card" style={{ color: "#b91c1c", fontSize: "0.9rem" }}>{message}</div>}
 
         <div className="review-page-grid">
           <div className="stack">

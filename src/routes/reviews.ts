@@ -151,31 +151,52 @@ export const reviewRoutes = {
       return json({ error: "Only teachers can override scores." }, 403);
     }
 
-    const body = await request.json().catch(() => ({})) as { score?: number };
+    const body = await request.json().catch(() => ({})) as { score?: number; feedback?: string };
     const score = Number(body.score);
+    const feedbackText = body.feedback?.trim() || null;
 
     if (!Number.isFinite(score) || score < 0) {
       return json({ error: "Please provide a valid override score." }, 400);
     }
 
-    const [existingReview] = await db
+    const [submission] = await db.select().from(submissions).where(eq(submissions.id, params.submissionId)).limit(1);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+
+    const [assignment] = await db.select().from(assignments).where(eq(assignments.id, submission.assignmentId)).limit(1);
+
+    if (score > (assignment?.maxScore ?? 100)) {
+      return json({ error: "Override score cannot exceed the assignment max score." }, 400);
+    }
+
+    let [existingReview] = await db
       .select()
       .from(reviews)
       .where(eq(reviews.submissionId, params.submissionId))
       .limit(1);
 
     if (!existingReview) {
-      return json({ error: "Review not found." }, 404);
+      // Create a manual review record so teacher can release a grade without running AI first
+      [existingReview] = await db
+        .insert(reviews)
+        .values({
+          submissionId: params.submissionId,
+          status: "completed",
+          maxScore: assignment?.maxScore ?? 100,
+        })
+        .returning();
     }
 
-    if (existingReview.maxScore != null && score > existingReview.maxScore) {
-      return json({ error: "Override score cannot exceed the assignment max score." }, 400);
-    }
+    const updatedFeedback = feedbackText
+      ? { ...(existingReview.feedback ?? {}), summary: feedbackText }
+      : existingReview.feedback;
 
     const [review] = await db
       .update(reviews)
       .set({
         teacherOverrideScore: Math.round(score),
+        status: "completed",
+        feedback: updatedFeedback as typeof existingReview.feedback,
+        reviewedAt: new Date(),
       })
       .where(eq(reviews.submissionId, params.submissionId))
       .returning();

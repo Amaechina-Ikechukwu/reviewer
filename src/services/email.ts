@@ -65,6 +65,23 @@ export async function sendAssignmentNotification(
   ));
 }
 
+export async function sendSubmissionNotification(
+  teacher: { email: string; fullName: string },
+  student: { fullName: string },
+  assignment: { title: string; id: string },
+  submissionId: string,
+) {
+  const link = `${APP_URL}/teacher/review/${submissionId}`;
+  await send(teacher.email, `New submission: ${assignment.title}`, `
+    <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:32px 24px;color:#15233b">
+      <h2 style="margin:0 0 8px">New submission received</h2>
+      <p style="margin:0 0 4px;color:#64748b"><strong>${student.fullName}</strong> just submitted <strong>${assignment.title}</strong>.</p>
+      <br/>
+      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">Review submission</a>
+    </div>
+  `);
+}
+
 export async function sendDeadlineReminder(
   students: Array<{ email: string; fullName: string }>,
   assignment: { title: string; closesAt: Date; id: string },

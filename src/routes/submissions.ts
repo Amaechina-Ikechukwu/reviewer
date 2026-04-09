@@ -11,6 +11,7 @@ import { extractZip } from "../services/file-extractor";
 import { cloneGithubRepo } from "../services/github";
 import { isWithinDeadline } from "../utils/deadline";
 import { json } from "../utils/json";
+import { sendSubmissionNotification } from "../services/email";
 import { hashPassword } from "../utils/password";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
@@ -230,6 +231,14 @@ export const submissionRoutes = {
         isLate,
       })
       .returning();
+
+    // Notify teacher
+    const [teacher] = await db.select({ email: users.email, fullName: users.fullName })
+      .from(users).where(eq(users.id, assignment.createdBy)).limit(1);
+    if (teacher) {
+      const [student] = await db.select({ fullName: users.fullName }).from(users).where(eq(users.id, user.userId)).limit(1);
+      sendSubmissionNotification(teacher, { fullName: student?.fullName || "A student" }, assignment, submissionId).catch(console.error);
+    }
 
     return json(submission, 201);
   },
