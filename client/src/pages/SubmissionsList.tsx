@@ -80,7 +80,7 @@ export default function SubmissionsList() {
   }, [date, selectedAssignment]);
 
   return (
-    <TeacherShell section="submissions" searchPlaceholder="Search entries...">
+    <TeacherShell section="submissions">
       <div className="page stack">
         <h1 className="page-title">Submissions</h1>
 

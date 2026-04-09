@@ -173,7 +173,7 @@ export default function ImportSubmissions() {
   }
 
   return (
-    <TeacherShell section="submissions" searchPlaceholder="Search imports...">
+    <TeacherShell section="submissions">
       <div className="page stack">
         <h1 className="page-title">Import Submissions</h1>
 

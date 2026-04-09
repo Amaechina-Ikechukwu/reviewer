@@ -170,7 +170,7 @@ export default function ReviewSubmission() {
   }
 
   return (
-    <TeacherShell section="submissions" searchPlaceholder="Search entries...">
+    <TeacherShell section="submissions">
       <div className="page">
         <div className="stack" style={{ gap: 6 }}>
           <Link className="action-link" to="/teacher/submissions" style={{ fontSize: "0.88rem" }}>← Submissions</Link>

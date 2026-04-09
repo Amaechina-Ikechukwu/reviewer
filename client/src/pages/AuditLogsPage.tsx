@@ -54,7 +54,7 @@ export default function AuditLogsPage() {
   }, []);
 
   return (
-    <TeacherShell section="dashboard" searchPlaceholder="Search logs...">
+    <TeacherShell section="dashboard">
       <div className="page stack">
         <div className="section-header">
           <h1 className="page-title">Activity Log</h1>

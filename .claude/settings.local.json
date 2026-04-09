@@ -11,7 +11,8 @@
       "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"CREATE TABLE IF NOT EXISTS audit_logs \\(id uuid PRIMARY KEY DEFAULT gen_random_uuid\\(\\), actor_id uuid, actor_email varchar\\(255\\), action varchar\\(100\\) NOT NULL, target_type varchar\\(50\\), target_id varchar\\(255\\), details jsonb, created_at timestamptz NOT NULL DEFAULT now\\(\\)\\); CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs\\(created_at\\); CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs\\(actor_id\\); ALTER TABLE submission_overrides ADD COLUMN IF NOT EXISTS closes_at timestamptz;\")",
       "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"\\\\dt\")",
       "Bash(psql postgres://postgres:robinsonmarch@localhost:5432/reviewer -c ':*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"SELECT id, assignment_id, student_id FROM submissions WHERE student_id = '2fd7f827-1917-4b72-a4c4-9f2d3fe9f0cb' AND assignment_id = '7f4e9e85-949d-4fce-9a94-b61eba2a321b';\")"
     ]
   }
 }

@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import { Toaster } from "./Toast";
 
 type TeacherShellProps = {
   section: "dashboard" | "assignments" | "submissions" | "students" | "logs";
   title?: string;
-  searchPlaceholder?: string;
   children: ReactNode;
 };
 
@@ -90,10 +88,8 @@ const sideLinks = [
 export default function TeacherShell({
   section,
   title = "Reviewer",
-  searchPlaceholder = "Search insights...",
   children,
 }: TeacherShellProps) {
-  const { user } = useAuth();
 
   return (
     <div className="app-shell">
@@ -136,23 +132,7 @@ export default function TeacherShell({
         </div>
       </aside>
 
-      <div className="main-shell">
-        <header className="topbar">
-          <Link className="topbar-logo" to="/teacher">Reviewer</Link>
-
-          <div className="topbar-actions">
-            <div className="search-pill">
-              <span className="search-icon"><SearchIcon /></span>
-              <span>{searchPlaceholder}</span>
-            </div>
-            <div className="avatar-pill">
-              {user?.fullName?.slice(0, 1).toUpperCase() || "T"}
-            </div>
-          </div>
-        </header>
-
-        <main className="main-content">{children}</main>
-      </div>
+      <main className="main-content">{children}</main>
       <Toaster />
     </div>
   );

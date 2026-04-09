@@ -97,22 +97,7 @@ export default function StudentShell({ section, children }: StudentShellProps) {
         </div>
       </aside>
 
-      <div className="main-shell">
-        <header className="topbar">
-          <Link className="topbar-logo" to="/student">Reviewer</Link>
-          <div className="topbar-actions">
-            <div className="search-pill">
-              <span className="search-icon"><SearchIcon /></span>
-              <span>Search assignments...</span>
-            </div>
-            <div className="avatar-pill">
-              {user?.fullName?.slice(0, 1).toUpperCase() || "S"}
-            </div>
-          </div>
-        </header>
-
-        <main className="main-content">{children}</main>
-      </div>
+      <main className="main-content">{children}</main>
       <Toaster />
     </div>
   );
