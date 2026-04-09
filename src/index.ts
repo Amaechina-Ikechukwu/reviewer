@@ -10,6 +10,7 @@ import { audit } from "./services/audit";
 import { assignmentRoutes } from "./routes/assignments";
 import { auditLogRoutes } from "./routes/auditLogs";
 import { authRoutes } from "./routes/auth";
+import { gradebookRoutes } from "./routes/gradebook";
 import { reviewRoutes } from "./routes/reviews";
 import { studentRoutes } from "./routes/students";
 import { submissionRoutes } from "./routes/submissions";
@@ -115,6 +116,7 @@ addRoute("DELETE", "/api/students/:studentId", studentRoutes.delete);
 addRoute("POST", "/api/students/:studentId/open-submission", studentRoutes.openSubmission);
 
 addRoute("GET", "/api/audit-logs", auditLogRoutes.list);
+addRoute("GET", "/api/gradebook", gradebookRoutes.get);
 
 addRoute("GET", "/api/teachers/join-link", teacherRoutes.getJoinLink);
 addRoute("GET", "/api/teachers/join/:code", teacherRoutes.getTeacherByCode, false);

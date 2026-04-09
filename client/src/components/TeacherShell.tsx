@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Toaster } from "./Toast";
 
 type TeacherShellProps = {
-  section: "dashboard" | "assignments" | "submissions" | "students" | "logs";
+  section: "dashboard" | "assignments" | "submissions" | "students" | "logs" | "gradebook";
   title?: string;
   children: ReactNode;
 };
@@ -77,11 +77,21 @@ function LogsIcon() {
   );
 }
 
+function GradebookIcon() {
+  return (
+    <IconBase>
+      <rect height="14" rx="1.5" stroke="currentColor" strokeWidth="1.8" width="16" x="4" y="5" />
+      <path d="M4 9h16M9 9v10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </IconBase>
+  );
+}
+
 const sideLinks = [
   { key: "dashboard", label: "Dashboard", to: "/teacher", icon: <DashboardIcon /> },
   { key: "assignments", label: "Assignments", to: "/teacher/assignments/new", icon: <AssignmentIcon /> },
   { key: "submissions", label: "Submissions", to: "/teacher/submissions", icon: <SubmissionIcon /> },
   { key: "students", label: "Students", to: "/teacher/students", icon: <StudentsIcon /> },
+  { key: "gradebook", label: "Gradebook", to: "/teacher/gradebook", icon: <GradebookIcon /> },
   { key: "logs", label: "Activity Log", to: "/teacher/logs", icon: <LogsIcon /> },
 ] as const;
 

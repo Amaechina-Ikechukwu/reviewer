@@ -75,6 +75,7 @@ export default function ReviewSubmission() {
   const [finalFeedback, setFinalFeedback] = useState("");
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState<"code" | "preview">("code");
+  const [releaseCount, setReleaseCount] = useState(0);
 
   useEffect(() => {
     if (!submissionId) return;
@@ -159,6 +160,7 @@ export default function ReviewSubmission() {
         body: JSON.stringify({ score: Number(overrideScore), feedback: finalFeedback }),
       });
       setReview(nextReview);
+      setReleaseCount((c) => c + 1);
       toast().success("Grade released");
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to release grade");
@@ -384,16 +386,23 @@ export default function ReviewSubmission() {
                   />
                 </label>
 
-                <button
-                  className="button review-action-button"
-                  onClick={applyOverride}
-                  type="button"
-                  style={{ marginTop: 4 }}
-                  disabled={!review || review.status !== "completed"}
-                  title={!review || review.status !== "completed" ? "Run Gemini Review first" : undefined}
-                >
-                  Release Grade
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <button
+                    className="button review-action-button"
+                    onClick={applyOverride}
+                    type="button"
+                    style={{ flex: 1 }}
+                    disabled={!review || review.status !== "completed"}
+                    title={!review || review.status !== "completed" ? "Run Gemini Review first" : undefined}
+                  >
+                    Release Grade
+                  </button>
+                  {releaseCount > 0 && (
+                    <span style={{ background: "#e7f0ff", color: "#3764c9", fontWeight: 700, fontSize: "0.8rem", borderRadius: 20, padding: "4px 10px", whiteSpace: "nowrap" }}>
+                      ×{releaseCount}
+                    </span>
+                  )}
+                </div>
                 {(!review || review.status !== "completed") && (
                   <p className="muted" style={{ margin: 0, fontSize: "0.8rem", textAlign: "center" }}>
                     Run Gemini Review first to enable grading
