@@ -43,13 +43,22 @@ function structureLabel(classification?: string) {
   }
 }
 
-function buildPreviewDocument(files: CodeFile[]) {
-  const htmlFile = files.find((f) => f.filename.toLowerCase().endsWith(".html"));
-  if (!htmlFile) return null;
+function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile) {
+  // Load CSS/JS from the same directory as the HTML file
+  const dir = htmlFile.filename.includes("/")
+    ? htmlFile.filename.slice(0, htmlFile.filename.lastIndexOf("/") + 1)
+    : "";
 
   let html = htmlFile.content;
-  const css = files.filter((f) => f.filename.toLowerCase().endsWith(".css")).map((f) => `<style>${f.content}</style>`).join("\n");
-  const js = files.filter((f) => f.filename.toLowerCase().endsWith(".js")).map((f) => `<script>${f.content}<\/script>`).join("\n");
+  const css = files
+    .filter((f) => f.filename.toLowerCase().endsWith(".css") && f.filename.startsWith(dir))
+    .map((f) => `<style>${f.content}</style>`)
+    .join("\n");
+  const js = files
+    .filter((f) => f.filename.toLowerCase().endsWith(".js") && f.filename.startsWith(dir))
+    .map((f) => `<script>${f.content}<\/script>`)
+    .join("\n");
+
   html = html.includes("</head>") ? html.replace("</head>", `${css}</head>`) : `${css}${html}`;
   html = html.includes("</body>") ? html.replace("</body>", `${js}</body>`) : `${html}${js}`;
   return html;
@@ -89,9 +98,13 @@ export default function ReviewSubmission() {
     }
   }, [files, selectedFileIndex]);
 
-  const previewDoc = useMemo(() => buildPreviewDocument(files), [files]);
-  const hasPreview = previewDoc !== null;
   const selectedFile = files[selectedFileIndex] || files[0];
+  const isHtmlFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".html");
+  const previewDoc = useMemo(
+    () => selectedFile && isHtmlFile(selectedFile) ? buildPreviewDocument(files, selectedFile) : null,
+    [files, selectedFile],
+  );
+  const hasPreview = files.some((f) => isHtmlFile(f));
   const geminiSummary = review?.feedback?.summary || "No Gemini review has been run for this submission yet.";
   const geminiSuggestions = review?.feedback?.suggestions || [];
   const geminiModel = review?.feedback?.model || "gemini-2.5-flash";
@@ -224,27 +237,21 @@ export default function ReviewSubmission() {
                 <div className="file-selector-bar">
                   {files.map((file, index) => (
                     <button
-                      className={`file-selector-chip ${viewMode === "code" && index === selectedFileIndex ? "active" : ""}`}
+                      className={`file-selector-chip ${index === selectedFileIndex ? "active" : ""}`}
                       key={file.path || file.filename}
-                      onClick={() => { setViewMode("code"); setSelectedFileIndex(index); }}
+                      onClick={() => {
+                        setSelectedFileIndex(index);
+                        setViewMode(isHtmlFile(file) ? "preview" : "code");
+                      }}
                       type="button"
                     >
                       {file.filename}
                     </button>
                   ))}
-                  {hasPreview && (
-                    <button
-                      className={`file-selector-chip preview-chip ${viewMode === "preview" ? "active" : ""}`}
-                      onClick={() => setViewMode("preview")}
-                      type="button"
-                    >
-                      ▶ Preview
-                    </button>
-                  )}
                 </div>
               )}
 
-              {viewMode === "preview" && previewDoc ? (
+              {viewMode === "preview" && previewDoc !== null ? (
                 <div className="mini-browser">
                   <div className="mini-browser-bar">
                     <span className="mini-browser-dot red" />
