@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import StudentShell from "../components/StudentShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 import type { Assignment, Review } from "../types";
 
@@ -20,7 +21,10 @@ export default function StudentDashboard() {
   const [reviews, setReviews] = useState<Record<string, Review>>({});
 
   useEffect(() => {
-    api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
+    api<Assignment[]>("/assignments").then(setAssignments).catch(() => {
+      setAssignments([]);
+      toast().error("Failed to load assignments");
+    });
     api<{ assignmentIds: string[] }>("/students/my-overrides")
       .then((r) => setOverrideIds(new Set(r.assignmentIds)))
       .catch(() => setOverrideIds(new Set()));
@@ -33,7 +37,10 @@ export default function StudentDashboard() {
         } catch { return null; }
       }));
       setReviews(Object.fromEntries(entries.filter(Boolean) as Array<readonly [string, Review]>));
-    }).catch(() => { setSubmissions([]); setReviews({}); });
+    }).catch(() => {
+      setSubmissions([]); setReviews({});
+      toast().error("Failed to load submissions");
+    });
   }, []);
 
   const now = new Date();

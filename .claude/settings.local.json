@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(bun run:*)",
-      "Bash(bun install:*)"
+      "Bash(bun install:*)",
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"SELECT s.id, a.title, s.submission_type, s.github_url FROM submissions s JOIN assignments a ON s.assignment_id = a.id WHERE s.student_id = 'd820228f-1820-4c7f-8985-e3a6025195f9';\")",
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"SELECT full_name, email FROM users WHERE id IN \\(SELECT id FROM users WHERE role='student' AND email NOT LIKE '%historical.reviewai.local'\\) ORDER BY full_name LIMIT 20;\")",
+      "Bash(bunx drizzle-kit:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"ALTER TABLE submission_overrides ADD COLUMN IF NOT EXISTS closes_at timestamptz;\")",
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"CREATE TABLE IF NOT EXISTS audit_logs \\(id uuid PRIMARY KEY DEFAULT gen_random_uuid\\(\\), actor_id uuid, actor_email varchar\\(255\\), action varchar\\(100\\) NOT NULL, target_type varchar\\(50\\), target_id varchar\\(255\\), details jsonb, created_at timestamptz NOT NULL DEFAULT now\\(\\)\\); CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs\\(created_at\\); CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs\\(actor_id\\); ALTER TABLE submission_overrides ADD COLUMN IF NOT EXISTS closes_at timestamptz;\")",
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"\\\\dt\")",
+      "Bash(psql postgres://postgres:robinsonmarch@localhost:5432/reviewer -c ':*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

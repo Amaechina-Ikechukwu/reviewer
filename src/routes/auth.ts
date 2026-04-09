@@ -2,6 +2,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "../db/connection";
 import { authTokens, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { audit } from "../services/audit";
 import { json, parseJson } from "../utils/json";
 import { signToken } from "../utils/jwt";
 import { hashPassword, verifyPassword } from "../utils/password";
@@ -45,6 +46,7 @@ export const authRoutes = {
       .values({ email, passwordHash: await hashPassword(password), fullName, role })
       .returning();
 
+    audit({ actorId: user.id, actorEmail: user.email, action: "auth.register", targetType: "user", targetId: user.id, details: { role } });
     return json(userResponse(user), 201);
   },
 
@@ -67,9 +69,11 @@ export const authRoutes = {
     }
 
     if (!await verifyPassword(password, user.passwordHash)) {
+      audit({ actorEmail: email, action: "auth.login_failed", details: { reason: "wrong_password" } });
       return json({ error: "Invalid email or password." }, 401);
     }
 
+    audit({ actorId: user.id, actorEmail: user.email, action: "auth.login", targetType: "user", targetId: user.id });
     return json(userResponse(user));
   },
 
@@ -119,6 +123,7 @@ export const authRoutes = {
       await db.delete(users).where(eq(users.id, ghost.id));
     }
 
+    audit({ actorId: user.id, actorEmail: user.email, action: "auth.invite_accepted", targetType: "user", targetId: user.id, details: { mergedHistorical: matches.length } });
     return json(userResponse({ ...user, role: user.role as "student" | "teacher" }));
   },
 

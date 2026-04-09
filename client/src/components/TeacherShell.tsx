@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Toaster } from "./Toast";
 
@@ -9,13 +9,6 @@ type TeacherShellProps = {
   searchPlaceholder?: string;
   children: ReactNode;
 };
-
-const topLinks = [
-  { key: "dashboard", label: "Dashboard", to: "/teacher" },
-  { key: "assignments", label: "Assignments", to: "/teacher/assignments/new" },
-  { key: "submissions", label: "Submissions", to: "/teacher/submissions" },
-  { key: "students", label: "Students", to: "/teacher/students" },
-] as const;
 
 function IconBase({ children }: { children: ReactNode }) {
   return (
@@ -100,7 +93,6 @@ export default function TeacherShell({
   searchPlaceholder = "Search insights...",
   children,
 }: TeacherShellProps) {
-  const { pathname } = useLocation();
   const { user } = useAuth();
 
   return (
@@ -146,20 +138,7 @@ export default function TeacherShell({
 
       <div className="main-shell">
         <header className="topbar">
-          <div className="topbar-left">
-            <Link className="topbar-logo" to="/teacher">Reviewer</Link>
-            <nav className="topbar-nav teacher-top-nav">
-              {topLinks.map((link) => (
-                <Link
-                  key={link.key}
-                  className={`topbar-link ${section === link.key || pathname === link.to ? "active" : ""}`}
-                  to={link.to}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
+          <Link className="topbar-logo" to="/teacher">Reviewer</Link>
 
           <div className="topbar-actions">
             <div className="search-pill">

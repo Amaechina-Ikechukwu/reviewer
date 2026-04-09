@@ -13,21 +13,30 @@ type AuditLog = {
   createdAt: string;
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  "review.run": "AI Review run",
-  "review.grade_released": "Grade released",
-  "student.updated": "Student updated",
-  "student.password_reset": "Password reset sent",
-  "student.merged": "Students merged",
-};
-
 function actionLabel(action: string) {
-  return ACTION_LABELS[action] ?? action;
+  if (action.startsWith("POST ") || action.startsWith("GET ") || action.startsWith("PATCH ") || action.startsWith("DELETE ") || action.startsWith("ERROR ")) {
+    return action;
+  }
+  const labels: Record<string, string> = {
+    "review.run": "AI Review run",
+    "review.grade_released": "Grade released",
+    "student.updated": "Student edited",
+    "student.password_reset": "Password reset sent",
+    "student.merged": "Students merged",
+    "submission.created": "Submission received",
+    "auth.register": "Account registered",
+    "auth.login": "Login",
+    "auth.login_failed": "Login failed",
+    "auth.invite_accepted": "Invite accepted",
+  };
+  return labels[action] ?? action;
 }
 
 function actionColor(action: string): string {
-  if (action.includes("grade_released")) return "#1a8a4a";
-  if (action.includes("review")) return "#0d56d8";
+  if (action.includes("ERROR") || action.includes("failed") || action.includes("api_error")) return "#d62828";
+  if (action.includes("grade_released") || action.includes("api_success")) return "#1a8a4a";
+  if (action.includes("review") || action.includes("submission")) return "#0d56d8";
+  if (action.includes("login") || action.includes("register") || action.includes("invite")) return "#0d9488";
   if (action.includes("password_reset") || action.includes("merged")) return "#b45309";
   if (action.includes("updated")) return "#7c3aed";
   return "#44516d";

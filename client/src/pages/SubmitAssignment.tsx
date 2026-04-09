@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import StudentShell from "../components/StudentShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 import type { Assignment } from "../types";
 
@@ -50,9 +51,12 @@ export default function SubmitAssignment() {
         formData.append("file", file);
         await api("/submissions", { method: "POST", body: formData });
       }
+      toast().success("Submission received!");
       navigate("/student/results");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Submission failed");
+      const msg = err instanceof Error ? err.message : "Submission failed";
+      setError(msg);
+      toast().error(msg);
     } finally {
       setSubmitting(false);
     }

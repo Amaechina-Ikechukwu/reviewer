@@ -1,5 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from "react";
 import TeacherShell from "../components/TeacherShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 
 type ImportRow = {
@@ -161,8 +162,11 @@ export default function ImportSubmissions() {
         }),
       });
       setResult(response.imported);
+      toast().success(`Imported ${response.imported.length} submission(s)`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Import failed");
+      const msg = err instanceof Error ? err.message : "Import failed";
+      setMessage(msg);
+      toast().error(msg);
     } finally {
       setIsImporting(false);
     }

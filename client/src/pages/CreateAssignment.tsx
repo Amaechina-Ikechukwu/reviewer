@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 import type { Assignment } from "../types";
 
@@ -52,8 +53,11 @@ export default function CreateAssignment() {
       });
 
       setCreated(assignment);
+      toast().success("Assignment created");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create assignment");
+      const msg = err instanceof Error ? err.message : "Failed to create assignment";
+      setError(msg);
+      toast().error(msg);
     }
   }
 

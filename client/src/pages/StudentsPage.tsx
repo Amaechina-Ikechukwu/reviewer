@@ -275,7 +275,7 @@ export default function StudentsPage() {
                     ···
                   </button>
                   {openPopoverId === student.id && (
-                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 8px 24px rgba(13,40,100,0.13)", zIndex: 200, minWidth: 180, overflow: "hidden" }}>
+                    <div style={{ position: "absolute", left: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 8px 24px rgba(13,40,100,0.13)", zIndex: 200, minWidth: 180, overflow: "hidden" }}>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); openSubmitFor(student); }}>Open submission</button>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setEditStudent(student); setEditName(student.fullName); setEditEmail(isPlaceholderEmail(student.email) ? "" : student.email); setEditError(""); }}>Edit details</button>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setConfirmReset(student); }}>Reset password</button>

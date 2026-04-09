@@ -61,39 +61,45 @@ export default function StudentShell({ section, children }: StudentShellProps) {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-lockup">
-          <div className="brand-mark brand-mark-square"><SparklesIcon /></div>
-          <div>
-            <div className="brand-title">Reviewer</div>
-            <div className="brand-subtitle">Student Portal</div>
+        <button className="sidebar-hamburger" aria-label="Open menu" type="button">
+          <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          </svg>
+        </button>
+
+        <div className="sidebar-menu">
+          <div className="brand-lockup">
+            <div className="brand-mark brand-mark-square"><SparklesIcon /></div>
+            <div>
+              <div className="brand-title">Reviewer</div>
+              <div className="brand-subtitle">Student Portal</div>
+            </div>
           </div>
-        </div>
 
-        <nav className="sidebar-nav">
-          {sideLinks.map((link) => (
-            <Link
-              key={link.key}
-              className={`sidebar-link ${section === link.key ? "active" : ""}`}
-              to={link.to}
-            >
-              <span className="sidebar-icon">{link.icon}</span>
-              <span>{link.label}</span>
-            </Link>
-          ))}
-        </nav>
+          <nav className="sidebar-nav">
+            {sideLinks.map((link) => (
+              <Link
+                key={link.key}
+                className={`sidebar-link ${section === link.key ? "active" : ""}`}
+                to={link.to}
+              >
+                <span className="sidebar-icon">{link.icon}</span>
+                <span>{link.label}</span>
+              </Link>
+            ))}
+          </nav>
 
-        <div className="sidebar-spacer" />
-
-        <div className="sidebar-footer">
-          <span>{user?.fullName}</span>
+          <div className="sidebar-menu-footer">
+            <div className="sidebar-footer">
+              <span>{user?.fullName}</span>
+            </div>
+          </div>
         </div>
       </aside>
 
       <div className="main-shell">
         <header className="topbar">
-          <div className="topbar-left">
-            <Link className="topbar-logo" to="/student">Reviewer</Link>
-          </div>
+          <Link className="topbar-logo" to="/student">Reviewer</Link>
           <div className="topbar-actions">
             <div className="search-pill">
               <span className="search-icon"><SearchIcon /></span>

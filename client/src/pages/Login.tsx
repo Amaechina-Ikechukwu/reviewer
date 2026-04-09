@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { toast, Toaster } from "../components/Toast";
 import { useAuth } from "../context/AuthContext";
 import type { Role, User } from "../types";
 
@@ -39,7 +40,9 @@ export default function Login() {
       login(payload.token, payload.user);
       navigate(payload.user.role === "teacher" ? "/teacher" : "/student");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      const msg = err instanceof Error ? err.message : "Authentication failed";
+      setError(msg);
+      toast().error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -97,6 +100,7 @@ export default function Login() {
           </button>
         </form>
       </div>
+      <Toaster />
     </div>
   );
 }

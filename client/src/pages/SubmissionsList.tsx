@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
+import { toast } from "../components/Toast";
 import { api } from "../api";
 import type { Assignment, Review } from "../types";
 
@@ -51,7 +52,10 @@ export default function SubmissionsList() {
   const [reviews, setReviews] = useState<Record<string, Review>>({});
 
   useEffect(() => {
-    api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
+    api<Assignment[]>("/assignments").then(setAssignments).catch(() => {
+      setAssignments([]);
+      toast().error("Failed to load assignments");
+    });
   }, []);
 
   useEffect(() => {

@@ -195,45 +195,8 @@ export default function ReviewSubmission() {
 
         {message && <div className="card" style={{ color: "#b91c1c", fontSize: "0.9rem" }}>{message}</div>}
 
-        <div className="review-page-grid">
-          <div className="stack">
-            <section className="review-score-grid">
-              <article className="provider-card blue">
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div className="stack" style={{ gap: 4 }}>
-                    <strong style={{ fontSize: "1.02rem" }}>Gemini Review</strong>
-                    <span className="muted">{geminiModel}</span>
-                  </div>
-                  <span className="score-pill blue">{typeof geminiScore === "number" ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
-                </div>
-
-                <p style={{ fontSize: "0.98rem", lineHeight: 1.65 }}>{geminiSummary}</p>
-                {typeof averageFileScore === "number" && (
-                  <div className="soft-card row" style={{ justifyContent: "space-between" }}>
-                    <strong>Average file score</strong>
-                    <span className="score-pill blue">{Math.round(averageFileScore)}/{review?.maxScore || submission.assignment.maxScore}</span>
-                  </div>
-                )}
-                {structure && (
-                  <div className="soft-card stack" style={{ gap: 8 }}>
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <strong>File-to-question structure</strong>
-                      <span className="tag violet">{structure.confidence} confidence</span>
-                    </div>
-                    <div className="muted">{structure.explanation}</div>
-                  </div>
-                )}
-                {geminiSuggestions.length > 0 && (
-                  <ul style={{ margin: 0, paddingLeft: 22, lineHeight: 1.55 }}>
-                    {geminiSuggestions.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                )}
-              </article>
-            </section>
-
-            <section className="card code-preview-panel">
+        {/* Code + preview — full width always */}
+        <section className="card code-preview-panel">
               {files.length > 0 && (
                 <div className="file-selector-bar">
                   {files.map((file, index) => (
@@ -299,6 +262,45 @@ export default function ReviewSubmission() {
                   <div className="muted">{selectedFileScore.summary}</div>
                 </div>
               )}
+        </section>
+
+        {/* AI review + assessment two-column grid */}
+        <div className="review-page-grid">
+          <div className="stack">
+            <section className="review-score-grid">
+              <article className="provider-card blue">
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div className="stack" style={{ gap: 4 }}>
+                    <strong style={{ fontSize: "1.02rem" }}>Gemini Review</strong>
+                    <span className="muted">{geminiModel}</span>
+                  </div>
+                  <span className="score-pill blue">{typeof geminiScore === "number" ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
+                </div>
+
+                <p style={{ fontSize: "0.98rem", lineHeight: 1.65 }}>{geminiSummary}</p>
+                {typeof averageFileScore === "number" && (
+                  <div className="soft-card row" style={{ justifyContent: "space-between" }}>
+                    <strong>Average file score</strong>
+                    <span className="score-pill blue">{Math.round(averageFileScore)}/{review?.maxScore || submission.assignment.maxScore}</span>
+                  </div>
+                )}
+                {structure && (
+                  <div className="soft-card stack" style={{ gap: 8 }}>
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      <strong>File-to-question structure</strong>
+                      <span className="tag violet">{structure.confidence} confidence</span>
+                    </div>
+                    <div className="muted">{structure.explanation}</div>
+                  </div>
+                )}
+                {geminiSuggestions.length > 0 && (
+                  <ul style={{ margin: 0, paddingLeft: 22, lineHeight: 1.55 }}>
+                    {geminiSuggestions.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+              </article>
             </section>
 
             <section className="card stack">

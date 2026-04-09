@@ -5,6 +5,7 @@ import mime from "mime-types";
 import { normalize, resolve } from "node:path";
 import type { AuthenticatedRequest } from "./middleware/auth";
 import { verifyAuth } from "./middleware/auth";
+import { audit } from "./services/audit";
 import { assignmentRoutes } from "./routes/assignments";
 import { auditLogRoutes } from "./routes/auditLogs";
 import { authRoutes } from "./routes/auth";
@@ -145,11 +146,65 @@ Bun.serve({
       }
 
       try {
-        return await route.handler(routeRequest, params);
+        const response = await route.handler(routeRequest, params);
+
+        // Audit every API response
+        const user = (routeRequest as AuthenticatedRequest).user;
+        const status = response.status;
+        if (status >= 400) {
+          audit({
+            actorId: user?.userId ?? null,
+            actorEmail: user?.email ?? null,
+            action: `${request.method} ${pathname}`,
+            targetType: "api_error",
+            details: { status, method: request.method, path: pathname },
+          });
+        } else if (request.method !== "GET") {
+          audit({
+            actorId: user?.userId ?? null,
+            actorEmail: user?.email ?? null,
+            action: `${request.method} ${pathname}`,
+            targetType: "api_success",
+            details: { status, method: request.method, path: pathname },
+          });
+        }
+
+        return response;
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unexpected server error";
-        return new Response(JSON.stringify({ error: message }), {
-          status: 500,
+        // Sanitize DB errors — never expose SQL to users
+        const rawMessage = error instanceof Error ? error.message : "Unexpected server error";
+        const isDbError = rawMessage.includes("Failed query")
+          || rawMessage.includes("violates unique constraint")
+          || rawMessage.includes("violates foreign key")
+          || rawMessage.includes("relation ")
+          || rawMessage.includes("column ");
+
+        let userMessage = rawMessage;
+        let status = 500;
+
+        if (rawMessage.includes("violates unique constraint") && rawMessage.includes("uniq_submissions_assignment_student")) {
+          userMessage = "You have already submitted for this assignment.";
+          status = 409;
+        } else if (rawMessage.includes("violates unique constraint")) {
+          userMessage = "A record with this information already exists.";
+          status = 409;
+        } else if (isDbError) {
+          userMessage = "Something went wrong. Please try again or contact your teacher.";
+        }
+
+        // Log the full error server-side
+        console.error(`[${request.method} ${pathname}]`, rawMessage);
+        const user = (routeRequest as AuthenticatedRequest).user;
+        audit({
+          actorId: user?.userId ?? null,
+          actorEmail: user?.email ?? null,
+          action: `ERROR ${request.method} ${pathname}`,
+          targetType: "server_error",
+          details: { error: rawMessage.slice(0, 500), method: request.method, path: pathname },
+        });
+
+        return new Response(JSON.stringify({ error: userMessage }), {
+          status,
           headers: {
             "Content-Type": "application/json",
           },

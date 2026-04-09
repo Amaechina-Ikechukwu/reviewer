@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { db } from "../db/connection";
 import { assignments, reviews, submissionOverrides, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../services/code-reader";
 import { extractZip } from "../services/file-extractor";
 import { cloneGithubRepo } from "../services/github";
@@ -244,6 +245,7 @@ export const submissionRoutes = {
       sendSubmissionNotification(teacher, { fullName: student?.fullName || "A student" }, assignment, submissionId).catch(console.error);
     }
 
+    audit({ actorId: user.userId, action: "submission.created", targetType: "submission", targetId: submissionId, details: { assignmentId, submissionType } });
     return json(submission, 201);
   },
 
@@ -431,6 +433,7 @@ export const submissionRoutes = {
       fullName: string;
       githubUrl: string;
       createdStudent: boolean;
+      mappedByFuzzy?: boolean;
       submissionId: string;
     }> = [];
 
@@ -502,7 +505,7 @@ export const submissionRoutes = {
       const [previousSubmission] = await db
         .select()
         .from(submissions)
-        .where(and(eq(submissions.assignmentId, assignmentId), eq(submissions.studentId, student.id)))
+        .where(and(eq(submissions.assignmentId, assignment.id), eq(submissions.studentId, student.id)))
         .limit(1);
 
       if (previousSubmission) {
@@ -519,7 +522,7 @@ export const submissionRoutes = {
         .insert(submissions)
         .values({
           id: submissionId,
-          assignmentId,
+          assignmentId: assignment.id,
           studentId: student.id,
           submissionType: "github",
           githubUrl,
