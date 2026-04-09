@@ -60,6 +60,13 @@ export default function StudentsPage() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Edit student
+  const [editStudent, setEditStudent] = useState<StudentWithPending | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editError, setEditError] = useState("");
+  const [editing, setEditing] = useState(false);
+
   // Merge students
   const [showMerge, setShowMerge] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState("");
@@ -153,6 +160,26 @@ export default function StudentsPage() {
       setMergeError(err instanceof Error ? err.message : "Merge failed");
     } finally {
       setMerging(false);
+    }
+  }
+
+  async function handleEditStudent(event: FormEvent) {
+    event.preventDefault();
+    if (!editStudent) return;
+    setEditError("");
+    setEditing(true);
+    try {
+      const updated = await api<StudentWithPending>(`/students/${editStudent.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ fullName: editName, email: editEmail || undefined }),
+      });
+      setStudents((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
+      toast().success("Student details updated");
+      setEditStudent(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setEditing(false);
     }
   }
 
@@ -250,6 +277,7 @@ export default function StudentsPage() {
                   {openPopoverId === student.id && (
                     <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 8px 24px rgba(13,40,100,0.13)", zIndex: 200, minWidth: 180, overflow: "hidden" }}>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); openSubmitFor(student); }}>Open submission</button>
+                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setEditStudent(student); setEditName(student.fullName); setEditEmail(isPlaceholderEmail(student.email) ? "" : student.email); setEditError(""); }}>Edit details</button>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setConfirmReset(student); }}>Reset password</button>
                       <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}>Merge student</button>
                     </div>
@@ -374,6 +402,36 @@ export default function StudentsPage() {
                   style={{ background: "var(--danger, #b91c1c)" }}
                 >
                   {merging ? "Merging..." : "Merge & delete source"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Edit student modal */}
+      {editStudent && createPortal(
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setEditStudent(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Edit student</h2>
+              <button className="modal-close" type="button" onClick={() => setEditStudent(null)}>✕</button>
+            </div>
+            <form className="stack" style={{ gap: 14 }} onSubmit={handleEditStudent}>
+              <label className="field">
+                <span>Full name</span>
+                <input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span>Email <span className="muted">(leave blank to keep current)</span></span>
+                <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="student@example.com" />
+              </label>
+              {editError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{editError}</div>}
+              <div className="confirm-actions">
+                <button className="button subtle" type="button" onClick={() => setEditStudent(null)}>Cancel</button>
+                <button className="button" type="submit" disabled={editing}>
+                  {editing ? "Saving..." : "Save changes"}
                 </button>
               </div>
             </form>

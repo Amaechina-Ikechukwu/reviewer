@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "../db/connection";
 import { assignments, authTokens, reviews, submissionOverrides, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { audit } from "../services/audit";
 import { sendInvite, sendPasswordReset } from "../services/email";
 import { json, parseJson } from "../utils/json";
 
@@ -215,6 +216,48 @@ export const studentRoutes = {
       console.error("Failed to send reset email:", err);
     }
 
+    audit({ actorId: user.userId, action: "student.password_reset", targetType: "student", targetId: studentId });
     return json({ sent: true });
+  },
+
+  async update(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (actor.role !== "teacher") return json({ error: "Only teachers can edit student details." }, 403);
+
+    const { studentId } = params;
+    const body = await parseJson<{ fullName?: string; email?: string }>(request);
+
+    const fullName = body.fullName?.trim();
+    const email = body.email?.trim().toLowerCase();
+
+    if (!fullName && !email) return json({ error: "Provide at least one field to update." }, 400);
+
+    const [existing] = await db.select().from(users).where(eq(users.id, studentId)).limit(1);
+    if (!existing || existing.role !== "student") return json({ error: "Student not found." }, 404);
+
+    if (email && email !== existing.email) {
+      const [conflict] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      if (conflict) return json({ error: "That email is already in use." }, 409);
+    }
+
+    const patch: Partial<{ fullName: string; email: string }> = {};
+    if (fullName) patch.fullName = fullName;
+    if (email) patch.email = email;
+
+    const [updated] = await db
+      .update(users)
+      .set(patch)
+      .where(eq(users.id, studentId))
+      .returning({ id: users.id, email: users.email, fullName: users.fullName, role: users.role, createdAt: users.createdAt });
+
+    audit({
+      actorId: actor.userId,
+      action: "student.updated",
+      targetType: "student",
+      targetId: studentId,
+      details: { before: { fullName: existing.fullName, email: existing.email }, after: patch },
+    });
+
+    return json(updated);
   },
 };

@@ -6,6 +6,7 @@ import { normalize, resolve } from "node:path";
 import type { AuthenticatedRequest } from "./middleware/auth";
 import { verifyAuth } from "./middleware/auth";
 import { assignmentRoutes } from "./routes/assignments";
+import { auditLogRoutes } from "./routes/auditLogs";
 import { authRoutes } from "./routes/auth";
 import { reviewRoutes } from "./routes/reviews";
 import { studentRoutes } from "./routes/students";
@@ -106,7 +107,10 @@ addRoute("GET", "/api/students/my-overrides", studentRoutes.myOverrides);
 addRoute("POST", "/api/students", studentRoutes.create);
 addRoute("POST", "/api/students/merge", studentRoutes.merge);
 addRoute("POST", "/api/students/reset-password", studentRoutes.resetPassword);
+addRoute("PATCH", "/api/students/:studentId", studentRoutes.update);
 addRoute("POST", "/api/students/:studentId/open-submission", studentRoutes.openSubmission);
+
+addRoute("GET", "/api/audit-logs", auditLogRoutes.list);
 
 addRoute("GET", "/api/teachers/join-link", teacherRoutes.getJoinLink);
 addRoute("GET", "/api/teachers/join/:code", teacherRoutes.getTeacherByCode, false);

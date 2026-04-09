@@ -154,9 +154,24 @@ export const submissionOverrides = pgTable("submission_overrides", {
   studentAssignmentUnique: uniqueIndex("uniq_overrides_student_assignment").on(table.studentId, table.assignmentId),
 }));
 
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  actorId: uuid("actor_id"),
+  actorEmail: varchar("actor_email", { length: 255 }),
+  action: varchar("action", { length: 100 }).notNull(),
+  targetType: varchar("target_type", { length: 50 }),
+  targetId: varchar("target_id", { length: 255 }),
+  details: jsonb("details").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  createdAtIdx: index("idx_audit_logs_created_at").on(table.createdAt),
+  actorIdx: index("idx_audit_logs_actor").on(table.actorId),
+}));
+
 export type User = typeof users.$inferSelect;
 export type Assignment = typeof assignments.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
 export type Review = typeof reviews.$inferSelect;
 export type AuthToken = typeof authTokens.$inferSelect;
 export type SubmissionOverride = typeof submissionOverrides.$inferSelect;
+export type AuditLog = typeof auditLogs.$inferSelect;

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { db } from "../db/connection";
 import { assignments, reviews, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
+import { audit } from "../services/audit";
 import { getAvailableProviders, reviewCode } from "../services/ai/reviewer";
 import { readCodeFiles } from "../services/code-reader";
 import { cloneGithubRepo } from "../services/github";
@@ -109,6 +110,7 @@ export const reviewRoutes = {
         .where(eq(reviews.id, review.id));
 
       const [updated] = await db.select().from(reviews).where(eq(reviews.submissionId, submission.id)).limit(1);
+      audit({ actorId: user.userId, action: "review.run", targetType: "submission", targetId: submission.id, details: { score: result.totalScore } });
       return json(updated);
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI review failed.";
@@ -227,6 +229,7 @@ export const reviewRoutes = {
       ).catch(console.error);
     }
 
+    audit({ actorId: user.userId, action: "review.grade_released", targetType: "submission", targetId: params.submissionId, details: { score: Math.round(score), maxScore: assignment?.maxScore ?? 100 } });
     return json(review);
   },
 };

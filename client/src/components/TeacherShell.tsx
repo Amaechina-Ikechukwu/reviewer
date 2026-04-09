@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { Toaster } from "./Toast";
 
 type TeacherShellProps = {
-  section: "dashboard" | "assignments" | "submissions" | "students";
+  section: "dashboard" | "assignments" | "submissions" | "students" | "logs";
   title?: string;
   searchPlaceholder?: string;
   children: ReactNode;
@@ -78,11 +78,20 @@ function SearchIcon() {
   );
 }
 
+function LogsIcon() {
+  return (
+    <IconBase>
+      <path d="M4 6h16M4 10h10M4 14h7M4 18h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </IconBase>
+  );
+}
+
 const sideLinks = [
   { key: "dashboard", label: "Dashboard", to: "/teacher", icon: <DashboardIcon /> },
   { key: "assignments", label: "Assignments", to: "/teacher/assignments/new", icon: <AssignmentIcon /> },
   { key: "submissions", label: "Submissions", to: "/teacher/submissions", icon: <SubmissionIcon /> },
   { key: "students", label: "Students", to: "/teacher/students", icon: <StudentsIcon /> },
+  { key: "logs", label: "Activity Log", to: "/teacher/logs", icon: <LogsIcon /> },
 ] as const;
 
 export default function TeacherShell({
@@ -97,34 +106,41 @@ export default function TeacherShell({
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand-lockup">
-          <div className="brand-mark brand-mark-square"><SparklesIcon /></div>
-          <div>
-            <div className="brand-title">{title}</div>
-            <div className="brand-subtitle">Teacher Portal</div>
+        <button className="sidebar-hamburger" aria-label="Open menu" type="button">
+          <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+          </svg>
+        </button>
+
+        <div className="sidebar-menu">
+          <div className="brand-lockup">
+            <div className="brand-mark brand-mark-square"><SparklesIcon /></div>
+            <div>
+              <div className="brand-title">{title}</div>
+              <div className="brand-subtitle">Teacher Portal</div>
+            </div>
           </div>
-        </div>
 
-        <nav className="sidebar-nav">
-          {sideLinks.map((link) => (
-            <Link
-              key={link.key}
-              className={`sidebar-link ${section === link.key ? "active" : ""}`}
-              to={link.to}
-            >
-              <span className="sidebar-icon">{link.icon}</span>
-              <span>{link.label}</span>
-            </Link>
-          ))}
-        </nav>
+          <nav className="sidebar-nav">
+            {sideLinks.map((link) => (
+              <Link
+                key={link.key}
+                className={`sidebar-link ${section === link.key ? "active" : ""}`}
+                to={link.to}
+              >
+                <span className="sidebar-icon">{link.icon}</span>
+                <span>{link.label}</span>
+              </Link>
+            ))}
+          </nav>
 
-        <div className="sidebar-spacer" />
-
-        <Link className="sidebar-cta" to="/teacher/assignments/new">New Assignment</Link>
-
-        <div className="sidebar-footer">
-          <span>Settings</span>
-          <span>Support</span>
+          <div className="sidebar-menu-footer">
+            <Link className="sidebar-cta" to="/teacher/assignments/new">New Assignment</Link>
+            <div className="sidebar-footer">
+              <span>Settings</span>
+              <span>Support</span>
+            </div>
+          </div>
         </div>
       </aside>
 

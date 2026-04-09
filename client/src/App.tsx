@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import AuditLogsPage from "./pages/AuditLogsPage";
 import CreateAssignment from "./pages/CreateAssignment";
 import ImportSubmissions from "./pages/ImportSubmissions";
 import JoinClass from "./pages/JoinClass";
@@ -102,6 +103,14 @@ export default function App() {
         element={(
           <ProtectedRoute role="teacher">
             <ImportSubmissions />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/logs"
+        element={(
+          <ProtectedRoute role="teacher">
+            <AuditLogsPage />
           </ProtectedRoute>
         )}
       />
