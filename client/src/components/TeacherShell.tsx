@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import { Toaster } from "./Toast";
 
 type TeacherShellProps = {
@@ -100,6 +101,13 @@ export default function TeacherShell({
   title = "Reviewer",
   children,
 }: TeacherShellProps) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
+  }
 
   return (
     <div className="app-shell">
@@ -135,8 +143,14 @@ export default function TeacherShell({
           <div className="sidebar-menu-footer">
             <Link className="sidebar-cta" to="/teacher/assignments/new">New Assignment</Link>
             <div className="sidebar-footer">
-              <span>Settings</span>
-              <span>Support</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.fullName}</span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", fontWeight: 600, fontSize: "0.85rem", padding: 0 }}
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>

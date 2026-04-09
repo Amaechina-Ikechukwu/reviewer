@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Toaster } from "./Toast";
 
@@ -56,7 +56,13 @@ const sideLinks = [
 ] as const;
 
 export default function StudentShell({ section, children }: StudentShellProps) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    logout();
+    navigate("/login");
+  }
 
   return (
     <div className="app-shell">
@@ -91,7 +97,14 @@ export default function StudentShell({ section, children }: StudentShellProps) {
 
           <div className="sidebar-menu-footer">
             <div className="sidebar-footer">
-              <span>{user?.fullName}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.fullName}</span>
+              <button
+                type="button"
+                onClick={handleLogout}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", fontWeight: 600, fontSize: "0.85rem", padding: 0 }}
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
