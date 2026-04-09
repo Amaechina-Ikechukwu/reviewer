@@ -1,3 +1,4 @@
+import { ensureSchema } from "./db/ensure-schema";
 import { startReminderJob } from "./jobs/reminders";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -192,15 +193,19 @@ Bun.serve({
           userMessage = "Something went wrong. Please try again or contact your teacher.";
         }
 
-        // Log the full error server-side
-        console.error(`[${request.method} ${pathname}]`, rawMessage);
+        // Log the full error server-side with Postgres error details
+        const pgCode = (error as any)?.code;
+        const pgDetail = (error as any)?.detail;
+        const pgConstraint = (error as any)?.constraint;
+        const pgTable = (error as any)?.table;
+        console.error(`[${request.method} ${pathname}]`, rawMessage, { pgCode, pgDetail, pgConstraint, pgTable });
         const user = (routeRequest as AuthenticatedRequest).user;
         audit({
           actorId: user?.userId ?? null,
           actorEmail: user?.email ?? null,
           action: `ERROR ${request.method} ${pathname}`,
           targetType: "server_error",
-          details: { error: rawMessage.slice(0, 500), method: request.method, path: pathname },
+          details: { error: rawMessage.slice(0, 500), pgCode, pgDetail, pgConstraint, pgTable, method: request.method, path: pathname },
         });
 
         return new Response(JSON.stringify({ error: userMessage }), {
@@ -225,5 +230,8 @@ Bun.serve({
   },
 });
 
-startReminderJob();
-console.log(`Reviewer app listening on http://localhost:${port}`);
+// Sync schema on startup (idempotent — safe to run every deploy)
+ensureSchema().then(() => {
+  startReminderJob();
+  console.log(`Reviewer app listening on http://localhost:${port}`);
+});
