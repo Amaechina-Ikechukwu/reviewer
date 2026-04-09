@@ -50,13 +50,14 @@ export default function SubmissionsList() {
   const [date, setDate] = useState("");
   const [rows, setRows] = useState<SubmissionRow[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => {
       setAssignments([]);
       toast().error("Failed to load assignments");
     });
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     const search = new URLSearchParams();
@@ -77,12 +78,15 @@ export default function SubmissionsList() {
       setRows([]);
       setReviews({});
     });
-  }, [date, selectedAssignment]);
+  }, [date, selectedAssignment, refreshKey]);
 
   return (
     <TeacherShell section="submissions">
       <div className="page stack">
-        <h1 className="page-title">Submissions</h1>
+        <div className="section-header">
+          <h1 className="page-title">Submissions</h1>
+          <button className="button secondary" style={{ padding: "8px 16px", fontSize: "0.9rem" }} type="button" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+        </div>
 
         <div className="card grid two">
           <label className="field">

@@ -78,6 +78,8 @@ export default function StudentsPage() {
   const [mergeError, setMergeError] = useState("");
   const [merging, setMerging] = useState(false);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const sortedStudents = useMemo<StudentWithPending[]>(
     () => [...students].sort((a, b) => a.fullName.localeCompare(b.fullName)),
     [students],
@@ -86,7 +88,7 @@ export default function StudentsPage() {
   useEffect(() => {
     api<StudentWithPending[]>("/students").then(setStudents).catch(() => setStudents([]));
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
-  }, []);
+  }, [refreshKey]);
 
   function openAddModal() {
     setFullName("");
@@ -227,6 +229,14 @@ export default function StudentsPage() {
         <div className="section-header">
           <h1 className="page-title">Students</h1>
           <div style={{ display: "flex", gap: 10 }}>
+            <button
+              className="button secondary"
+              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+              type="button"
+              onClick={() => setRefreshKey((k) => k + 1)}
+            >
+              Refresh
+            </button>
             <button
               className="button secondary"
               style={{ padding: "8px 16px", fontSize: "0.9rem" }}

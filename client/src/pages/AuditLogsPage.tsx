@@ -47,20 +47,25 @@ function actionColor(action: string): string {
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
+    setLoading(true);
     api<AuditLog[]>("/audit-logs?limit=200")
       .then(setLogs)
       .catch(() => setLogs([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   return (
     <TeacherShell section="dashboard">
       <div className="page stack">
         <div className="section-header">
           <h1 className="page-title">Activity Log</h1>
-          <span className="muted" style={{ fontSize: "0.9rem" }}>{logs.length} recent events</span>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <span className="muted" style={{ fontSize: "0.9rem" }}>{logs.length} recent events</span>
+            <button className="button secondary" style={{ padding: "8px 16px", fontSize: "0.9rem" }} type="button" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+          </div>
         </div>
 
         <div className="card table-card">
