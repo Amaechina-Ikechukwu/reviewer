@@ -384,9 +384,21 @@ export default function ReviewSubmission() {
                   />
                 </label>
 
-                <button className="button review-action-button" onClick={applyOverride} type="button" style={{ marginTop: 4 }}>
+                <button
+                  className="button review-action-button"
+                  onClick={applyOverride}
+                  type="button"
+                  style={{ marginTop: 4 }}
+                  disabled={!review || review.status !== "completed"}
+                  title={!review || review.status !== "completed" ? "Run Gemini Review first" : undefined}
+                >
                   Release Grade
                 </button>
+                {(!review || review.status !== "completed") && (
+                  <p className="muted" style={{ margin: 0, fontSize: "0.8rem", textAlign: "center" }}>
+                    Run Gemini Review first to enable grading
+                  </p>
+                )}
 
                 <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
                   <button className="button secondary compact-button review-action-button" onClick={runReview} disabled={reviewing} type="button">
