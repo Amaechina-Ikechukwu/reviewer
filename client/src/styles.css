@@ -1137,10 +1137,9 @@ select {
   background: white;
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 18px;
+  padding: 22px;
   box-shadow: var(--shadow-soft);
   border-left: 4px solid #ea7f4f;
-  max-width: 520px;
 }
 
 .provider-card.blue {
@@ -1285,19 +1284,28 @@ select {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #eef4ff;
+  background: #f4f7ff;
+  border: 1.5px solid #d0dcff;
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 10px 14px;
 }
 
 .score-input input {
   border: none;
   background: transparent;
   width: 100%;
-  font-size: 1.2rem;
+  font-size: 1.5rem;
+  font-weight: 800;
   color: var(--brand);
   outline: none;
   font-family: "Manrope", "Inter", sans-serif;
+}
+
+.score-input .score-denom {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
 .review-action-button {

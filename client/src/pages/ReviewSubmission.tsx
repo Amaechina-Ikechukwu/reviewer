@@ -86,9 +86,11 @@ export default function ReviewSubmission() {
     api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => setFiles([]));
     api<Review>(`/reviews/${submissionId}`).then((data) => {
       setReview(data);
-      const score = data.teacherOverrideScore ?? data.aiScore;
+      // Only pre-fill score if teacher has explicitly overridden, or AI gave a non-zero score
+      const score = data.teacherOverrideScore ?? (data.aiScore && data.aiScore > 0 ? data.aiScore : null);
       setOverrideScore(typeof score === "number" ? String(score) : "");
-      setFinalFeedback(data.feedback?.summary || "");
+      // Only pre-fill feedback if teacher has already released a grade
+      setFinalFeedback(typeof data.teacherOverrideScore === "number" ? (data.feedback?.summary || "") : "");
     }).catch(() => setReview(null));
   }, [submissionId]);
 
@@ -136,9 +138,9 @@ export default function ReviewSubmission() {
         body: JSON.stringify({ provider: "gemini" }),
       });
       setReview(nextReview);
-      const score = nextReview.teacherOverrideScore ?? nextReview.aiScore;
+      const score = nextReview.teacherOverrideScore ?? (nextReview.aiScore && nextReview.aiScore > 0 ? nextReview.aiScore : null);
       setOverrideScore(typeof score === "number" ? String(score) : "");
-      setFinalFeedback(nextReview.feedback?.summary || "");
+      setFinalFeedback(typeof nextReview.teacherOverrideScore === "number" ? (nextReview.feedback?.summary || "") : "");
       toast().success("Review completed");
       // Re-fetch files now that the repo has been cloned
       api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => {});
@@ -203,7 +205,7 @@ export default function ReviewSubmission() {
                     <strong style={{ fontSize: "1.02rem" }}>Gemini Review</strong>
                     <span className="muted">{geminiModel}</span>
                   </div>
-                  <span className="score-pill blue">{typeof geminiScore === "number" ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
+                  <span className="score-pill blue">{typeof geminiScore === "number" && geminiScore > 0 ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
                 </div>
 
                 <p style={{ fontSize: "0.98rem", lineHeight: 1.65 }}>{geminiSummary}</p>
@@ -344,27 +346,48 @@ export default function ReviewSubmission() {
           </div>
 
           <aside className="assessment-panel">
-            <section className="card stack">
-              <h2 style={{ margin: 0, fontSize: "1.6rem" }}>Final Assessment</h2>
-              <label className="field">
-                <span>Manual Score (0-{submission.assignment.maxScore})</span>
-                <div className="score-input">
-                  <input value={overrideScore} onChange={(event) => setOverrideScore(event.target.value)} />
-                  <span className="muted">/ {submission.assignment.maxScore}</span>
+            <section className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>Final Assessment</h2>
+                {typeof geminiScore === "number" && geminiScore > 0 && (
+                  <span className="score-pill blue">{geminiScore}/{review?.maxScore || submission.assignment.maxScore}</span>
+                )}
+              </div>
+
+              <div className="stack" style={{ padding: "16px 20px 20px", gap: 14 }}>
+                <label className="field">
+                  <span>Score (0–{submission.assignment.maxScore})</span>
+                  <div className="score-input">
+                    <input
+                      placeholder="—"
+                      value={overrideScore}
+                      onChange={(event) => setOverrideScore(event.target.value)}
+                    />
+                    <span className="score-denom">/ {submission.assignment.maxScore}</span>
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Feedback to {submission.studentName?.split(" ")[0] || "Student"}</span>
+                  <textarea
+                    placeholder={`Write feedback for ${submission.studentName?.split(" ")[0] || "the student"}...`}
+                    value={finalFeedback}
+                    onChange={(event) => setFinalFeedback(event.target.value)}
+                    style={{ minHeight: 120 }}
+                  />
+                </label>
+
+                <button className="button review-action-button" onClick={applyOverride} type="button" style={{ marginTop: 4 }}>
+                  Release Grade
+                </button>
+
+                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                  <button className="button secondary compact-button review-action-button" onClick={runReview} disabled={reviewing} type="button">
+                    {reviewing ? "Running Gemini Review..." : "Run Gemini Review"}
+                  </button>
                 </div>
-              </label>
-
-              <label className="field">
-                <span>Final Feedback to {submission.studentName?.split(" ")[0] || "Student"}</span>
-                <textarea value={finalFeedback} onChange={(event) => setFinalFeedback(event.target.value)} />
-              </label>
-
-              <button className="button compact-button review-action-button" onClick={applyOverride} type="button">Release Grade</button>
-              <button className="button secondary compact-button review-action-button" onClick={runReview} disabled={reviewing} type="button">
-                {reviewing ? "Running Gemini Review..." : "Run Gemini Review"}
-              </button>
+              </div>
             </section>
-
           </aside>
         </div>
       </div>
