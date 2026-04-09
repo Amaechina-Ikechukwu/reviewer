@@ -64,18 +64,20 @@ export async function ensureSchema() {
     await db.execute(sqlTag`CREATE INDEX IF NOT EXISTS "idx_audit_logs_created_at" ON "audit_logs" ("created_at")`);
     await db.execute(sqlTag`CREATE INDEX IF NOT EXISTS "idx_audit_logs_actor" ON "audit_logs" ("actor_id")`);
 
-    // Unique constraints (idempotent via DO block)
+    // Unique constraints (idempotent — check if they exist first)
     await db.execute(sqlTag`
       DO $$ BEGIN
-        ALTER TABLE "submission_overrides" ADD CONSTRAINT "uniq_overrides_student_assignment" UNIQUE ("student_id", "assignment_id");
-      EXCEPTION WHEN duplicate_object THEN NULL;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uniq_overrides_student_assignment') THEN
+          ALTER TABLE "submission_overrides" ADD CONSTRAINT "uniq_overrides_student_assignment" UNIQUE ("student_id", "assignment_id");
+        END IF;
       END $$;
     `);
 
     await db.execute(sqlTag`
       DO $$ BEGIN
-        ALTER TABLE "users" ADD CONSTRAINT "users_join_code_unique" UNIQUE ("join_code");
-      EXCEPTION WHEN duplicate_object THEN NULL;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_join_code_unique') THEN
+          ALTER TABLE "users" ADD CONSTRAINT "users_join_code_unique" UNIQUE ("join_code");
+        END IF;
       END $$;
     `);
 
