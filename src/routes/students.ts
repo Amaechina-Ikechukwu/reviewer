@@ -220,6 +220,37 @@ export const studentRoutes = {
     return json({ sent: true });
   },
 
+  async delete(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (actor.role !== "teacher") return json({ error: "Only teachers can delete students." }, 403);
+
+    const { studentId } = params;
+
+    const [existing] = await db.select({ id: users.id, role: users.role, fullName: users.fullName, email: users.email })
+      .from(users).where(eq(users.id, studentId)).limit(1);
+    if (!existing || existing.role !== "student") return json({ error: "Student not found." }, 404);
+
+    // Cascade: delete reviews first, then submissions, overrides, tokens, user
+    const studentSubs = await db.select({ id: submissions.id }).from(submissions).where(eq(submissions.studentId, studentId));
+    for (const sub of studentSubs) {
+      await db.delete(reviews).where(eq(reviews.submissionId, sub.id));
+    }
+    await db.delete(submissions).where(eq(submissions.studentId, studentId));
+    await db.delete(submissionOverrides).where(eq(submissionOverrides.studentId, studentId));
+    await db.delete(authTokens).where(eq(authTokens.userId, studentId));
+    await db.delete(users).where(eq(users.id, studentId));
+
+    audit({
+      actorId: actor.userId,
+      action: "student.deleted",
+      targetType: "student",
+      targetId: studentId,
+      details: { fullName: existing.fullName, email: existing.email, submissionsDeleted: studentSubs.length },
+    });
+
+    return json({ deleted: true });
+  },
+
   async update(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
     if (actor.role !== "teacher") return json({ error: "Only teachers can edit student details." }, 403);

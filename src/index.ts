@@ -110,6 +110,7 @@ addRoute("POST", "/api/students", studentRoutes.create);
 addRoute("POST", "/api/students/merge", studentRoutes.merge);
 addRoute("POST", "/api/students/reset-password", studentRoutes.resetPassword);
 addRoute("PATCH", "/api/students/:studentId", studentRoutes.update);
+addRoute("DELETE", "/api/students/:studentId", studentRoutes.delete);
 addRoute("POST", "/api/students/:studentId/open-submission", studentRoutes.openSubmission);
 
 addRoute("GET", "/api/audit-logs", auditLogRoutes.list);

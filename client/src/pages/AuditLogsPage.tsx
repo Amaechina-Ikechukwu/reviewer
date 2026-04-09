@@ -21,6 +21,7 @@ function actionLabel(action: string) {
     "review.run": "AI Review run",
     "review.grade_released": "Grade released",
     "student.updated": "Student edited",
+    "student.deleted": "Student deleted",
     "student.password_reset": "Password reset sent",
     "student.merged": "Students merged",
     "submission.created": "Submission received",
@@ -37,6 +38,7 @@ function actionColor(action: string): string {
   if (action.includes("grade_released") || action.includes("api_success")) return "#1a8a4a";
   if (action.includes("review") || action.includes("submission")) return "#0d56d8";
   if (action.includes("login") || action.includes("register") || action.includes("invite")) return "#0d9488";
+  if (action.includes("deleted")) return "#b91c1c";
   if (action.includes("password_reset") || action.includes("merged")) return "#b45309";
   if (action.includes("updated")) return "#7c3aed";
   return "#44516d";

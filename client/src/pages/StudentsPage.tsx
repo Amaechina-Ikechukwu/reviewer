@@ -67,6 +67,10 @@ export default function StudentsPage() {
   const [editError, setEditError] = useState("");
   const [editing, setEditing] = useState(false);
 
+  // Delete student
+  const [confirmDelete, setConfirmDelete] = useState<StudentWithPending | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Merge students
   const [showMerge, setShowMerge] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState("");
@@ -160,6 +164,21 @@ export default function StudentsPage() {
       setMergeError(err instanceof Error ? err.message : "Merge failed");
     } finally {
       setMerging(false);
+    }
+  }
+
+  async function handleDeleteStudent() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      await api(`/students/${confirmDelete.id}`, { method: "DELETE" });
+      setStudents((prev) => prev.filter((s) => s.id !== confirmDelete.id));
+      toast().success(`${confirmDelete.fullName} deleted`);
+      setConfirmDelete(null);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to delete student");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -280,6 +299,7 @@ export default function StudentsPage() {
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setEditStudent(student); setEditName(student.fullName); setEditEmail(isPlaceholderEmail(student.email) ? "" : student.email); setEditError(""); }}>Edit details</button>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setConfirmReset(student); }}>Reset password</button>
                       <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}>Merge student</button>
+                      <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setConfirmDelete(student); }}>Delete student</button>
                     </div>
                   )}
                 </div>
@@ -435,6 +455,34 @@ export default function StudentsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Delete student confirm modal */}
+      {confirmDelete && createPortal(
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setConfirmDelete(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Delete student?</h2>
+              <button className="modal-close" type="button" onClick={() => setConfirmDelete(null)}>✕</button>
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              This will permanently delete <strong>{confirmDelete.fullName}</strong> and all their submissions and reviews. This cannot be undone.
+            </p>
+            <div className="confirm-actions">
+              <button className="button subtle" type="button" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button
+                className="button"
+                type="button"
+                disabled={deleting}
+                style={{ background: "var(--danger, #b91c1c)" }}
+                onClick={handleDeleteStudent}
+              >
+                {deleting ? "Deleting..." : "Delete permanently"}
+              </button>
+            </div>
           </div>
         </div>,
         document.body,
