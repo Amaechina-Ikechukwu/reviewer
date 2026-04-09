@@ -182,12 +182,16 @@ export const submissionRoutes = {
     const deadline = isWithinDeadline(assignment.opensAt, assignment.closesAt);
     if (!deadline.canSubmit) {
       const [override] = await db
-        .select({ id: submissionOverrides.id })
+        .select({ id: submissionOverrides.id, closesAt: submissionOverrides.closesAt })
         .from(submissionOverrides)
         .where(and(eq(submissionOverrides.studentId, user.userId), eq(submissionOverrides.assignmentId, assignmentId)))
         .limit(1);
       if (!override) {
         return json({ error: deadline.reason }, 400);
+      }
+      // If override has a custom deadline, enforce it
+      if (override.closesAt && new Date() > override.closesAt) {
+        return json({ error: "Your extended deadline has also passed." }, 400);
       }
     }
     const isLate = false;

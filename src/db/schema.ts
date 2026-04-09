@@ -148,6 +148,7 @@ export const submissionOverrides = pgTable("submission_overrides", {
   studentId: uuid("student_id").references(() => users.id).notNull(),
   assignmentId: uuid("assignment_id").references(() => assignments.id).notNull(),
   grantedBy: uuid("granted_by").references(() => users.id).notNull(),
+  closesAt: timestamp("closes_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => ({
   studentAssignmentUnique: uniqueIndex("uniq_overrides_student_assignment").on(table.studentId, table.assignmentId),

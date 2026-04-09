@@ -96,8 +96,10 @@ export const studentRoutes = {
     if (user.role !== "teacher") return json({ error: "Only teachers can open submissions." }, 403);
 
     const { studentId } = params;
-    const { assignmentId } = await parseJson<{ assignmentId?: string }>(request);
+    const { assignmentId, closesAt: closesAtStr } = await parseJson<{ assignmentId?: string; closesAt?: string }>(request);
     if (!assignmentId) return json({ error: "assignmentId required." }, 400);
+    const closesAt = closesAtStr ? new Date(closesAtStr) : null;
+    if (closesAt && Number.isNaN(closesAt.getTime())) return json({ error: "Invalid closesAt date." }, 400);
 
     const [student] = await db.select({ id: users.id, role: users.role }).from(users).where(eq(users.id, studentId)).limit(1);
     if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
@@ -107,8 +109,11 @@ export const studentRoutes = {
 
     await db
       .insert(submissionOverrides)
-      .values({ studentId, assignmentId, grantedBy: user.userId })
-      .onConflictDoNothing();
+      .values({ studentId, assignmentId, grantedBy: user.userId, ...(closesAt ? { closesAt } : {}) })
+      .onConflictDoUpdate({
+        target: [submissionOverrides.studentId, submissionOverrides.assignmentId],
+        set: { grantedBy: user.userId, ...(closesAt ? { closesAt } : {}) },
+      });
 
     return json({ opened: true });
   },

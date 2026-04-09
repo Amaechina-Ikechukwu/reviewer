@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "../db/connection";
 import { assignments, reviews, submissions, users } from "../db/schema";
@@ -38,7 +39,9 @@ export const reviewRoutes = {
 
     let filePath = submission.filePath;
 
-    if (!filePath) {
+    // Re-clone if path is missing or the directory no longer exists on disk
+    // (happens after container restarts / redeployments that wipe the uploads folder)
+    if (!filePath || !existsSync(filePath)) {
       if (!submission.githubUrl) {
         return json({ error: "Submission has no files and no GitHub URL." }, 400);
       }
