@@ -25,6 +25,7 @@ function actionLabel(action: string) {
     "student.password_reset": "Password reset sent",
     "student.merged": "Students merged",
     "submission.created": "Submission received",
+    "submission.created_by_teacher": "Submitted by teacher",
     "auth.register": "Account registered",
     "auth.login": "Login",
     "auth.login_failed": "Login failed",
@@ -64,7 +65,9 @@ export default function AuditLogsPage() {
           <h1 className="page-title">Activity Log</h1>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <span className="muted" style={{ fontSize: "0.9rem" }}>{logs.length} recent events</span>
-            <button className="button secondary" style={{ padding: "8px 16px", fontSize: "0.9rem" }} type="button" onClick={() => setRefreshKey((k) => k + 1)}>Refresh</button>
+            <button className="button secondary" style={{ padding: "8px 10px", lineHeight: 1 }} type="button" title="Refresh" onClick={() => setRefreshKey((k) => k + 1)}>
+              <svg fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M4 12a8 8 0 0 1 14.93-4H15v2h7V3h-2v3.1A9.97 9.97 0 0 0 2 12h2Zm16 0a8 8 0 0 1-14.93 4H9v-2H2v7h2v-3.1A9.97 9.97 0 0 0 22 12h-2Z" fill="currentColor"/></svg>
+            </button>
           </div>
         </div>
 

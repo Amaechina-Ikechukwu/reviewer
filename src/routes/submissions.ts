@@ -249,6 +249,62 @@ export const submissionRoutes = {
     return json(submission, 201);
   },
 
+  async submitForStudent(request: Request) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (actor.role !== "teacher") {
+      return json({ error: "Only teachers can submit on behalf of a student." }, 403);
+    }
+
+    const body = await request.json() as { studentId?: string; assignmentId?: string; githubUrl?: string };
+    const { studentId, assignmentId, githubUrl: rawUrl } = body;
+
+    if (!studentId || !assignmentId) {
+      return json({ error: "studentId and assignmentId are required." }, 400);
+    }
+
+    const githubUrl = normalizeGithubUrl(rawUrl);
+    if (!githubUrl) {
+      return json({ error: "A GitHub URL is required." }, 400);
+    }
+
+    const [student] = await db.select({ id: users.id, role: users.role, fullName: users.fullName })
+      .from(users).where(eq(users.id, studentId)).limit(1);
+    if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
+
+    const assignment = await getAssignment(assignmentId);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    const [existing] = await db.select({ id: submissions.id })
+      .from(submissions)
+      .where(and(eq(submissions.assignmentId, assignmentId), eq(submissions.studentId, studentId)))
+      .limit(1);
+    if (existing) return json({ error: `${student.fullName} has already submitted for this assignment.` }, 409);
+
+    const submissionId = randomUUID();
+    const [submission] = await db
+      .insert(submissions)
+      .values({
+        id: submissionId,
+        assignmentId: assignment.id,
+        studentId,
+        submissionType: "github",
+        githubUrl,
+        filePath: null,
+        isLate: false,
+      })
+      .returning();
+
+    audit({
+      actorId: actor.userId,
+      action: "submission.created_by_teacher",
+      targetType: "submission",
+      targetId: submissionId,
+      details: { studentId, assignmentId, githubUrl },
+    });
+
+    return json(submission, 201);
+  },
+
   async list(request: Request) {
     const url = new URL(request.url);
     const user = (request as AuthenticatedRequest).user;

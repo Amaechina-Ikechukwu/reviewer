@@ -67,6 +67,13 @@ export default function StudentsPage() {
   const [editError, setEditError] = useState("");
   const [editing, setEditing] = useState(false);
 
+  // Submit for student
+  const [submitForStudent, setSubmitForStudent] = useState<StudentWithPending | null>(null);
+  const [submitAssignmentId, setSubmitAssignmentId] = useState("");
+  const [submitGithubUrl, setSubmitGithubUrl] = useState("");
+  const [submitForError, setSubmitForError] = useState("");
+  const [submittingFor, setSubmittingFor] = useState(false);
+
   // Delete student
   const [confirmDelete, setConfirmDelete] = useState<StudentWithPending | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -169,6 +176,25 @@ export default function StudentsPage() {
     }
   }
 
+  async function handleSubmitForStudent(event: FormEvent) {
+    event.preventDefault();
+    if (!submitForStudent) return;
+    setSubmitForError("");
+    setSubmittingFor(true);
+    try {
+      await api("/submissions/submit-for-student", {
+        method: "POST",
+        body: JSON.stringify({ studentId: submitForStudent.id, assignmentId: submitAssignmentId, githubUrl: submitGithubUrl }),
+      });
+      toast().success(`Submission created for ${submitForStudent.fullName}`);
+      setSubmitForStudent(null);
+    } catch (err) {
+      setSubmitForError(err instanceof Error ? err.message : "Submission failed");
+    } finally {
+      setSubmittingFor(false);
+    }
+  }
+
   async function handleDeleteStudent() {
     if (!confirmDelete) return;
     setDeleting(true);
@@ -231,11 +257,12 @@ export default function StudentsPage() {
           <div style={{ display: "flex", gap: 10 }}>
             <button
               className="button secondary"
-              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
+              style={{ padding: "8px 10px", lineHeight: 1 }}
               type="button"
+              title="Refresh"
               onClick={() => setRefreshKey((k) => k + 1)}
             >
-              Refresh
+              <svg fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M4 12a8 8 0 0 1 14.93-4H15v2h7V3h-2v3.1A9.97 9.97 0 0 0 2 12h2Zm16 0a8 8 0 0 1-14.93 4H9v-2H2v7h2v-3.1A9.97 9.97 0 0 0 22 12h-2Z" fill="currentColor"/></svg>
             </button>
             <button
               className="button secondary"
@@ -306,6 +333,7 @@ export default function StudentsPage() {
                   {openPopoverId === student.id && (
                     <div style={{ position: "absolute", left: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 8px 24px rgba(13,40,100,0.13)", zIndex: 200, minWidth: 180, overflow: "hidden" }}>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); openSubmitFor(student); }}>Open submission</button>
+                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setSubmitForStudent(student); setSubmitAssignmentId(assignments[0]?.id || ""); setSubmitGithubUrl(""); setSubmitForError(""); }}>Submit for student</button>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setEditStudent(student); setEditName(student.fullName); setEditEmail(isPlaceholderEmail(student.email) ? "" : student.email); setEditError(""); }}>Edit details</button>
                       <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setConfirmReset(student); }}>Reset password</button>
                       <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}>Merge student</button>
@@ -462,6 +490,47 @@ export default function StudentsPage() {
                 <button className="button subtle" type="button" onClick={() => setEditStudent(null)}>Cancel</button>
                 <button className="button" type="submit" disabled={editing}>
                   {editing ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* Submit for student modal */}
+      {submitForStudent && createPortal(
+        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setSubmitForStudent(null)}>
+          <div className="modal">
+            <div className="modal-header">
+              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Submit for {submitForStudent.fullName}</h2>
+              <button className="modal-close" type="button" onClick={() => setSubmitForStudent(null)}>✕</button>
+            </div>
+            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
+              Creates a GitHub submission on behalf of this student. The student will not be notified.
+            </p>
+            <form className="stack" style={{ gap: 14 }} onSubmit={handleSubmitForStudent}>
+              <label className="field">
+                <span>Assignment</span>
+                <select value={submitAssignmentId} onChange={(e) => setSubmitAssignmentId(e.target.value)} required>
+                  {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+                  {assignments.length === 0 && <option disabled value="">No assignments available</option>}
+                </select>
+              </label>
+              <label className="field">
+                <span>GitHub URL</span>
+                <input
+                  placeholder="https://github.com/owner/repo"
+                  value={submitGithubUrl}
+                  onChange={(e) => setSubmitGithubUrl(e.target.value)}
+                  required
+                />
+              </label>
+              {submitForError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{submitForError}</div>}
+              <div className="confirm-actions">
+                <button className="button subtle" type="button" onClick={() => setSubmitForStudent(null)}>Cancel</button>
+                <button className="button" type="submit" disabled={submittingFor || assignments.length === 0}>
+                  {submittingFor ? "Submitting..." : "Create submission"}
                 </button>
               </div>
             </form>

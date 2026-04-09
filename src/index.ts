@@ -104,6 +104,7 @@ addRoute("GET", "/api/submissions", submissionRoutes.list);
 addRoute("GET", "/api/submissions/:id", submissionRoutes.get);
 addRoute("GET", "/api/submissions/:id/files", submissionRoutes.getFiles);
 
+addRoute("POST", "/api/submissions/submit-for-student", submissionRoutes.submitForStudent);
 addRoute("GET", "/api/students", studentRoutes.list);
 addRoute("GET", "/api/students/my-overrides", studentRoutes.myOverrides);
 addRoute("POST", "/api/students", studentRoutes.create);
