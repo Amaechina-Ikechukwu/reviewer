@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { db } from "../db/connection";
-import { assignments, reviews, submissions } from "../db/schema";
+import { assignments, reviews, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { getAvailableProviders, reviewCode } from "../services/ai/reviewer";
 import { readCodeFiles } from "../services/code-reader";
 import { cloneGithubRepo } from "../services/github";
+import { sendGradeRelease } from "../services/email";
 import { json } from "../utils/json";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
@@ -186,9 +187,11 @@ export const reviewRoutes = {
         .returning();
     }
 
-    const updatedFeedback = feedbackText
-      ? { ...(existingReview.feedback ?? {}), summary: feedbackText }
-      : existingReview.feedback;
+    // Merge teacher feedback into the existing AI feedback object (keep AI criteria/suggestions)
+    const updatedFeedback = {
+      ...(existingReview.feedback ?? {}),
+      ...(feedbackText ? { summary: feedbackText } : {}),
+    };
 
     const [review] = await db
       .update(reviews)
@@ -200,6 +203,26 @@ export const reviewRoutes = {
       })
       .where(eq(reviews.submissionId, params.submissionId))
       .returning();
+
+    // Email the student their grade
+    const [student] = await db
+      .select({ email: users.email, fullName: users.fullName })
+      .from(users)
+      .where(eq(users.id, submission.studentId))
+      .limit(1);
+
+    if (student && !student.email.endsWith("@historical.reviewai.local")) {
+      sendGradeRelease(
+        student,
+        { title: assignment?.title ?? "Assignment", id: submission.assignmentId },
+        {
+          score: Math.round(score),
+          maxScore: assignment?.maxScore ?? 100,
+          feedback: feedbackText || (existingReview.feedback?.summary ?? null),
+          suggestions: existingReview.feedback?.suggestions ?? [],
+        },
+      ).catch(console.error);
+    }
 
     return json(review);
   },

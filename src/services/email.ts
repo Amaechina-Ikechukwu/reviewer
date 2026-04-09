@@ -65,6 +65,38 @@ export async function sendAssignmentNotification(
   ));
 }
 
+export async function sendGradeRelease(
+  student: { email: string; fullName: string },
+  assignment: { title: string; id: string },
+  grade: { score: number; maxScore: number; feedback?: string | null; suggestions?: string[] },
+) {
+  const first = student.fullName.split(" ")[0];
+  const link = `${APP_URL}/student/results`;
+  const percent = Math.round((grade.score / grade.maxScore) * 100);
+
+  const suggestionsHtml = grade.suggestions && grade.suggestions.length > 0
+    ? `<ul style="margin:12px 0 0;padding-left:20px;color:#334155;line-height:1.7">${grade.suggestions.map((s) => `<li>${s}</li>`).join("")}</ul>`
+    : "";
+
+  await send(student.email, `Your grade for "${assignment.title}"`, `
+    <div style="font-family:sans-serif;max-width:560px;margin:auto;padding:32px 24px;color:#15233b">
+      <h2 style="margin:0 0 4px">Hi ${first},</h2>
+      <p style="margin:0 0 24px;color:#64748b">Your assignment <strong>${assignment.title}</strong> has been graded.</p>
+
+      <div style="background:#f0f4ff;border-radius:12px;padding:20px 24px;margin-bottom:20px;text-align:center">
+        <div style="font-size:2.4rem;font-weight:800;color:#0d56d8">${grade.score}/${grade.maxScore}</div>
+        <div style="color:#64748b;font-size:0.9rem">${percent}%</div>
+      </div>
+
+      ${grade.feedback ? `<p style="margin:0 0 8px;color:#334155;line-height:1.7"><strong>Feedback:</strong> ${grade.feedback}</p>` : ""}
+      ${suggestionsHtml}
+
+      <br/>
+      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">View on Reviewer</a>
+    </div>
+  `);
+}
+
 export async function sendSubmissionNotification(
   teacher: { email: string; fullName: string },
   student: { fullName: string },
