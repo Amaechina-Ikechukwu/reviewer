@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { ensureSchema } from "./db/ensure-schema";
 import { startReminderJob } from "./jobs/reminders";
 import { existsSync } from "node:fs";
@@ -221,6 +222,13 @@ Bun.serve({
       }
     }
 
+    if (pathname === "/health") {
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     if (pathname.startsWith("/api/")) {
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
@@ -234,8 +242,12 @@ Bun.serve({
   },
 });
 
+// Ensure upload directory exists (important on Cloud Run where UPLOAD_DIR=/tmp/uploads)
+const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+mkdirSync(UPLOAD_DIR, { recursive: true });
+
 // Sync schema on startup (idempotent — safe to run every deploy)
 ensureSchema().then(() => {
   startReminderJob();
-  console.log(`Reviewer app listening on http://localhost:${port}`);
+  console.log(`Reviewer app listening on port ${port}`);
 });

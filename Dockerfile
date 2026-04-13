@@ -10,12 +10,13 @@ RUN npm run build
 FROM oven/bun:1 AS deps
 WORKDIR /app
 COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile
+RUN bun install --frozen-lockfile --production
 
 # Stage 3: Runtime
 FROM oven/bun:1 AS runner
 WORKDIR /app
 
+# git is required for GitHub repo cloning at review time
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -25,6 +26,12 @@ COPY tsconfig.json ./
 COPY drizzle.config.ts ./
 COPY --from=client-build /app/client/dist ./client/dist
 
-EXPOSE 3000
+# Cloud Run sets PORT dynamically (default 8080)
+ENV PORT=8080
+# Use /tmp for uploads — Cloud Run filesystem is ephemeral.
+# For persistent file uploads wire GCS_BUCKET instead (see .env.example).
+ENV UPLOAD_DIR=/tmp/uploads
+
+EXPOSE 8080
 
 CMD ["bun", "run", "src/index.ts"]
