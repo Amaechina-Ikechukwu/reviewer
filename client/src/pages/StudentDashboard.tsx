@@ -153,7 +153,10 @@ function ResultCard({ row, review }: { row: SubmissionRow; review: Review | unde
   const label = row.assignmentTitle ?? "Assignment";
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)]">
+    <Link
+      to={`/student/results#${row.submission.id}`}
+      className="group relative block overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] transition hover:border-[var(--accent)]/50 hover:shadow-[var(--shadow-md)]"
+    >
       <div className="absolute left-0 top-0 h-full w-1 bg-[var(--success)]" />
       <div className="flex items-start justify-between gap-3 pl-2">
         <div className="min-w-0">
@@ -178,7 +181,7 @@ function ResultCard({ row, review }: { row: SubmissionRow; review: Review | unde
           <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-[var(--fg)]">{insight}</p>
         </div>
       )}
-    </div>
+    </Link>
   );
 }
 
@@ -218,11 +221,20 @@ export default function StudentDashboard() {
         const within = new Date(a.opensAt) <= now && new Date(a.closesAt) > now;
         return within || overrideIds.has(a.id);
       })
-      .sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [assignments, overrideIds]);
 
   const milestone = openAssignments[0] ?? null;
-  const recentSubmissions = useMemo(() => submissions.slice(0, 4), [submissions]);
+  const recentSubmissions = useMemo(
+    () =>
+      [...submissions]
+        .sort(
+          (a, b) =>
+            new Date(b.submission.submittedAt).getTime() - new Date(a.submission.submittedAt).getTime(),
+        )
+        .slice(0, 4),
+    [submissions],
+  );
 
   return (
     <StudentShell section="dashboard">

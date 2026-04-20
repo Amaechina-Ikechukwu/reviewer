@@ -16,7 +16,10 @@
       "Bash(bun add *)",
       "Bash(bun x *)",
       "mcp__Claude_Preview__preview_start",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m 'Redesign student dashboard and refresh client UI *)",
+      "Bash(git push *)",
+      "Bash(bunx tsc *)"
     ]
   }
 }

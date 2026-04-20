@@ -171,15 +171,23 @@ export function AppShell({ nav, portalLabel, activeKey, primaryAction, children 
           </button>
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
-              <span>{portalLabel}</span>
+            <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+              <Link to={nav[0]?.to ?? "/"} className="hover:text-[var(--fg)] transition-colors">
+                {portalLabel}
+              </Link>
               {activeItem && (
                 <>
                   <Icon.ChevronRight className="h-3 w-3" />
-                  <span className="font-medium text-[var(--fg)]">{activeItem.label}</span>
+                  <Link
+                    to={activeItem.to}
+                    aria-current="page"
+                    className="font-medium text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
+                  >
+                    {activeItem.label}
+                  </Link>
                 </>
               )}
-            </div>
+            </nav>
           </div>
 
           <div className="flex items-center gap-2">

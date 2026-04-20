@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import StudentShell from "../components/StudentShell";
 import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
@@ -28,6 +28,23 @@ export default function StudentResults() {
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
   const [loading, setLoading] = useState(true);
+  const { hash } = useLocation();
+  const focusedId = hash.startsWith("#") ? hash.slice(1) : "";
+
+  useEffect(() => {
+    if (!focusedId || loading) return;
+    const el = document.getElementById(`submission-${focusedId}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusedId, loading]);
+
+  const sortedSubmissions = useMemo(
+    () =>
+      [...submissions].sort(
+        (a, b) =>
+          new Date(b.submission.submittedAt).getTime() - new Date(a.submission.submittedAt).getTime(),
+      ),
+    [submissions],
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -81,12 +98,20 @@ export default function StudentResults() {
         )}
 
         <div className="flex flex-col gap-3">
-          {submissions.map((row) => {
+          {sortedSubmissions.map((row) => {
             const review = reviews[row.submission.id];
             const score = review?.teacherOverrideScore ?? review?.aiScore;
             const maxScore = review?.maxScore ?? 100;
+            const isFocused = focusedId === row.submission.id;
             return (
-              <Card key={row.submission.id}>
+              <Card
+                key={row.submission.id}
+                id={`submission-${row.submission.id}`}
+                className={cn(
+                  "scroll-mt-20 transition-shadow",
+                  isFocused && "ring-2 ring-[var(--accent)] shadow-[var(--shadow-md)]",
+                )}
+              >
                 <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
                     <div
