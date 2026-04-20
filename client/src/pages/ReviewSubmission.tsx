@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Icon } from "../components/ui/Icons";
+import { Input, Label, Textarea } from "../components/ui/Input";
 import { api } from "../api";
+import { cn } from "../lib/cn";
+import { formatDateTime } from "../lib/format";
 import type { CodeFile, Review } from "../types";
 
 type SubmissionResponse = {
@@ -31,20 +38,19 @@ type SubmissionResponse = {
 function structureLabel(classification?: string) {
   switch (classification) {
     case "one_file_per_question":
-      return "File Per Question";
+      return "File per question";
     case "multi_file_per_question":
-      return "Grouped By Question";
+      return "Grouped by question";
     case "single_project_solution":
-      return "Single Combined Solution";
+      return "Single combined solution";
     case "mixed_or_unclear":
       return "Mixed";
     default:
-      return "Structure Pending";
+      return "Structure pending";
   }
 }
 
 function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile) {
-  // Load CSS/JS from the same directory as the HTML file
   const dir = htmlFile.filename.includes("/")
     ? htmlFile.filename.slice(0, htmlFile.filename.lastIndexOf("/") + 1)
     : "";
@@ -64,49 +70,69 @@ function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile) {
   return html;
 }
 
+function ScorePill({ score, max }: { score: number; max: number }) {
+  const pct = max > 0 ? score / max : 0;
+  const tone = pct >= 0.8 ? "success" : pct >= 0.6 ? "warn" : "danger";
+  const classes =
+    tone === "success"
+      ? "bg-[var(--success-soft)] text-[var(--success)]"
+      : tone === "warn"
+        ? "bg-[var(--warn-soft)] text-[var(--warn)]"
+        : "bg-[var(--danger-soft)] text-[var(--danger)]";
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold tabular-nums", classes)}>
+      {score}
+      <span className="opacity-60">/{max}</span>
+    </span>
+  );
+}
+
 export default function ReviewSubmission() {
   const { submissionId } = useParams();
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [review, setReview] = useState<Review | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [releasing, setReleasing] = useState(false);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [overrideScore, setOverrideScore] = useState("");
   const [finalFeedback, setFinalFeedback] = useState("");
   const [message, setMessage] = useState("");
-  const [viewMode, setViewMode] = useState<"code" | "preview">("code");
   const [releaseCount, setReleaseCount] = useState(0);
 
   useEffect(() => {
     if (!submissionId) return;
 
-    api<SubmissionResponse>(`/submissions/${submissionId}`).then(setSubmission).catch((err) => {
-      setMessage(err instanceof Error ? err.message : "Failed to load submission");
-    });
+    api<SubmissionResponse>(`/submissions/${submissionId}`)
+      .then(setSubmission)
+      .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load submission"));
 
-    api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => setFiles([]));
-    api<Review>(`/reviews/${submissionId}`).then((data) => {
-      setReview(data);
-      // Always pre-fill score from teacher override if set, else from AI score
-      const score = data.teacherOverrideScore ?? data.aiScore;
-      setOverrideScore(typeof score === "number" ? String(score) : "");
-      setFinalFeedback(data.feedback?.summary || "");
-    }).catch(() => setReview(null));
+    api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`)
+      .then((data) => setFiles(data.files))
+      .catch(() => setFiles([]));
+
+    api<Review>(`/reviews/${submissionId}`)
+      .then((data) => {
+        setReview(data);
+        const score = data.teacherOverrideScore ?? data.aiScore;
+        setOverrideScore(typeof score === "number" ? String(score) : "");
+        setFinalFeedback(data.feedback?.summary || "");
+      })
+      .catch(() => setReview(null));
   }, [submissionId]);
 
   useEffect(() => {
-    if (selectedFileIndex >= files.length) {
-      setSelectedFileIndex(0);
-    }
+    if (selectedFileIndex >= files.length) setSelectedFileIndex(0);
   }, [files, selectedFileIndex]);
 
   const selectedFile = files[selectedFileIndex] || files[0];
   const isHtmlFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".html");
   const previewDoc = useMemo(
-    () => selectedFile && isHtmlFile(selectedFile) ? buildPreviewDocument(files, selectedFile) : null,
+    () => (selectedFile && isHtmlFile(selectedFile) ? buildPreviewDocument(files, selectedFile) : null),
     [files, selectedFile],
   );
-  const hasPreview = files.some((f) => isHtmlFile(f));
+
+  const maxScore = review?.maxScore || submission?.assignment.maxScore || 100;
   const geminiSummary = review?.feedback?.summary || "No Gemini review has been run for this submission yet.";
   const geminiSuggestions = review?.feedback?.suggestions || [];
   const geminiModel = review?.feedback?.model || "gemini-2.5-flash";
@@ -122,9 +148,7 @@ export default function ReviewSubmission() {
 
   function focusFile(filename: string) {
     const nextIndex = files.findIndex((file) => file.filename === filename);
-    if (nextIndex >= 0) {
-      setSelectedFileIndex(nextIndex);
-    }
+    if (nextIndex >= 0) setSelectedFileIndex(nextIndex);
   }
 
   async function runReview() {
@@ -142,8 +166,9 @@ export default function ReviewSubmission() {
       setOverrideScore(typeof score === "number" ? String(score) : "");
       setFinalFeedback(nextReview.feedback?.summary || "");
       toast().success("Review completed");
-      // Re-fetch files now that the repo has been cloned
-      api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`).then((data) => setFiles(data.files)).catch(() => {});
+      api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`)
+        .then((data) => setFiles(data.files))
+        .catch(() => {});
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Review failed");
     } finally {
@@ -153,7 +178,7 @@ export default function ReviewSubmission() {
 
   async function applyOverride() {
     if (!submissionId) return;
-
+    setReleasing(true);
     try {
       const nextReview = await api<Review>(`/reviews/${submissionId}/override`, {
         method: "PATCH",
@@ -164,258 +189,342 @@ export default function ReviewSubmission() {
       toast().success("Grade released");
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to release grade");
+    } finally {
+      setReleasing(false);
     }
   }
 
   if (!submission) {
-    return <div className="auth-shell">Loading submission...</div>;
+    return (
+      <TeacherShell section="submissions">
+        <div className="flex min-h-[40vh] items-center justify-center text-sm text-[var(--fg-muted)]">
+          Loading submission...
+        </div>
+      </TeacherShell>
+    );
   }
+
+  const canRelease = review && review.status === "completed";
+  const firstName = submission.studentName?.split(" ")[0] || "Student";
 
   return (
     <TeacherShell section="submissions">
-      <div className="page">
-        <div className="stack" style={{ gap: 6 }}>
-          <Link className="action-link" to="/teacher/submissions" style={{ fontSize: "0.88rem" }}>← Submissions</Link>
-          <h1 className="page-title" style={{ margin: 0 }}>{submission.assignment.title}</h1>
-          <div className="row muted" style={{ fontSize: "0.92rem" }}>
-            <span>{submission.studentName || "Student"}</span>
-            <span>·</span>
-            <span>{new Date(submission.submission.submittedAt).toLocaleString()}</span>
-          </div>
-        </div>
-
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <div className="pill-row">
-            <span className="tag">{submission.submission.submissionType}</span>
-            <span className={`tag ${submission.submission.isLate ? "red" : "success"}`}>{submission.submission.isLate ? "Late" : "On Time"}</span>
-            <span className="tag violet">{structureLabel(structure?.classification)}</span>
-          </div>
-          {submission.submission.githubUrl && (
-            <a className="button secondary compact-button" href={submission.submission.githubUrl} rel="noreferrer" target="_blank">GitHub Repo</a>
-          )}
-        </div>
-
-        {message && <div className="card" style={{ color: "#b91c1c", fontSize: "0.9rem" }}>{message}</div>}
-
-        {/* Code + preview — full width always */}
-        <section className="card code-preview-panel">
-              {files.length > 0 && (
-                <div className="file-selector-bar">
-                  {files.map((file, index) => (
-                    <button
-                      className={`file-selector-chip ${index === selectedFileIndex ? "active" : ""}`}
-                      key={file.path || file.filename}
-                      onClick={() => {
-                        setSelectedFileIndex(index);
-                        setViewMode(isHtmlFile(file) ? "preview" : "code");
-                      }}
-                      type="button"
-                    >
-                      {file.filename}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className={`code-split-panel${previewDoc !== null ? " has-preview" : ""}`}>
-                {/* Left: code */}
-                <div className="code-split-left">
-                  <div className="code-preview-head">
-                    <span>Code: {selectedFile?.filename || "—"}</span>
-                    <span>{selectedFile ? `${selectedFileLineCount} lines` : ""}</span>
-                  </div>
-                  {selectedFile && (
-                    <div className="code-box">
-                      <pre>{selectedFile.content}</pre>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right: mini browser — only when an HTML file is selected */}
-                {previewDoc !== null && (
-                  <div className="code-split-right">
-                    <div className="mini-browser">
-                      <div className="mini-browser-bar">
-                        <span className="mini-browser-dot red" />
-                        <span className="mini-browser-dot yellow" />
-                        <span className="mini-browser-dot green" />
-                        <div className="mini-browser-url">
-                          <span>🔒</span>
-                          <span>{submission.studentName} — {submission.assignment.title}</span>
-                        </div>
-                      </div>
-                      <iframe
-                        className="mini-browser-frame"
-                        sandbox="allow-scripts"
-                        srcDoc={previewDoc}
-                        title="Student preview"
-                      />
-                    </div>
-                  </div>
-                )}
+      <div className="flex flex-col gap-6">
+        {/* Header */}
+        <div className="flex flex-col gap-2">
+          <Link
+            to="/teacher/submissions"
+            className="inline-flex w-fit items-center gap-1 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--accent)]"
+          >
+            <Icon.ChevronLeft className="h-3 w-3" />
+            Submissions
+          </Link>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 flex-col gap-1">
+              <h1 className="truncate text-2xl font-semibold tracking-tight">{submission.assignment.title}</h1>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--fg-muted)]">
+                <span className="font-medium text-[var(--fg)]">{submission.studentName || "Student"}</span>
+                <span>·</span>
+                <span>{formatDateTime(submission.submission.submittedAt)}</span>
               </div>
-
-              {viewMode === "code" && selectedFileScore && (
-                <div className="file-score-strip">
-                  <div className="row" style={{ justifyContent: "space-between" }}>
-                    <strong>{selectedFileScore.filename}</strong>
-                    <span className="score-pill blue">{selectedFileScore.score}/{selectedFileScore.maxScore}</span>
-                  </div>
-                  <div className="muted">{selectedFileScore.summary}</div>
-                </div>
-              )}
-        </section>
-
-        {/* AI review + assessment two-column grid */}
-        <div className="review-page-grid">
-          <div className="stack">
-            <section className="review-score-grid">
-              <article className="provider-card blue">
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div className="stack" style={{ gap: 4 }}>
-                    <strong style={{ fontSize: "1.02rem" }}>Gemini Review</strong>
-                    <span className="muted">{geminiModel}</span>
-                  </div>
-                  <span className="score-pill blue">{typeof geminiScore === "number" ? `${geminiScore}/${review?.maxScore || submission.assignment.maxScore}` : "--"}</span>
-                </div>
-
-                <p style={{ fontSize: "0.98rem", lineHeight: 1.65 }}>{geminiSummary}</p>
-                {typeof averageFileScore === "number" && (
-                  <div className="soft-card row" style={{ justifyContent: "space-between" }}>
-                    <strong>Average file score</strong>
-                    <span className="score-pill blue">{Math.round(averageFileScore)}/{review?.maxScore || submission.assignment.maxScore}</span>
-                  </div>
-                )}
-                {structure && (
-                  <div className="soft-card stack" style={{ gap: 8 }}>
-                    <div className="row" style={{ justifyContent: "space-between" }}>
-                      <strong>File-to-question structure</strong>
-                      <span className="tag violet">{structure.confidence} confidence</span>
-                    </div>
-                    <div className="muted">{structure.explanation}</div>
-                  </div>
-                )}
-                {geminiSuggestions.length > 0 && (
-                  <ul style={{ margin: 0, paddingLeft: 22, lineHeight: 1.55 }}>
-                    {geminiSuggestions.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
-                )}
-              </article>
-            </section>
-
-            <section className="card stack">
-              <div className="section-header">
-                <h2 className="section-title" style={{ fontSize: "1.2rem" }}>Question Mapping</h2>
-              </div>
-              {questionGroups.length > 0 ? (
-                questionGroups.map((group) => (
-                  <div className="soft-card stack" key={`${group.label}-${group.files.join(",")}`} style={{ gap: 8 }}>
-                    <strong>{group.label}</strong>
-                    <div className="pill-row">
-                      {group.files.map((file) => (
-                        <button className="tag tag-button" key={file} onClick={() => focusFile(file)} type="button">
-                          {file}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="muted">{group.reasoning}</div>
-                  </div>
-                ))
+            </div>
+            {submission.submission.githubUrl && (
+              <a href={submission.submission.githubUrl} target="_blank" rel="noreferrer">
+                <Button variant="secondary" size="sm">
+                  <Icon.Github className="h-3.5 w-3.5" />
+                  GitHub repo
+                  <Icon.External className="h-3 w-3" />
+                </Button>
+              </a>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="neutral">
+              {submission.submission.submissionType === "github" ? (
+                <span className="inline-flex items-center gap-1">
+                  <Icon.Github className="h-3 w-3" /> GitHub
+                </span>
               ) : (
-                <div className="muted">Run Gemini review to infer how files map to assignment questions.</div>
+                <span className="inline-flex items-center gap-1">
+                  <Icon.Upload className="h-3 w-3" /> ZIP
+                </span>
               )}
-            </section>
+            </Badge>
+            {submission.submission.isLate ? (
+              <Badge tone="warn">Late</Badge>
+            ) : (
+              <Badge tone="success">On time</Badge>
+            )}
+            <Badge tone="accent">{structureLabel(structure?.classification)}</Badge>
+          </div>
+        </div>
 
-            {fileScores.length > 0 && (
-              <section className="card stack">
-                <div className="section-header">
-                  <h2 className="section-title" style={{ fontSize: "1.2rem" }}>File Scores</h2>
-                  {typeof averageFileScore === "number" && (
-                    <span className="tag violet">Average {Math.round(averageFileScore)}/{review?.maxScore || submission.assignment.maxScore}</span>
+        {message && (
+          <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+            {message}
+          </div>
+        )}
+
+        {/* Code + preview */}
+        <Card className="overflow-hidden">
+          {files.length > 0 && (
+            <div className="flex items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-2 py-1.5">
+              {files.map((file, index) => (
+                <button
+                  key={file.filename}
+                  onClick={() => setSelectedFileIndex(index)}
+                  type="button"
+                  className={cn(
+                    "whitespace-nowrap rounded-md px-2.5 py-1 font-mono text-[11px] transition-colors",
+                    index === selectedFileIndex
+                      ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm ring-1 ring-[var(--border)]"
+                      : "text-[var(--fg-muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--fg)]",
                   )}
+                >
+                  {file.filename}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className={cn("grid", previewDoc !== null ? "lg:grid-cols-2" : "grid-cols-1")}>
+            <div className="flex min-w-0 flex-col border-r border-[var(--border)]">
+              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)]/30 px-4 py-2 text-[11px] text-[var(--fg-muted)]">
+                <span className="truncate font-mono">{selectedFile?.filename || "—"}</span>
+                <span>{selectedFile ? `${selectedFileLineCount} lines` : ""}</span>
+              </div>
+              {selectedFile ? (
+                <pre className="m-0 max-h-[520px] overflow-auto bg-[var(--surface)] p-4 font-mono text-xs leading-relaxed text-[var(--fg)]">
+                  {selectedFile.content}
+                </pre>
+              ) : (
+                <div className="flex h-40 items-center justify-center text-sm text-[var(--fg-muted)]">
+                  No files yet. Run Gemini review to clone the repo.
                 </div>
-                {fileScores.map((entry) => (
-                  <button
-                    className={`file-score-row ${selectedFile?.filename === entry.filename ? "active" : ""}`}
-                    key={entry.filename}
-                    onClick={() => focusFile(entry.filename)}
-                    type="button"
-                  >
-                    <div className="stack" style={{ gap: 4, textAlign: "left" }}>
-                      <strong>{entry.filename}</strong>
-                      <span className="muted">{entry.summary}</span>
-                    </div>
-                    <span className="score-pill blue">{entry.score}/{entry.maxScore}</span>
-                  </button>
-                ))}
-              </section>
+              )}
+            </div>
+
+            {previewDoc !== null && (
+              <div className="flex min-w-0 flex-col">
+                <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)]/30 px-3 py-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]/70" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--warn)]/70" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--success)]/70" />
+                  <div className="ml-2 flex flex-1 items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
+                    <Icon.Link className="h-3 w-3 shrink-0" />
+                    <span className="truncate">
+                      {submission.studentName || "Student"} — {submission.assignment.title}
+                    </span>
+                  </div>
+                </div>
+                <iframe
+                  className="h-[520px] w-full border-0 bg-white"
+                  sandbox="allow-scripts"
+                  srcDoc={previewDoc}
+                  title="Student preview"
+                />
+              </div>
             )}
           </div>
 
-          <aside className="assessment-panel">
-            <section className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800 }}>Final Assessment</h2>
-                {typeof geminiScore === "number" && geminiScore > 0 && (
-                  <span className="score-pill blue">{geminiScore}/{review?.maxScore || submission.assignment.maxScore}</span>
-                )}
+          {selectedFileScore && (
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-muted)]/30 px-4 py-2.5">
+              <div className="min-w-0">
+                <div className="truncate font-mono text-xs font-semibold">{selectedFileScore.filename}</div>
+                <div className="truncate text-[11px] text-[var(--fg-muted)]">{selectedFileScore.summary}</div>
               </div>
+              <ScorePill score={selectedFileScore.score} max={selectedFileScore.maxScore} />
+            </div>
+          )}
+        </Card>
 
-              <div className="stack" style={{ padding: "16px 20px 20px", gap: 14 }}>
-                <label className="field">
-                  <span>Score (0–{submission.assignment.maxScore})</span>
-                  <div className="score-input">
-                    <input
+        {/* Review analysis + assessment grid */}
+        <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+          <div className="flex flex-col gap-6">
+            {/* AI review */}
+            <Card>
+              <CardHeader>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <CardTitle>
+                    <span className="inline-flex items-center gap-2">
+                      <Icon.Sparkles className="h-4 w-4 text-[var(--accent)]" />
+                      AI review
+                    </span>
+                  </CardTitle>
+                  <span className="font-mono text-[11px] text-[var(--fg-muted)]">{geminiModel}</span>
+                </div>
+                {typeof geminiScore === "number" && <ScorePill score={geminiScore} max={maxScore} />}
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <p className="text-sm leading-relaxed text-[var(--fg)]">{geminiSummary}</p>
+
+                {typeof averageFileScore === "number" && (
+                  <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/40 px-3 py-2">
+                    <span className="text-xs font-medium">Average file score</span>
+                    <ScorePill score={Math.round(averageFileScore)} max={maxScore} />
+                  </div>
+                )}
+
+                {structure && (
+                  <div className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold">File-to-question structure</span>
+                      <Badge tone="accent">{structure.confidence} confidence</Badge>
+                    </div>
+                    <div className="text-xs leading-relaxed text-[var(--fg-muted)]">{structure.explanation}</div>
+                  </div>
+                )}
+
+                {geminiSuggestions.length > 0 && (
+                  <ul className="flex flex-col gap-1.5 pl-5 text-sm leading-relaxed text-[var(--fg)]">
+                    {geminiSuggestions.map((item) => (
+                      <li key={item} className="list-disc">
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Question mapping */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Question mapping</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {questionGroups.length > 0 ? (
+                  questionGroups.map((group) => (
+                    <div
+                      key={`${group.label}-${group.files.join(",")}`}
+                      className="flex flex-col gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3"
+                    >
+                      <strong className="text-sm">{group.label}</strong>
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.files.map((file) => (
+                          <button
+                            key={file}
+                            type="button"
+                            onClick={() => focusFile(file)}
+                            className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 font-mono text-[11px] text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                          >
+                            <Icon.FileCode className="h-3 w-3" />
+                            {file}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="text-xs leading-relaxed text-[var(--fg-muted)]">{group.reasoning}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-[var(--fg-muted)]">
+                    Run AI review to infer how files map to assignment questions.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* File scores */}
+            {fileScores.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>File scores</CardTitle>
+                  {typeof averageFileScore === "number" && (
+                    <Badge tone="accent">Avg {Math.round(averageFileScore)}/{maxScore}</Badge>
+                  )}
+                </CardHeader>
+                <CardContent className="flex flex-col gap-1.5">
+                  {fileScores.map((entry) => (
+                    <button
+                      key={entry.filename}
+                      type="button"
+                      onClick={() => focusFile(entry.filename)}
+                      className={cn(
+                        "flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
+                        selectedFile?.filename === entry.filename
+                          ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                          : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]/60",
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-mono text-xs font-semibold text-[var(--fg)]">{entry.filename}</div>
+                        <div className="mt-0.5 truncate text-[11px] text-[var(--fg-muted)]">{entry.summary}</div>
+                      </div>
+                      <ScorePill score={entry.score} max={entry.maxScore} />
+                    </button>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Assessment panel */}
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-6 lg:self-start">
+            <Card>
+              <CardHeader>
+                <CardTitle>Final assessment</CardTitle>
+                {typeof geminiScore === "number" && geminiScore > 0 && (
+                  <ScorePill score={geminiScore} max={maxScore} />
+                )}
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <Label>
+                  Score (0–{maxScore})
+                  <div className="flex items-stretch overflow-hidden rounded-lg border border-[var(--border)] focus-within:border-[var(--accent)] focus-within:ring-2 focus-within:ring-[var(--accent)]/20">
+                    <Input
                       placeholder="—"
                       value={overrideScore}
                       onChange={(event) => setOverrideScore(event.target.value)}
+                      className="border-0 bg-transparent focus:ring-0"
                     />
-                    <span className="score-denom">/ {submission.assignment.maxScore}</span>
+                    <span className="flex items-center border-l border-[var(--border)] bg-[var(--surface-muted)]/60 px-3 text-xs font-medium text-[var(--fg-muted)]">
+                      / {maxScore}
+                    </span>
                   </div>
-                </label>
+                </Label>
 
-                <label className="field">
-                  <span>Feedback to {submission.studentName?.split(" ")[0] || "Student"}</span>
-                  <textarea
-                    placeholder={`Write feedback for ${submission.studentName?.split(" ")[0] || "the student"}...`}
+                <Label>
+                  Feedback to {firstName}
+                  <Textarea
+                    placeholder={`Write feedback for ${firstName}...`}
                     value={finalFeedback}
                     onChange={(event) => setFinalFeedback(event.target.value)}
-                    style={{ minHeight: 120 }}
+                    rows={6}
                   />
-                </label>
+                </Label>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                  <button
-                    className="button review-action-button"
+                <div className="flex items-center gap-2">
+                  <Button
+                    className="flex-1"
                     onClick={applyOverride}
-                    type="button"
-                    style={{ flex: 1 }}
-                    disabled={!review || review.status !== "completed"}
-                    title={!review || review.status !== "completed" ? "Run Gemini Review first" : undefined}
+                    disabled={!canRelease}
+                    loading={releasing}
+                    title={!canRelease ? "Run AI review first" : undefined}
                   >
-                    Release Grade
-                  </button>
-                  {releaseCount > 0 && (
-                    <span style={{ background: "#e7f0ff", color: "#3764c9", fontWeight: 700, fontSize: "0.8rem", borderRadius: 20, padding: "4px 10px", whiteSpace: "nowrap" }}>
-                      ×{releaseCount}
-                    </span>
-                  )}
+                    <Icon.Check className="h-3.5 w-3.5" />
+                    Release grade
+                  </Button>
+                  {releaseCount > 0 && <Badge tone="accent">×{releaseCount}</Badge>}
                 </div>
-                {(!review || review.status !== "completed") && (
-                  <p className="muted" style={{ margin: 0, fontSize: "0.8rem", textAlign: "center" }}>
-                    Run Gemini Review first to enable grading
+                {!canRelease && (
+                  <p className="text-center text-[11px] text-[var(--fg-muted)]">
+                    Run AI review first to enable grading.
                   </p>
                 )}
 
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-                  <button className="button secondary compact-button review-action-button" onClick={runReview} disabled={reviewing} type="button">
-                    {reviewing ? "Running Gemini Review..." : "Run Gemini Review"}
-                  </button>
+                <div className="border-t border-[var(--border)] pt-4">
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={runReview}
+                    loading={reviewing}
+                  >
+                    <Icon.Sparkles className="h-3.5 w-3.5" />
+                    {reviewing ? "Running AI review..." : "Run AI review"}
+                  </Button>
                 </div>
-              </div>
-            </section>
+              </CardContent>
+            </Card>
           </aside>
         </div>
       </div>

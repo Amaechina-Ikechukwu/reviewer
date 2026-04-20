@@ -12,7 +12,11 @@
       "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"\\\\dt\")",
       "Bash(psql postgres://postgres:robinsonmarch@localhost:5432/reviewer -c ':*)",
       "Bash(npx tsc:*)",
-      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"SELECT id, assignment_id, student_id FROM submissions WHERE student_id = '2fd7f827-1917-4b72-a4c4-9f2d3fe9f0cb' AND assignment_id = '7f4e9e85-949d-4fce-9a94-b61eba2a321b';\")"
+      "Bash(psql \"postgres://postgres:robinsonmarch@localhost:5432/reviewer\" -c \"SELECT id, assignment_id, student_id FROM submissions WHERE student_id = '2fd7f827-1917-4b72-a4c4-9f2d3fe9f0cb' AND assignment_id = '7f4e9e85-949d-4fce-9a94-b61eba2a321b';\")",
+      "Bash(bun add *)",
+      "Bash(bun x *)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git add *)"
     ]
   }
 }

@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { createPortal } from "react-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
+import { Avatar } from "../components/ui/Avatar";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { Icon } from "../components/ui/Icons";
+import { Input, Label, Select } from "../components/ui/Input";
+import { Modal } from "../components/ui/Modal";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { api } from "../api";
+import { formatDate } from "../lib/format";
 import type { Assignment, StudentRecord } from "../types";
 
 type StudentWithPending = StudentRecord & { pending?: boolean };
@@ -11,110 +20,133 @@ function isPlaceholderEmail(email: string) {
   return email.endsWith("@historical.reviewai.local");
 }
 
-const BADGE_PALETTES = [
-  { bg: "#d8e7ff", color: "#3764c9" },
-  { bg: "#e7d8ff", color: "#6d36c9" },
-  { bg: "#d8f0e7", color: "#2a8a5e" },
-  { bg: "#ffd8e7", color: "#c93764" },
-  { bg: "#ffe7d8", color: "#c96437" },
-  { bg: "#d8f4ff", color: "#2479a8" },
-];
+function RowMenu({
+  student,
+  onAction,
+}: {
+  student: StudentWithPending;
+  onAction: (action: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
-function getBadgePalette(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  return BADGE_PALETTES[Math.abs(hash) % BADGE_PALETTES.length];
+  useEffect(() => {
+    if (!open) return;
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const items: Array<{ key: string; label: string; danger?: boolean }> = [
+    { key: "open", label: "Open submission" },
+    { key: "submit-for", label: "Submit for student" },
+    { key: "edit", label: "Edit details" },
+    { key: "reset", label: "Reset password" },
+    { key: "merge", label: "Merge into another…", danger: true },
+    { key: "delete", label: "Delete student", danger: true },
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <Button variant="ghost" size="icon" onClick={() => setOpen((o) => !o)} aria-label={`Actions for ${student.fullName}`}>
+        <Icon.MoreHorizontal className="h-4 w-4" />
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] animate-fade-in">
+          {items.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onAction(item.key);
+              }}
+              className={`block w-full px-3 py-2 text-left text-xs font-medium transition-colors hover:bg-[var(--surface-muted)] ${
+                item.danger ? "text-[var(--danger)] hover:bg-[var(--danger-soft)]" : "text-[var(--fg)]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<StudentWithPending[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [showModal, setShowModal] = useState(false);
-  const [confirmReset, setConfirmReset] = useState<StudentWithPending | null>(null);
-  const [submitFor, setSubmitFor] = useState<StudentWithPending | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [query, setQuery] = useState("");
 
-  // Add student form
+  const [showAdd, setShowAdd] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [addError, setAddError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Open submission form
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
-  const [openError, setOpenError] = useState("");
-  const [opening, setOpening] = useState(false);
-
+  const [confirmReset, setConfirmReset] = useState<StudentWithPending | null>(null);
   const [resetting, setResetting] = useState(false);
 
-  // Row action popover
-  const [openPopoverId, setOpenPopoverId] = useState<string | null>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
+  const [openSubFor, setOpenSubFor] = useState<StudentWithPending | null>(null);
+  const [openSubAssignmentId, setOpenSubAssignmentId] = useState("");
+  const [openSubError, setOpenSubError] = useState("");
+  const [opening, setOpening] = useState(false);
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setOpenPopoverId(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  // Edit student
   const [editStudent, setEditStudent] = useState<StudentWithPending | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editError, setEditError] = useState("");
   const [editing, setEditing] = useState(false);
 
-  // Submit for student
   const [submitForStudent, setSubmitForStudent] = useState<StudentWithPending | null>(null);
   const [submitAssignmentId, setSubmitAssignmentId] = useState("");
   const [submitGithubUrl, setSubmitGithubUrl] = useState("");
   const [submitForError, setSubmitForError] = useState("");
   const [submittingFor, setSubmittingFor] = useState(false);
 
-  // Delete student
   const [confirmDelete, setConfirmDelete] = useState<StudentWithPending | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Merge students
   const [showMerge, setShowMerge] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState("");
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergeError, setMergeError] = useState("");
   const [merging, setMerging] = useState(false);
 
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  const sortedStudents = useMemo<StudentWithPending[]>(
-    () => [...students].sort((a, b) => a.fullName.localeCompare(b.fullName)),
-    [students],
-  );
-
   useEffect(() => {
     api<StudentWithPending[]>("/students").then(setStudents).catch(() => setStudents([]));
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
   }, [refreshKey]);
 
-  function openAddModal() {
+  const sortedStudents = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = [...students].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    if (!q) return base;
+    return base.filter((s) => s.fullName.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+  }, [students, query]);
+
+  function openAdd() {
     setFullName("");
     setEmail("");
     setAddError("");
-    setShowModal(true);
+    setShowAdd(true);
   }
 
-  async function handleCreate(event: FormEvent) {
-    event.preventDefault();
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
     setAddError("");
     setSubmitting(true);
     try {
-      const response = await api<{ student: StudentWithPending }>("/students", {
+      const res = await api<{ student: StudentWithPending }>("/students", {
         method: "POST",
         body: JSON.stringify({ fullName, email }),
       });
-      setStudents((prev) => [...prev, response.student]);
-      setShowModal(false);
+      setStudents((prev) => [...prev, res.student]);
+      setShowAdd(false);
       toast().success(`Invite sent to ${email}`);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : "Failed to create student");
@@ -127,7 +159,7 @@ export default function StudentsPage() {
     try {
       const { url } = await api<{ url: string }>("/teachers/join-link");
       await navigator.clipboard.writeText(url);
-      toast().success("Join link copied to clipboard");
+      toast().success("Join link copied");
     } catch {
       toast().error("Failed to get join link");
     }
@@ -141,23 +173,17 @@ export default function StudentsPage() {
         method: "POST",
         body: JSON.stringify({ studentId: confirmReset.id }),
       });
-      toast().success(`Password reset email sent to ${confirmReset.fullName}`);
+      toast().success(`Reset email sent to ${confirmReset.fullName}`);
     } catch {
-      toast().error("Failed to send reset email. Try again.");
+      toast().error("Failed to send reset email");
     } finally {
       setResetting(false);
       setConfirmReset(null);
     }
   }
 
-  function openSubmitFor(student: StudentWithPending) {
-    setSubmitFor(student);
-    setSelectedAssignmentId(assignments[0]?.id || "");
-    setOpenError("");
-  }
-
-  async function handleMerge(event: FormEvent) {
-    event.preventDefault();
+  async function handleMerge(e: FormEvent) {
+    e.preventDefault();
     if (!mergeSourceId || !mergeTargetId) return;
     setMergeError("");
     setMerging(true);
@@ -167,7 +193,7 @@ export default function StudentsPage() {
         body: JSON.stringify({ sourceId: mergeSourceId, targetId: mergeTargetId }),
       });
       setStudents((prev) => prev.filter((s) => s.id !== mergeSourceId));
-      toast().success(`Students merged. ${res.transferredSubmissions} submission(s) transferred${res.skipped > 0 ? `, ${res.skipped} skipped (conflict)` : ""}.`);
+      toast().success(`Merged. ${res.transferredSubmissions} submission(s) transferred${res.skipped > 0 ? `, ${res.skipped} skipped` : ""}.`);
       setShowMerge(false);
     } catch (err) {
       setMergeError(err instanceof Error ? err.message : "Merge failed");
@@ -176,8 +202,8 @@ export default function StudentsPage() {
     }
   }
 
-  async function handleSubmitForStudent(event: FormEvent) {
-    event.preventDefault();
+  async function handleSubmitForStudent(e: FormEvent) {
+    e.preventDefault();
     if (!submitForStudent) return;
     setSubmitForError("");
     setSubmittingFor(true);
@@ -195,7 +221,7 @@ export default function StudentsPage() {
     }
   }
 
-  async function handleDeleteStudent() {
+  async function handleDelete() {
     if (!confirmDelete) return;
     setDeleting(true);
     try {
@@ -204,14 +230,14 @@ export default function StudentsPage() {
       toast().success(`${confirmDelete.fullName} deleted`);
       setConfirmDelete(null);
     } catch (err) {
-      toast().error(err instanceof Error ? err.message : "Failed to delete student");
+      toast().error(err instanceof Error ? err.message : "Failed to delete");
     } finally {
       setDeleting(false);
     }
   }
 
-  async function handleEditStudent(event: FormEvent) {
-    event.preventDefault();
+  async function handleEdit(e: FormEvent) {
+    e.preventDefault();
     if (!editStudent) return;
     setEditError("");
     setEditing(true);
@@ -221,7 +247,7 @@ export default function StudentsPage() {
         body: JSON.stringify({ fullName: editName, email: editEmail || undefined }),
       });
       setStudents((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
-      toast().success("Student details updated");
+      toast().success("Student updated");
       setEditStudent(null);
     } catch (err) {
       setEditError(err instanceof Error ? err.message : "Update failed");
@@ -230,366 +256,349 @@ export default function StudentsPage() {
     }
   }
 
-  async function handleOpenSubmission(event: FormEvent) {
-    event.preventDefault();
-    if (!submitFor) return;
-    setOpenError("");
+  async function handleOpenSubmission(e: FormEvent) {
+    e.preventDefault();
+    if (!openSubFor) return;
+    setOpenSubError("");
     setOpening(true);
     try {
-      await api(`/students/${submitFor.id}/open-submission`, {
+      await api(`/students/${openSubFor.id}/open-submission`, {
         method: "POST",
-        body: JSON.stringify({ assignmentId: selectedAssignmentId }),
+        body: JSON.stringify({ assignmentId: openSubAssignmentId }),
       });
-      toast().success(`Submission opened for ${submitFor.fullName}`);
-      setSubmitFor(null);
+      toast().success(`Submission opened for ${openSubFor.fullName}`);
+      setOpenSubFor(null);
     } catch (err) {
-      setOpenError(err instanceof Error ? err.message : "Failed to open submission");
+      setOpenSubError(err instanceof Error ? err.message : "Failed to open submission");
     } finally {
       setOpening(false);
     }
   }
 
+  function handleRowAction(action: string, student: StudentWithPending) {
+    switch (action) {
+      case "open":
+        setOpenSubFor(student);
+        setOpenSubAssignmentId(assignments[0]?.id || "");
+        setOpenSubError("");
+        break;
+      case "submit-for":
+        setSubmitForStudent(student);
+        setSubmitAssignmentId(assignments[0]?.id || "");
+        setSubmitGithubUrl("");
+        setSubmitForError("");
+        break;
+      case "edit":
+        setEditStudent(student);
+        setEditName(student.fullName);
+        setEditEmail(isPlaceholderEmail(student.email) ? "" : student.email);
+        setEditError("");
+        break;
+      case "reset":
+        setConfirmReset(student);
+        break;
+      case "merge":
+        setMergeSourceId(student.id);
+        setMergeTargetId("");
+        setMergeError("");
+        setShowMerge(true);
+        break;
+      case "delete":
+        setConfirmDelete(student);
+        break;
+    }
+  }
+
   return (
     <TeacherShell section="students">
-      <div className="page stack">
-        <div className="section-header">
-          <h1 className="page-title">Students</h1>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              className="button secondary"
-              style={{ padding: "8px 10px", lineHeight: 1 }}
-              type="button"
-              title="Refresh"
-              onClick={() => setRefreshKey((k) => k + 1)}
-            >
-              <svg fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M4 12a8 8 0 0 1 14.93-4H15v2h7V3h-2v3.1A9.97 9.97 0 0 0 2 12h2Zm16 0a8 8 0 0 1-14.93 4H9v-2H2v7h2v-3.1A9.97 9.97 0 0 0 22 12h-2Z" fill="currentColor"/></svg>
-            </button>
-            <button
-              className="button secondary"
-              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
-              type="button"
-              onClick={handleCopyJoinLink}
-            >
-              Copy join link
-            </button>
-            <button
-              className="button secondary"
-              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
-              type="button"
-              onClick={() => { setMergeSourceId(""); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}
-            >
-              Merge students
-            </button>
-            <button
-              className="button secondary"
-              style={{ padding: "8px 16px", fontSize: "0.9rem" }}
-              type="button"
-              onClick={openAddModal}
-            >
-              + Add student
-            </button>
-          </div>
-        </div>
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title="Students"
+          description={`${students.length} students in your workspace.`}
+          actions={
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setRefreshKey((k) => k + 1)}>
+                <Icon.Refresh className="h-3.5 w-3.5" />
+                Refresh
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleCopyJoinLink}>
+                <Icon.Link className="h-3.5 w-3.5" />
+                Copy join link
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => { setMergeSourceId(""); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}>
+                Merge students
+              </Button>
+              <Button size="sm" onClick={openAdd}>
+                <Icon.Plus className="h-3.5 w-3.5" />
+                Add student
+              </Button>
+            </>
+          }
+        />
 
-        <div className="card table-card">
-          <div className="table-head" style={{ gridTemplateColumns: "1.4fr 1fr 0.7fr 1fr" }}>
-            <span>Student</span>
-            <span>Email</span>
-            <span>Joined</span>
-            <span>Actions</span>
+        <Card className="p-3">
+          <div className="relative">
+            <Icon.Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--fg-muted)]" />
+            <Input
+              placeholder="Search by name or email..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="pl-9"
+            />
           </div>
+        </Card>
 
-          {sortedStudents.map((student) => {
-            const palette = getBadgePalette(student.fullName);
-            return (
-              <div className="table-row" key={student.id} style={{ gridTemplateColumns: "1.4fr 1fr 0.7fr 1fr" }}>
-                <div className="name-cell">
-                  <div className="initials-badge" style={{ background: palette.bg, color: palette.color }}>
-                    {student.fullName.slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{student.fullName}</div>
-                    {student.pending && (
-                      <span className="status-pill pending" style={{ fontSize: "0.7rem", padding: "2px 7px" }}>
-                        Invite pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="muted" style={{ fontSize: "0.9rem" }}>
-                  {isPlaceholderEmail(student.email) ? "—" : student.email}
-                </div>
-                <div className="muted" style={{ fontSize: "0.88rem" }}>
-                  {new Date(student.createdAt).toLocaleDateString()}
-                </div>
-                <div style={{ position: "relative" }} ref={openPopoverId === student.id ? popoverRef : undefined}>
-                  <button
-                    type="button"
-                    style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "6px 12px", cursor: "pointer", fontWeight: 700, fontSize: "1rem", color: "#5d6d89", lineHeight: 1 }}
-                    onClick={() => setOpenPopoverId(openPopoverId === student.id ? null : student.id)}
-                  >
-                    ···
-                  </button>
-                  {openPopoverId === student.id && (
-                    <div style={{ position: "absolute", left: 0, top: "calc(100% + 6px)", background: "#fff", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 8px 24px rgba(13,40,100,0.13)", zIndex: 200, minWidth: 180, overflow: "hidden" }}>
-                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); openSubmitFor(student); }}>Open submission</button>
-                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setSubmitForStudent(student); setSubmitAssignmentId(assignments[0]?.id || ""); setSubmitGithubUrl(""); setSubmitForError(""); }}>Submit for student</button>
-                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setEditStudent(student); setEditName(student.fullName); setEditEmail(isPlaceholderEmail(student.email) ? "" : student.email); setEditError(""); }}>Edit details</button>
-                      <button type="button" className="popover-action" onClick={() => { setOpenPopoverId(null); setConfirmReset(student); }}>Reset password</button>
-                      <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setMergeSourceId(student.id); setMergeTargetId(""); setMergeError(""); setShowMerge(true); }}>Merge student</button>
-                      <button type="button" className="popover-action danger" onClick={() => { setOpenPopoverId(null); setConfirmDelete(student); }}>Delete student</button>
+        <Card className="overflow-visible">
+          <Table>
+            <THead>
+              <TR>
+                <TH>Student</TH>
+                <TH>Email</TH>
+                <TH>Joined</TH>
+                <TH className="text-right">Actions</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {sortedStudents.map((student) => (
+                <TR key={student.id}>
+                  <TD label="Student">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={student.fullName} size="sm" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-medium">{student.fullName}</span>
+                          {student.pending && <Badge tone="warn">Invite pending</Badge>}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {sortedStudents.length === 0 && (
-            <div className="table-row" style={{ gridTemplateColumns: "1fr" }}>
-              <span className="muted">No students yet.</span>
-            </div>
-          )}
-        </div>
+                  </TD>
+                  <TD label="Email" className="text-sm text-[var(--fg-muted)]">
+                    {isPlaceholderEmail(student.email) ? "—" : student.email}
+                  </TD>
+                  <TD label="Joined" className="text-xs text-[var(--fg-muted)]">{formatDate(student.createdAt)}</TD>
+                  <TD label="Actions" className="text-right">
+                    <RowMenu student={student} onAction={(a) => handleRowAction(a, student)} />
+                  </TD>
+                </TR>
+              ))}
+              {sortedStudents.length === 0 && <EmptyRow cols={4}>No students match your search.</EmptyRow>}
+            </TBody>
+          </Table>
+        </Card>
       </div>
 
-      {/* Add student modal */}
-      {showModal && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Add student</h2>
-              <button className="modal-close" type="button" onClick={() => setShowModal(false)}>✕</button>
+      {/* Add student */}
+      <Modal
+        open={showAdd}
+        onClose={() => setShowAdd(false)}
+        title="Add student"
+        description="An invite email is sent so the student can set their own password."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
+            <Button type="submit" form="add-student-form" loading={submitting}>
+              {submitting ? "Sending..." : "Add & send invite"}
+            </Button>
+          </>
+        }
+      >
+        <form id="add-student-form" className="flex flex-col gap-4" onSubmit={handleCreate}>
+          <Label required>Full name
+            <Input autoFocus value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+          </Label>
+          <Label required>Email
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </Label>
+          {addError && (
+            <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+              {addError}
             </div>
-            <form className="stack" style={{ gap: 14 }} onSubmit={handleCreate}>
-              <label className="field">
-                <span>Full name</span>
-                <input autoFocus value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-              </label>
-              <label className="field">
-                <span>Email</span>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </label>
-              <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-                An invite email will be sent so the student can set their own password.
-              </p>
-              {addError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{addError}</div>}
-              <div className="confirm-actions">
-                <button className="button subtle" type="button" onClick={() => setShowModal(false)}>Cancel</button>
-                <button className="button" type="submit" disabled={submitting}>
-                  {submitting ? "Sending..." : "Add & send invite"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body,
-      )}
+          )}
+        </form>
+      </Modal>
 
-      {/* Open submission for student modal */}
-      {submitFor && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setSubmitFor(null)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Open submission for {submitFor.fullName}</h2>
-              <button className="modal-close" type="button" onClick={() => setSubmitFor(null)}>✕</button>
+      {/* Open submission */}
+      <Modal
+        open={!!openSubFor}
+        onClose={() => setOpenSubFor(null)}
+        title={openSubFor ? `Open submission for ${openSubFor.fullName}` : ""}
+        description="The student will be able to submit for this assignment themselves, even if it's closed."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpenSubFor(null)}>Cancel</Button>
+            <Button type="submit" form="open-sub-form" loading={opening} disabled={assignments.length === 0}>
+              {opening ? "Opening..." : "Open for student"}
+            </Button>
+          </>
+        }
+      >
+        <form id="open-sub-form" className="flex flex-col gap-4" onSubmit={handleOpenSubmission}>
+          <Label required>Assignment
+            <Select value={openSubAssignmentId} onChange={(e) => setOpenSubAssignmentId(e.target.value)} required>
+              {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+              {assignments.length === 0 && <option disabled value="">No assignments available</option>}
+            </Select>
+          </Label>
+          {openSubError && (
+            <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+              {openSubError}
             </div>
-            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-              The student will be able to submit for this assignment themselves.
-            </p>
-            <form className="stack" style={{ gap: 14 }} onSubmit={handleOpenSubmission}>
-              <label className="field">
-                <span>Assignment</span>
-                <select value={selectedAssignmentId} onChange={(e) => setSelectedAssignmentId(e.target.value)} required>
-                  {assignments.map((a) => (
-                    <option key={a.id} value={a.id}>{a.title}</option>
-                  ))}
-                  {assignments.length === 0 && <option disabled value="">No assignments available</option>}
-                </select>
-              </label>
-              {openError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{openError}</div>}
-              <div className="confirm-actions">
-                <button className="button subtle" type="button" onClick={() => setSubmitFor(null)}>Cancel</button>
-                <button className="button" type="submit" disabled={opening || assignments.length === 0}>
-                  {opening ? "Opening..." : "Open for student"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body,
-      )}
+          )}
+        </form>
+      </Modal>
 
-      {/* Merge students modal */}
-      {showMerge && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowMerge(false)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Merge students</h2>
-              <button className="modal-close" type="button" onClick={() => setShowMerge(false)}>✕</button>
+      {/* Merge */}
+      <Modal
+        open={showMerge}
+        onClose={() => setShowMerge(false)}
+        title="Merge students"
+        description="All submissions from the source are transferred to the target. The source is deleted. Conflicting submissions are skipped."
+        size="lg"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowMerge(false)}>Cancel</Button>
+            <Button type="submit" form="merge-form" variant="danger" loading={merging} disabled={!mergeSourceId || !mergeTargetId}>
+              {merging ? "Merging..." : "Merge & delete source"}
+            </Button>
+          </>
+        }
+      >
+        <form id="merge-form" className="flex flex-col gap-4" onSubmit={handleMerge}>
+          <Label required>Source student <span className="font-normal text-[var(--fg-subtle)]">(will be deleted)</span>
+            <Select value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)} required>
+              <option value="">— Select source —</option>
+              {sortedStudents.filter((s) => s.id !== mergeTargetId).map((s) => (
+                <option key={s.id} value={s.id}>{s.fullName}</option>
+              ))}
+            </Select>
+          </Label>
+          <Label required>Target student <span className="font-normal text-[var(--fg-subtle)]">(will be kept)</span>
+            <Select value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)} required>
+              <option value="">— Select target —</option>
+              {sortedStudents.filter((s) => s.id !== mergeSourceId).map((s) => (
+                <option key={s.id} value={s.id}>{s.fullName}</option>
+              ))}
+            </Select>
+          </Label>
+          {mergeError && (
+            <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+              {mergeError}
             </div>
-            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-              All submissions from the <strong>source</strong> student will be transferred to the <strong>target</strong> student. The source record will be permanently deleted. Submissions that would conflict (same assignment) are skipped.
-            </p>
-            <form className="stack" style={{ gap: 14 }} onSubmit={handleMerge}>
-              <label className="field">
-                <span>Source student <span className="muted">(will be deleted)</span></span>
-                <select value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)} required>
-                  <option value="">— Select source —</option>
-                  {sortedStudents.filter((s) => s.id !== mergeTargetId).map((s) => (
-                    <option key={s.id} value={s.id}>{s.fullName}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Target student <span className="muted">(will be kept)</span></span>
-                <select value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)} required>
-                  <option value="">— Select target —</option>
-                  {sortedStudents.filter((s) => s.id !== mergeSourceId).map((s) => (
-                    <option key={s.id} value={s.id}>{s.fullName}</option>
-                  ))}
-                </select>
-              </label>
-              {mergeError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{mergeError}</div>}
-              <div className="confirm-actions">
-                <button className="button subtle" type="button" onClick={() => setShowMerge(false)}>Cancel</button>
-                <button
-                  className="button"
-                  type="submit"
-                  disabled={!mergeSourceId || !mergeTargetId || merging}
-                  style={{ background: "var(--danger, #b91c1c)" }}
-                >
-                  {merging ? "Merging..." : "Merge & delete source"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body,
-      )}
+          )}
+        </form>
+      </Modal>
 
-      {/* Edit student modal */}
-      {editStudent && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setEditStudent(null)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Edit student</h2>
-              <button className="modal-close" type="button" onClick={() => setEditStudent(null)}>✕</button>
+      {/* Edit */}
+      <Modal
+        open={!!editStudent}
+        onClose={() => setEditStudent(null)}
+        title="Edit student"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditStudent(null)}>Cancel</Button>
+            <Button type="submit" form="edit-student-form" loading={editing}>
+              {editing ? "Saving..." : "Save changes"}
+            </Button>
+          </>
+        }
+      >
+        <form id="edit-student-form" className="flex flex-col gap-4" onSubmit={handleEdit}>
+          <Label required>Full name
+            <Input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} required />
+          </Label>
+          <Label>Email <span className="font-normal text-[var(--fg-subtle)]">(blank to keep current)</span>
+            <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="student@example.com" />
+          </Label>
+          {editError && (
+            <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+              {editError}
             </div>
-            <form className="stack" style={{ gap: 14 }} onSubmit={handleEditStudent}>
-              <label className="field">
-                <span>Full name</span>
-                <input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} required />
-              </label>
-              <label className="field">
-                <span>Email <span className="muted">(leave blank to keep current)</span></span>
-                <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="student@example.com" />
-              </label>
-              {editError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{editError}</div>}
-              <div className="confirm-actions">
-                <button className="button subtle" type="button" onClick={() => setEditStudent(null)}>Cancel</button>
-                <button className="button" type="submit" disabled={editing}>
-                  {editing ? "Saving..." : "Save changes"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body,
-      )}
+          )}
+        </form>
+      </Modal>
 
-      {/* Submit for student modal */}
-      {submitForStudent && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setSubmitForStudent(null)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Submit for {submitForStudent.fullName}</h2>
-              <button className="modal-close" type="button" onClick={() => setSubmitForStudent(null)}>✕</button>
+      {/* Submit for student */}
+      <Modal
+        open={!!submitForStudent}
+        onClose={() => setSubmitForStudent(null)}
+        title={submitForStudent ? `Submit for ${submitForStudent.fullName}` : ""}
+        description="Creates a GitHub submission on behalf of this student. The student is not notified."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSubmitForStudent(null)}>Cancel</Button>
+            <Button type="submit" form="submit-for-form" loading={submittingFor} disabled={assignments.length === 0}>
+              {submittingFor ? "Submitting..." : "Create submission"}
+            </Button>
+          </>
+        }
+      >
+        <form id="submit-for-form" className="flex flex-col gap-4" onSubmit={handleSubmitForStudent}>
+          <Label required>Assignment
+            <Select value={submitAssignmentId} onChange={(e) => setSubmitAssignmentId(e.target.value)} required>
+              {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+              {assignments.length === 0 && <option disabled value="">No assignments available</option>}
+            </Select>
+          </Label>
+          <Label required>GitHub URL
+            <Input
+              placeholder="https://github.com/owner/repo"
+              value={submitGithubUrl}
+              onChange={(e) => setSubmitGithubUrl(e.target.value)}
+              required
+            />
+          </Label>
+          {submitForError && (
+            <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+              {submitForError}
             </div>
-            <p className="muted" style={{ margin: 0, fontSize: "0.9rem" }}>
-              Creates a GitHub submission on behalf of this student. The student will not be notified.
-            </p>
-            <form className="stack" style={{ gap: 14 }} onSubmit={handleSubmitForStudent}>
-              <label className="field">
-                <span>Assignment</span>
-                <select value={submitAssignmentId} onChange={(e) => setSubmitAssignmentId(e.target.value)} required>
-                  {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-                  {assignments.length === 0 && <option disabled value="">No assignments available</option>}
-                </select>
-              </label>
-              <label className="field">
-                <span>GitHub URL</span>
-                <input
-                  placeholder="https://github.com/owner/repo"
-                  value={submitGithubUrl}
-                  onChange={(e) => setSubmitGithubUrl(e.target.value)}
-                  required
-                />
-              </label>
-              {submitForError && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{submitForError}</div>}
-              <div className="confirm-actions">
-                <button className="button subtle" type="button" onClick={() => setSubmitForStudent(null)}>Cancel</button>
-                <button className="button" type="submit" disabled={submittingFor || assignments.length === 0}>
-                  {submittingFor ? "Submitting..." : "Create submission"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body,
-      )}
+          )}
+        </form>
+      </Modal>
 
-      {/* Delete student confirm modal */}
-      {confirmDelete && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setConfirmDelete(null)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Delete student?</h2>
-              <button className="modal-close" type="button" onClick={() => setConfirmDelete(null)}>✕</button>
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              This will permanently delete <strong>{confirmDelete.fullName}</strong> and all their submissions and reviews. This cannot be undone.
-            </p>
-            <div className="confirm-actions">
-              <button className="button subtle" type="button" onClick={() => setConfirmDelete(null)}>Cancel</button>
-              <button
-                className="button"
-                type="button"
-                disabled={deleting}
-                style={{ background: "var(--danger, #b91c1c)" }}
-                onClick={handleDeleteStudent}
-              >
-                {deleting ? "Deleting..." : "Delete permanently"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+      {/* Delete */}
+      <Modal
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="Delete student?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+            <Button variant="danger" onClick={handleDelete} loading={deleting}>
+              {deleting ? "Deleting..." : "Delete permanently"}
+            </Button>
+          </>
+        }
+      >
+        {confirmDelete && (
+          <p className="text-sm text-[var(--fg-muted)]">
+            This will permanently delete <strong className="text-[var(--fg)]">{confirmDelete.fullName}</strong> and all
+            their submissions and reviews. This cannot be undone.
+          </p>
+        )}
+      </Modal>
 
-      {/* Reset password confirm modal */}
-      {confirmReset && createPortal(
-        <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setConfirmReset(null)}>
-          <div className="modal">
-            <div className="modal-header">
-              <h2 style={{ margin: 0, fontSize: "1.3rem" }}>Reset password?</h2>
-              <button className="modal-close" type="button" onClick={() => setConfirmReset(null)}>✕</button>
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              A password reset email will be sent to <strong>{confirmReset.fullName}</strong>
-              {!isPlaceholderEmail(confirmReset.email) && <> at <strong>{confirmReset.email}</strong></>}.
-              The link expires in 2 hours.
-            </p>
-            <div className="confirm-actions">
-              <button className="button subtle" type="button" onClick={() => setConfirmReset(null)}>Cancel</button>
-              <button className="button" type="button" disabled={resetting} onClick={confirmResetPassword}>
-                {resetting ? "Sending..." : "Send reset email"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
+      {/* Reset password */}
+      <Modal
+        open={!!confirmReset}
+        onClose={() => setConfirmReset(null)}
+        title="Reset password?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmReset(null)}>Cancel</Button>
+            <Button onClick={confirmResetPassword} loading={resetting}>
+              {resetting ? "Sending..." : "Send reset email"}
+            </Button>
+          </>
+        }
+      >
+        {confirmReset && (
+          <p className="text-sm text-[var(--fg-muted)]">
+            A reset email will be sent to <strong className="text-[var(--fg)]">{confirmReset.fullName}</strong>
+            {!isPlaceholderEmail(confirmReset.email) && <> at <strong className="text-[var(--fg)]">{confirmReset.email}</strong></>}.
+            The link expires in 2 hours.
+          </p>
+        )}
+      </Modal>
     </TeacherShell>
   );
 }

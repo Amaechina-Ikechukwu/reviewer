@@ -2,7 +2,14 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent } from "../components/ui/Card";
+import { Icon } from "../components/ui/Icons";
+import { Input, Label, Textarea } from "../components/ui/Input";
+import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
+import { cn } from "../lib/cn";
 import type { Assignment } from "../types";
 
 type SourceMode = "markdown" | "notion";
@@ -19,6 +26,7 @@ export default function CreateAssignment() {
   const [maxScore, setMaxScore] = useState(100);
   const [classNotes, setClassNotes] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Assignment | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -31,6 +39,7 @@ export default function CreateAssignment() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
+    setSubmitting(true);
 
     try {
       const assignment = await api<Assignment>("/assignments", {
@@ -58,6 +67,8 @@ export default function CreateAssignment() {
       const msg = err instanceof Error ? err.message : "Failed to create assignment";
       setError(msg);
       toast().error(msg);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -68,37 +79,56 @@ export default function CreateAssignment() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function resetForm() {
+    setCreated(null);
+    setTitle("");
+    setSourceMarkdown("");
+    setSourceUrl("");
+    setClosesAt("");
+    setClassNotes("");
+  }
+
   if (created) {
     const link = `${window.location.origin}/student/submit/${created.id}`;
     return (
       <TeacherShell section="assignments">
-        <div className="page" style={{ maxWidth: 560, margin: "0 auto" }}>
-          <div className="card stack" style={{ gap: 20, padding: 28 }}>
-            <div className="stack" style={{ gap: 6 }}>
-              <span className="tag success" style={{ width: "fit-content" }}>Created</span>
-              <h2 style={{ margin: 0 }}>{created.title}</h2>
-              <span className="muted" style={{ fontSize: "0.9rem" }}>
-                Due {new Date(created.closesAt).toLocaleString()}
-              </span>
-            </div>
-
-            <div className="stack" style={{ gap: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: "0.88rem" }}>Student submission link</span>
-              <div className="link-copy-row">
-                <span className="link-copy-url">{link}</span>
-                <button className="button" style={{ flexShrink: 0, padding: "8px 16px", fontSize: "0.85rem" }} onClick={copyLink} type="button">
-                  {copied ? "Copied!" : "Copy"}
-                </button>
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+          <PageHeader
+            title="Assignment created"
+            description="Share this link with your students to collect submissions."
+          />
+          <Card>
+            <CardContent className="flex flex-col gap-5">
+              <div className="flex flex-col gap-1">
+                <Badge tone="success" dot>Live</Badge>
+                <h2 className="mt-2 text-xl font-semibold tracking-tight">{created.title}</h2>
+                <div className="text-xs text-[var(--fg-muted)]">
+                  Due {new Date(created.closesAt).toLocaleString()}
+                </div>
               </div>
-            </div>
 
-            <div className="row">
-              <button className="button secondary" onClick={() => navigate("/teacher")} type="button">Dashboard</button>
-              <button className="button subtle" onClick={() => { setCreated(null); setTitle(""); setSourceMarkdown(""); setSourceUrl(""); setClosesAt(""); }} type="button">
-                New assignment
-              </button>
-            </div>
-          </div>
+              <div className="flex flex-col gap-2">
+                <div className="text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">
+                  Student submission link
+                </div>
+                <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/60 p-2 pl-3">
+                  <span className="flex-1 truncate font-mono text-xs text-[var(--fg)]">{link}</span>
+                  <Button variant="secondary" size="sm" onClick={copyLink}>
+                    <Icon.Copy className="h-3.5 w-3.5" />
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => navigate("/teacher")}>Back to dashboard</Button>
+                <Button variant="ghost" onClick={resetForm}>
+                  <Icon.Plus className="h-3.5 w-3.5" />
+                  New assignment
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </TeacherShell>
     );
@@ -106,118 +136,166 @@ export default function CreateAssignment() {
 
   return (
     <TeacherShell section="assignments">
-      <div className="page" style={{ maxWidth: 600, margin: "0 auto" }}>
-        <div className="stack" style={{ gap: 6, marginBottom: 8 }}>
-          <Link className="action-link" to="/teacher" style={{ fontSize: "0.88rem" }}>← Dashboard</Link>
-          <h1 style={{ margin: 0 }}>New assignment</h1>
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <Link
+            to="/teacher"
+            className="inline-flex w-fit items-center gap-1 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--accent)]"
+          >
+            <Icon.ChevronLeft className="h-3 w-3" />
+            Dashboard
+          </Link>
+          <PageHeader title="New assignment" description="Create an assignment and share the link with your class." />
         </div>
 
-        <form className="card stack" style={{ gap: 24, padding: 28 }} onSubmit={handleSubmit}>
-          <label className="field">
-            <span>Assignment name</span>
-            <input
-              placeholder="e.g. JavaScript & HTML Events"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
+        <Card>
+          <CardContent>
+            <form className="flex flex-col gap-6" onSubmit={handleSubmit}>
+              <Label required>
+                Assignment name
+                <Input
+                  placeholder="e.g. JavaScript & HTML Events"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </Label>
 
-          <div className="stack" style={{ gap: 10 }}>
-            <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>Assignment source</span>
-            <div className="source-toggle">
-              <button
-                className={`source-toggle-btn ${sourceMode === "markdown" ? "active" : ""}`}
-                type="button"
-                onClick={() => setSourceMode("markdown")}
-              >
-                Markdown file
-              </button>
-              <button
-                className={`source-toggle-btn ${sourceMode === "notion" ? "active" : ""}`}
-                type="button"
-                onClick={() => setSourceMode("notion")}
-              >
-                Notion link
-              </button>
-            </div>
+              <div className="flex flex-col gap-3">
+                <div className="text-sm font-medium">Assignment source</div>
+                <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                  {(["markdown", "notion"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setSourceMode(mode)}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 text-xs font-medium transition-colors",
+                        sourceMode === mode
+                          ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                          : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                      )}
+                    >
+                      {mode === "markdown" ? "Markdown file" : "Notion link"}
+                    </button>
+                  ))}
+                </div>
 
-            {sourceMode === "markdown" && (
-              <div className="stack" style={{ gap: 8 }}>
-                <label className="field">
-                  <span>Upload .md file</span>
-                  <input accept=".md,.markdown,.txt" type="file" onChange={handleMarkdownFile} />
-                </label>
-                {sourceMarkdown && (
-                  <span className="muted" style={{ fontSize: "0.82rem" }}>
-                    {sourceMarkdown.split("\n").length} lines loaded
-                  </span>
+                {sourceMode === "markdown" && (
+                  <div className="flex flex-col gap-2">
+                    <Label>
+                      Upload .md file
+                      <Input accept=".md,.markdown,.txt" type="file" onChange={handleMarkdownFile} />
+                    </Label>
+                    {sourceMarkdown && (
+                      <div className="text-xs text-[var(--fg-muted)]">
+                        {sourceMarkdown.split("\n").length} lines loaded
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {sourceMode === "notion" && (
+                  <Label>
+                    Notion page URL
+                    <Input
+                      placeholder="https://www.notion.so/..."
+                      type="url"
+                      value={sourceUrl}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                    />
+                  </Label>
                 )}
               </div>
-            )}
 
-            {sourceMode === "notion" && (
-              <label className="field">
-                <span>Notion page URL</span>
-                <input
-                  placeholder="https://www.notion.so/..."
-                  type="url"
-                  value={sourceUrl}
-                  onChange={(e) => setSourceUrl(e.target.value)}
+              <Label required>
+                Submission deadline
+                <Input
+                  required
+                  type="datetime-local"
+                  value={closesAt}
+                  onChange={(e) => setClosesAt(e.target.value)}
                 />
-              </label>
-            )}
-          </div>
+              </Label>
 
-          <label className="field">
-            <span>Submission deadline</span>
-            <input
-              required
-              type="datetime-local"
-              value={closesAt}
-              onChange={(e) => setClosesAt(e.target.value)}
-            />
-          </label>
+              <div className="flex flex-col gap-3">
+                <div className="text-sm font-medium">Submission type</div>
+                <div className="flex flex-wrap gap-2">
+                  <label
+                    className={cn(
+                      "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                      allowGithub
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
+                        : "border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:border-[var(--border-strong)]",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allowGithub}
+                      onChange={(e) => setAllowGithub(e.target.checked)}
+                      className="h-4 w-4 accent-[var(--accent)]"
+                    />
+                    <Icon.Github className="h-4 w-4" />
+                    GitHub repo
+                  </label>
+                  <label
+                    className={cn(
+                      "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                      allowFileUpload
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
+                        : "border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:border-[var(--border-strong)]",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={allowFileUpload}
+                      onChange={(e) => setAllowFileUpload(e.target.checked)}
+                      className="h-4 w-4 accent-[var(--accent)]"
+                    />
+                    <Icon.Upload className="h-4 w-4" />
+                    ZIP upload
+                  </label>
+                </div>
+              </div>
 
-          <div className="stack" style={{ gap: 10 }}>
-            <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>Submission type</span>
-            <div className="row" style={{ gap: 16 }}>
-              <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input checked={allowGithub} type="checkbox" onChange={(e) => setAllowGithub(e.target.checked)} />
-                <span>GitHub repo</span>
-              </label>
-              <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                <input checked={allowFileUpload} type="checkbox" onChange={(e) => setAllowFileUpload(e.target.checked)} />
-                <span>ZIP upload</span>
-              </label>
-            </div>
-          </div>
+              <Label>
+                Max score
+                <Input
+                  min={1}
+                  type="number"
+                  value={maxScore}
+                  onChange={(e) => setMaxScore(Number(e.target.value))}
+                  className="max-w-[140px]"
+                />
+              </Label>
 
-          <label className="field">
-            <span>Max score</span>
-            <input
-              min={1}
-              style={{ maxWidth: 120 }}
-              type="number"
-              value={maxScore}
-              onChange={(e) => setMaxScore(Number(e.target.value))}
-            />
-          </label>
+              <Label>
+                <span>
+                  Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
+                </span>
+                <Textarea
+                  placeholder="Paste any notes, instructions, or resources students should read before submitting..."
+                  rows={5}
+                  value={classNotes}
+                  onChange={(e) => setClassNotes(e.target.value)}
+                />
+              </Label>
 
-          <label className="field">
-            <span>Class notes <span className="muted">(optional — shown to students when submitting)</span></span>
-            <textarea
-              placeholder="Paste any notes, instructions, or resources students should read before submitting..."
-              rows={5}
-              value={classNotes}
-              onChange={(e) => setClassNotes(e.target.value)}
-            />
-          </label>
+              {error && (
+                <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+                  {error}
+                </div>
+              )}
 
-          {error && <div style={{ color: "var(--danger)", fontSize: "0.9rem" }}>{error}</div>}
-
-          <button className="button" type="submit">Create & get link</button>
-        </form>
+              <div className="flex justify-end">
+                <Button type="submit" loading={submitting}>
+                  <Icon.Sparkles className="h-3.5 w-3.5" />
+                  Create & get link
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </TeacherShell>
   );

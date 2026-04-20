@@ -22,7 +22,11 @@ function ProtectedRoute({ role, children }: { role?: Role; children: ReactNode }
   const { ready, user } = useAuth();
 
   if (!ready) {
-    return <div className="auth-shell">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] text-sm text-[var(--fg-muted)]">
+        Loading...
+      </div>
+    );
   }
 
   if (!user) {
@@ -40,7 +44,11 @@ function HomeRedirect() {
   const { ready, user } = useAuth();
 
   if (!ready) {
-    return <div className="auth-shell">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--bg)] text-sm text-[var(--fg-muted)]">
+        Loading...
+      </div>
+    );
   }
 
   if (!user) {

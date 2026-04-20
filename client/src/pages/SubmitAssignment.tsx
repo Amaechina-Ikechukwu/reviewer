@@ -2,7 +2,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import StudentShell from "../components/StudentShell";
 import { toast } from "../components/Toast";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Icon } from "../components/ui/Icons";
+import { Input, Label, Textarea } from "../components/ui/Input";
 import { api } from "../api";
+import { cn } from "../lib/cn";
+import { formatDateTime } from "../lib/format";
 import type { Assignment } from "../types";
 
 export default function SubmitAssignment() {
@@ -20,10 +27,12 @@ export default function SubmitAssignment() {
 
   useEffect(() => {
     if (!assignmentId) return;
-    api<Assignment>(`/assignments/${assignmentId}`).then((data) => {
-      setAssignment(data);
-      if (!data.allowGithub && data.allowFileUpload) setSubmissionType("file_upload");
-    }).catch((err) => setError(err instanceof Error ? err.message : "Failed to load assignment"));
+    api<Assignment>(`/assignments/${assignmentId}`)
+      .then((data) => {
+        setAssignment(data);
+        if (!data.allowGithub && data.allowFileUpload) setSubmissionType("file_upload");
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load assignment"));
 
     api<{ assignmentIds: string[] }>("/students/my-overrides")
       .then((r) => setHasOverride(r.assignmentIds.includes(assignmentId!)))
@@ -62,116 +71,187 @@ export default function SubmitAssignment() {
     }
   }
 
-  if (!assignment) return <div className="auth-shell">Loading...</div>;
+  if (!assignment) {
+    return (
+      <StudentShell section="dashboard">
+        <div className="flex min-h-[40vh] items-center justify-center text-sm text-[var(--fg-muted)]">
+          Loading assignment...
+        </div>
+      </StudentShell>
+    );
+  }
 
   const now = new Date();
   const isPast = new Date(assignment.closesAt) <= now && !hasOverride;
-  const dueDate = new Date(assignment.closesAt).toLocaleString();
+  const dueDate = formatDateTime(assignment.closesAt);
 
   return (
     <StudentShell section="dashboard">
-      <div className="page">
-        <div className="submit-layout">
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">Assignment</div>
+            <h1 className="text-3xl font-semibold leading-tight tracking-tight">{assignment.title}</h1>
+            {assignment.description && (
+              <p className="text-sm leading-relaxed text-[var(--fg-muted)]">{assignment.description}</p>
+            )}
+          </div>
 
-          {/* Left: assignment info */}
-          <div className="submit-info stack">
-            <div className="stack" style={{ gap: 6 }}>
-              <div className="eyebrow">Assignment</div>
-              <h1 style={{ margin: 0, fontSize: "2rem", lineHeight: 1.2 }}>{assignment.title}</h1>
-              {assignment.description && (
-                <p className="muted" style={{ margin: 0, fontSize: "0.97rem", lineHeight: 1.6 }}>{assignment.description}</p>
-              )}
-            </div>
+          {assignment.sourceUrl && (
+            <a
+              href={assignment.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex w-fit items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <Icon.External className="h-3.5 w-3.5" />
+              Open assignment brief
+            </a>
+          )}
 
-            {assignment.sourceUrl && (
-              <a
-                className="notion-link-btn"
-                href={assignment.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
+          <Card>
+            <CardContent className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">
+                  {isPast ? "Closed" : "Due"}
+                </div>
+                <div className="mt-1 text-base font-semibold">{dueDate}</div>
+              </div>
+              <div
+                className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-lg",
+                  isPast ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent)]",
+                )}
               >
-                Open assignment brief ↗
-              </a>
-            )}
-
-            <div className={`due-badge ${isPast ? "due-badge--closed" : ""}`}>
-              <div className="eyebrow">{isPast ? "Closed" : "Due"}</div>
-              <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>{dueDate}</div>
-            </div>
-
-            {assignment.classNotes && (
-              <div className="class-notes-box">
-                <div className="eyebrow" style={{ marginBottom: 8 }}>Class notes</div>
-                <pre className="class-notes-content">{assignment.classNotes}</pre>
+                <Icon.Clock className="h-5 w-5" />
               </div>
-            )}
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Right: submission form */}
-          <div className="submit-form-panel stack">
-            <h2 style={{ margin: 0, fontSize: "1.25rem" }}>Your submission</h2>
+          {assignment.classNotes && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Class notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--fg)]">
+                  {assignment.classNotes}
+                </pre>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
-            {alreadySubmitted ? (
-              <div className="submitted-box">
-                <div style={{ fontSize: "2rem" }}>✓</div>
-                <strong style={{ fontSize: "1.1rem" }}>Already submitted</strong>
-                <p className="muted" style={{ margin: "4px 0 0", fontSize: "0.9rem" }}>
-                  Submitted on {new Date(alreadySubmitted.submittedAt).toLocaleString()}
-                </p>
-              </div>
-            ) : isPast ? (
-              <div className="deadline-passed-box">
-                <strong>Submission closed</strong>
-                <p style={{ margin: "6px 0 0" }}>
-                  The deadline was {dueDate}. Contact your teacher if you need an extension.
-                </p>
-              </div>
-            ) : (
-              <form className="stack" onSubmit={handleSubmit}>
-                {(assignment.allowGithub && assignment.allowFileUpload) && (
-                  <div className="submission-toggle">
-                    <button className={submissionType === "github" ? "active" : ""} onClick={() => setSubmissionType("github")} type="button">GitHub Repo</button>
-                    <button className={submissionType === "file_upload" ? "active" : ""} onClick={() => setSubmissionType("file_upload")} type="button">ZIP Upload</button>
+        <div className="flex flex-col gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your submission</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {alreadySubmitted ? (
+                <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success-soft)] px-4 py-8 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success)]/20 text-[var(--success)]">
+                    <Icon.Check className="h-6 w-6" />
                   </div>
-                )}
+                  <div className="text-base font-semibold">Already submitted</div>
+                  <div className="text-xs text-[var(--fg-muted)]">
+                    Submitted on {formatDateTime(alreadySubmitted.submittedAt)}
+                  </div>
+                </div>
+              ) : isPast ? (
+                <div className="flex flex-col gap-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-4 py-5">
+                  <div className="flex items-center gap-2">
+                    <Icon.AlertTriangle className="h-4 w-4 text-[var(--danger)]" />
+                    <strong className="text-sm text-[var(--danger)]">Submission closed</strong>
+                  </div>
+                  <div className="text-xs text-[var(--fg-muted)]">
+                    The deadline was {dueDate}. Contact your teacher if you need an extension.
+                  </div>
+                </div>
+              ) : (
+                <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+                  {assignment.allowGithub && assignment.allowFileUpload && (
+                    <div className="inline-flex w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                      <button
+                        type="button"
+                        onClick={() => setSubmissionType("github")}
+                        className={cn(
+                          "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                          submissionType === "github"
+                            ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                            : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <Icon.Github className="h-3.5 w-3.5" />
+                          GitHub repo
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSubmissionType("file_upload")}
+                        className={cn(
+                          "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                          submissionType === "file_upload"
+                            ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                            : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                        )}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          <Icon.Upload className="h-3.5 w-3.5" />
+                          ZIP upload
+                        </span>
+                      </button>
+                    </div>
+                  )}
 
-                {submissionType === "github" ? (
-                  <label className="field">
-                    <span>Repository URL</span>
-                    <input
-                      className="input-plain"
-                      placeholder="https://github.com/username/repo"
-                      value={githubUrl}
-                      onChange={(e) => setGithubUrl(e.target.value)}
+                  {submissionType === "github" ? (
+                    <Label required>
+                      Repository URL
+                      <Input
+                        placeholder="https://github.com/username/repo"
+                        value={githubUrl}
+                        required
+                        onChange={(e) => setGithubUrl(e.target.value)}
+                      />
+                    </Label>
+                  ) : (
+                    <Label required>
+                      ZIP file
+                      <Input accept=".zip" onChange={(e) => setFile(e.target.files?.[0] || null)} type="file" />
+                      {file && (
+                        <div className="mt-1 inline-flex items-center gap-1.5">
+                          <Badge tone="accent">{file.name}</Badge>
+                          <span className="text-[11px] text-[var(--fg-muted)]">{(file.size / 1024).toFixed(1)} KB</span>
+                        </div>
+                      )}
+                    </Label>
+                  )}
+
+                  <Label>
+                    Notes <span className="font-normal text-[var(--fg-muted)]">(optional)</span>
+                    <Textarea
+                      placeholder="Any specific areas you'd like feedback on?"
+                      rows={4}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
                     />
-                  </label>
-                ) : (
-                  <label className="field">
-                    <span>ZIP file</span>
-                    <input accept=".zip" onChange={(e) => setFile(e.target.files?.[0] || null)} type="file" />
-                  </label>
-                )}
+                  </Label>
 
-                <label className="field">
-                  <span>Notes <span className="muted">(optional)</span></span>
-                  <textarea
-                    placeholder="Any specific areas you'd like feedback on?"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </label>
+                  {error && (
+                    <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+                      {error}
+                    </div>
+                  )}
 
-                {error && <div className="soft-card" style={{ color: "#b91c1c" }}>{error}</div>}
-
-                <button className="button" disabled={submitting} type="submit">
-                  {submitting ? "Submitting..." : "Submit for Review"}
-                </button>
-              </form>
-            )}
-          </div>
-
-
-
+                  <Button type="submit" loading={submitting}>
+                    Submit for review
+                    <Icon.ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </StudentShell>

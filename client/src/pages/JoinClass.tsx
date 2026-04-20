@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import { AuthLayout } from "../components/AuthLayout";
+import { Button } from "../components/ui/Button";
+import { Input, Label } from "../components/ui/Input";
 import { useAuth } from "../context/AuthContext";
 import type { User } from "../types";
 
@@ -43,47 +46,45 @@ export default function JoinClass() {
 
   if (notFound) {
     return (
-      <div className="auth-shell">
-        <div className="auth-card">
-          <h1 style={{ fontSize: "1.4rem", margin: "0 0 8px" }}>Invalid link</h1>
-          <p className="muted">This join link is invalid or has expired.</p>
-        </div>
-      </div>
+      <AuthLayout title="Invalid link" description="This join link is invalid or has expired.">
+        <p className="text-sm text-[var(--fg-muted)]">Contact your teacher for a new invite.</p>
+      </AuthLayout>
     );
   }
 
   if (!teacherName) {
-    return <div className="auth-shell">Loading...</div>;
+    return (
+      <AuthLayout title="Loading...">
+        <div className="h-16 animate-pulse rounded-md bg-[var(--surface-muted)]" />
+      </AuthLayout>
+    );
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div style={{ marginBottom: 24 }}>
-          <div className="eyebrow">You're joining</div>
-          <h1 style={{ fontSize: "1.6rem", margin: "4px 0 4px" }}>{teacherName}'s class</h1>
-          <p className="muted" style={{ margin: 0, fontSize: "0.95rem" }}>Create your account to get started.</p>
-        </div>
-
-        <form className="stack" style={{ gap: 14 }} onSubmit={handleSubmit}>
-          <label className="field">
-            <span>Full name</span>
-            <input autoFocus value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Your full name" />
-          </label>
-          <label className="field">
-            <span>Email</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
-          </label>
-          <label className="field">
-            <span>Password</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Min 8 characters" minLength={8} />
-          </label>
-          {error && <div style={{ color: "var(--danger)", fontSize: "0.88rem" }}>{error}</div>}
-          <button className="button" type="submit" disabled={submitting}>
-            {submitting ? "Creating account..." : "Create account & join"}
-          </button>
-        </form>
-      </div>
-    </div>
+    <AuthLayout
+      eyebrow="You're joining"
+      title={`${teacherName}'s class`}
+      description="Create your student account to get started."
+    >
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        <Label required>Full name
+          <Input autoFocus value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Your full name" />
+        </Label>
+        <Label required>Email
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
+        </Label>
+        <Label required>Password
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Min 8 characters" minLength={8} />
+        </Label>
+        {error && (
+          <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+            {error}
+          </div>
+        )}
+        <Button type="submit" loading={submitting} size="lg">
+          {submitting ? "Creating account..." : "Create account & join"}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

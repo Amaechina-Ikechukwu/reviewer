@@ -1,117 +1,18 @@
 import type { ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { Toaster } from "./Toast";
+import { AppShell, type NavItem } from "./AppShell";
+import { Icon } from "./ui/Icons";
 
-type StudentShellProps = {
-  section: "dashboard" | "submissions";
-  children: ReactNode;
-};
+type StudentSection = "dashboard" | "submissions";
 
-function IconBase({ children }: { children: ReactNode }) {
+const nav: NavItem[] = [
+  { key: "dashboard", label: "Dashboard", to: "/student", icon: <Icon.Dashboard className="h-4 w-4" />, matches: (p) => p === "/student" || p.startsWith("/student/submit") },
+  { key: "submissions", label: "My Submissions", to: "/student/results", icon: <Icon.Inbox className="h-4 w-4" />, matches: (p) => p.startsWith("/student/results") },
+];
+
+export default function StudentShell({ section, children }: { section: StudentSection; children: ReactNode }) {
   return (
-    <svg aria-hidden="true" fill="none" height="18" viewBox="0 0 24 24" width="18">
+    <AppShell nav={nav} portalLabel="Student Portal" activeKey={section}>
       {children}
-    </svg>
-  );
-}
-
-function DashboardIcon() {
-  return (
-    <IconBase>
-      <path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z" fill="currentColor" />
-    </IconBase>
-  );
-}
-
-function SubmissionIcon() {
-  return (
-    <IconBase>
-      <path d="M7 7h10M7 12h7M7 17h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <path d="m15 10 3 2-3 2M9 14l-3-2 3-2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </IconBase>
-  );
-}
-
-function SparklesIcon() {
-  return (
-    <IconBase>
-      <path d="m12 3 1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3ZM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15ZM6 15l.8 2.2L9 18l-2.2.8L6 21l-.8-2.2L3 18l2.2-.8L6 15Z" fill="currentColor" />
-    </IconBase>
-  );
-}
-
-function SearchIcon() {
-  return (
-    <IconBase>
-      <circle cx="11" cy="11" r="5.5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="m16 16 4 4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </IconBase>
-  );
-}
-
-const sideLinks = [
-  { key: "dashboard", label: "Dashboard", to: "/student", icon: <DashboardIcon /> },
-  { key: "submissions", label: "Submissions", to: "/student/results", icon: <SubmissionIcon /> },
-] as const;
-
-export default function StudentShell({ section, children }: StudentShellProps) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  function handleLogout() {
-    logout();
-    navigate("/login");
-  }
-
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button className="sidebar-hamburger" aria-label="Open menu" type="button">
-          <svg fill="none" height="18" viewBox="0 0 24 24" width="18">
-            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-          </svg>
-        </button>
-
-        <div className="sidebar-menu">
-          <div className="brand-lockup">
-            <div className="brand-mark brand-mark-square"><SparklesIcon /></div>
-            <div>
-              <div className="brand-title">Reviewer</div>
-              <div className="brand-subtitle">Student Portal</div>
-            </div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {sideLinks.map((link) => (
-              <Link
-                key={link.key}
-                className={`sidebar-link ${section === link.key ? "active" : ""}`}
-                to={link.to}
-              >
-                <span className="sidebar-icon">{link.icon}</span>
-                <span>{link.label}</span>
-              </Link>
-            ))}
-          </nav>
-
-          <div className="sidebar-menu-footer">
-            <div className="sidebar-footer">
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.fullName}</span>
-              <button
-                type="button"
-                onClick={handleLogout}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#b91c1c", fontWeight: 600, fontSize: "0.85rem", padding: 0 }}
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <main className="main-content">{children}</main>
-      <Toaster />
-    </div>
+    </AppShell>
   );
 }

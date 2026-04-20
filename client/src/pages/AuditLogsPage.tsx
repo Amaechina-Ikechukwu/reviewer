@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import TeacherShell from "../components/TeacherShell";
+import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { Icon } from "../components/ui/Icons";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { api } from "../api";
+import { formatDateTime } from "../lib/format";
 
 type AuditLog = {
   id: string;
@@ -13,12 +20,12 @@ type AuditLog = {
   createdAt: string;
 };
 
+type Tone = "neutral" | "accent" | "success" | "warn" | "danger" | "info";
+
 function actionLabel(action: string) {
-  if (action.startsWith("POST ") || action.startsWith("GET ") || action.startsWith("PATCH ") || action.startsWith("DELETE ") || action.startsWith("ERROR ")) {
-    return action;
-  }
+  if (/^(POST|GET|PATCH|DELETE|ERROR) /.test(action)) return action;
   const labels: Record<string, string> = {
-    "review.run": "AI Review run",
+    "review.run": "AI review run",
     "review.grade_released": "Grade released",
     "student.updated": "Student edited",
     "student.deleted": "Student deleted",
@@ -34,15 +41,15 @@ function actionLabel(action: string) {
   return labels[action] ?? action;
 }
 
-function actionColor(action: string): string {
-  if (action.includes("ERROR") || action.includes("failed") || action.includes("api_error")) return "#d62828";
-  if (action.includes("grade_released") || action.includes("api_success")) return "#1a8a4a";
-  if (action.includes("review") || action.includes("submission")) return "#0d56d8";
-  if (action.includes("login") || action.includes("register") || action.includes("invite")) return "#0d9488";
-  if (action.includes("deleted")) return "#b91c1c";
-  if (action.includes("password_reset") || action.includes("merged")) return "#b45309";
-  if (action.includes("updated")) return "#7c3aed";
-  return "#44516d";
+function actionTone(action: string): Tone {
+  if (action.includes("ERROR") || action.includes("failed") || action.includes("api_error")) return "danger";
+  if (action.includes("grade_released") || action.includes("api_success")) return "success";
+  if (action.includes("review") || action.includes("submission")) return "info";
+  if (action.includes("login") || action.includes("register") || action.includes("invite")) return "accent";
+  if (action.includes("deleted")) return "danger";
+  if (action.includes("password_reset") || action.includes("merged")) return "warn";
+  if (action.includes("updated")) return "accent";
+  return "neutral";
 }
 
 export default function AuditLogsPage() {
@@ -59,71 +66,58 @@ export default function AuditLogsPage() {
   }, [refreshKey]);
 
   return (
-    <TeacherShell section="dashboard">
-      <div className="page stack">
-        <div className="section-header">
-          <h1 className="page-title">Activity Log</h1>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <span className="muted" style={{ fontSize: "0.9rem" }}>{logs.length} recent events</span>
-            <button className="button secondary" style={{ padding: "8px 10px", lineHeight: 1 }} type="button" title="Refresh" onClick={() => setRefreshKey((k) => k + 1)}>
-              <svg fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M4 12a8 8 0 0 1 14.93-4H15v2h7V3h-2v3.1A9.97 9.97 0 0 0 2 12h2Zm16 0a8 8 0 0 1-14.93 4H9v-2H2v7h2v-3.1A9.97 9.97 0 0 0 22 12h-2Z" fill="currentColor"/></svg>
-            </button>
-          </div>
-        </div>
+    <TeacherShell section="logs">
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title="Activity"
+          description="Everything that happens in your workspace — auth, submissions, reviews, grades."
+          actions={
+            <>
+              <Badge tone="neutral">{logs.length} events</Badge>
+              <Button variant="secondary" size="sm" onClick={() => setRefreshKey((k) => k + 1)}>
+                <Icon.Refresh className="h-3.5 w-3.5" />
+                Refresh
+              </Button>
+            </>
+          }
+        />
 
-        <div className="card table-card">
-          <div className="table-head" style={{ gridTemplateColumns: "1.2fr 1fr 0.8fr 1.2fr 0.9fr" }}>
-            <span>Action</span>
-            <span>Actor</span>
-            <span>Target</span>
-            <span>Details</span>
-            <span>When</span>
-          </div>
-
-          {loading && (
-            <div className="table-row" style={{ gridTemplateColumns: "1fr" }}>
-              <span className="muted">Loading...</span>
-            </div>
-          )}
-
-          {!loading && logs.length === 0 && (
-            <div className="table-row" style={{ gridTemplateColumns: "1fr" }}>
-              <span className="muted">No activity recorded yet.</span>
-            </div>
-          )}
-
-          {logs.map((log) => (
-            <div className="table-row" key={log.id} style={{ gridTemplateColumns: "1.2fr 1fr 0.8fr 1.2fr 0.9fr" }}>
-              <span
-                style={{
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  color: actionColor(log.action),
-                }}
-              >
-                {actionLabel(log.action)}
-              </span>
-              <span className="muted" style={{ fontSize: "0.88rem" }}>
-                {log.actorEmail ?? "System"}
-              </span>
-              <span className="muted" style={{ fontSize: "0.82rem", fontFamily: "monospace" }}>
-                {log.targetType && log.targetId
-                  ? `${log.targetType}/${log.targetId.slice(0, 8)}`
-                  : "—"}
-              </span>
-              <span className="muted" style={{ fontSize: "0.82rem" }}>
-                {log.details
-                  ? Object.entries(log.details)
-                      .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
-                      .join(" · ")
-                  : "—"}
-              </span>
-              <span className="muted" style={{ fontSize: "0.82rem" }}>
-                {new Date(log.createdAt).toLocaleString()}
-              </span>
-            </div>
-          ))}
-        </div>
+        <Card>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Action</TH>
+                <TH>Actor</TH>
+                <TH>Target</TH>
+                <TH>Details</TH>
+                <TH>When</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {loading && <EmptyRow cols={5}>Loading activity...</EmptyRow>}
+              {!loading && logs.length === 0 && <EmptyRow cols={5}>No activity recorded yet.</EmptyRow>}
+              {logs.map((log) => (
+                <TR key={log.id}>
+                  <TD label="Action">
+                    <Badge tone={actionTone(log.action)} dot>{actionLabel(log.action)}</Badge>
+                  </TD>
+                  <TD label="Actor" className="text-xs text-[var(--fg-muted)]">{log.actorEmail ?? "System"}</TD>
+                  <TD label="Target" className="font-mono text-[11px] text-[var(--fg-muted)]">
+                    {log.targetType && log.targetId ? `${log.targetType}/${log.targetId.slice(0, 8)}` : "—"}
+                  </TD>
+                  <TD label="Details" className="text-xs text-[var(--fg-muted)]">
+                    {log.details
+                      ? Object.entries(log.details)
+                          .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+                          .join(" · ")
+                      : "—"}
+                  </TD>
+                  <TD label="When" className="whitespace-nowrap text-xs text-[var(--fg-muted)]">{formatDateTime(log.createdAt)}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Card>
       </div>
     </TeacherShell>
   );

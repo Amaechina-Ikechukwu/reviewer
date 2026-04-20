@@ -1,14 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { toast, Toaster } from "../components/Toast";
+import { AuthLayout } from "../components/AuthLayout";
+import { Button } from "../components/ui/Button";
+import { Input, Label, Select } from "../components/ui/Input";
+import { toast } from "../components/Toast";
 import { useAuth } from "../context/AuthContext";
+import { cn } from "../lib/cn";
 import type { Role, User } from "../types";
 
-type AuthResponse = {
-  token: string;
-  user: User;
-};
+type AuthResponse = { token: string; user: User };
 
 export default function Login() {
   const navigate = useNavigate();
@@ -25,18 +26,17 @@ export default function Login() {
     event.preventDefault();
     setSubmitting(true);
     setError("");
-
     try {
-      const payload = mode === "login"
-        ? await api<AuthResponse>("/auth/login", {
-            method: "POST",
-            body: JSON.stringify({ email, password }),
-          })
-        : await api<AuthResponse>("/auth/register", {
-            method: "POST",
-            body: JSON.stringify({ email, password, fullName, role }),
-          });
-
+      const payload =
+        mode === "login"
+          ? await api<AuthResponse>("/auth/login", {
+              method: "POST",
+              body: JSON.stringify({ email, password }),
+            })
+          : await api<AuthResponse>("/auth/register", {
+              method: "POST",
+              body: JSON.stringify({ email, password, fullName, role }),
+            });
       login(payload.token, payload.user);
       navigate(payload.user.role === "teacher" ? "/teacher" : "/student");
     } catch (err) {
@@ -49,58 +49,65 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-shell">
-      <div className="card auth-card stack">
-        <div className="stack" style={{ gap: 6 }}>
-          <h1 style={{ margin: 0 }}>Reviewer</h1>
-          <p className="muted" style={{ margin: 0 }}>{mode === "login" ? "Sign in to your account." : "Create a new account."}</p>
-        </div>
-
-        <div className="pill-row">
-          <button className={`pill-button ${mode === "login" ? "active" : ""}`} onClick={() => setMode("login")} type="button">
-            Login
+    <AuthLayout
+      title={mode === "login" ? "Welcome back" : "Create your account"}
+      description={
+        mode === "login"
+          ? "Sign in to continue to your workspace."
+          : "Start reviewing student submissions in minutes."
+      }
+    >
+      <div className="mb-5 grid grid-cols-2 gap-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] p-1 text-sm">
+        {(["login", "register"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={cn(
+              "h-8 rounded px-3 font-medium transition-colors",
+              mode === m
+                ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+            )}
+          >
+            {m === "login" ? "Sign in" : "Register"}
           </button>
-          <button className={`pill-button ${mode === "register" ? "active" : ""}`} onClick={() => setMode("register")} type="button">
-            Register
-          </button>
-        </div>
-
-        <form className="stack" onSubmit={handleSubmit}>
-          {mode === "register" && (
-            <>
-              <label className="field">
-                <span>Full name</span>
-                <input value={fullName} onChange={(event) => setFullName(event.target.value)} required />
-              </label>
-
-              <label className="field">
-                <span>Role</span>
-                <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
-                  <option value="teacher">Teacher / Admin</option>
-                  <option value="student">Student</option>
-                </select>
-              </label>
-            </>
-          )}
-
-          <label className="field">
-            <span>Email</span>
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          </label>
-
-          <label className="field">
-            <span>Password</span>
-            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-          </label>
-
-          {error && <div className="card" style={{ color: "#b91c1c" }}>{error}</div>}
-
-          <button className="button" disabled={submitting} type="submit">
-            {submitting ? "Working..." : mode === "login" ? "Login" : "Create account"}
-          </button>
-        </form>
+        ))}
       </div>
-      <Toaster />
-    </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {mode === "register" && (
+          <>
+            <Label required>Full name
+              <Input value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Jane Doe" />
+            </Label>
+            <Label>Role
+              <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+                <option value="teacher">Teacher / Admin</option>
+                <option value="student">Student</option>
+              </Select>
+            </Label>
+          </>
+        )}
+
+        <Label required>Email
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@school.edu" />
+        </Label>
+
+        <Label required>Password
+          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+        </Label>
+
+        {error && (
+          <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+            {error}
+          </div>
+        )}
+
+        <Button type="submit" loading={submitting} size="lg" className="mt-1 w-full">
+          {submitting ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

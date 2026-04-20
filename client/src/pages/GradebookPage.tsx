@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
+import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui/Card";
+import { Icon } from "../components/ui/Icons";
+import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
+import { cn } from "../lib/cn";
 
 type GradebookAssignment = { id: string; title: string; maxScore: number };
 
@@ -25,24 +30,24 @@ type GradebookData = {
   rows: GradebookRow[];
 };
 
-function scoreColor(score: number, maxScore: number) {
+function scoreTone(score: number, maxScore: number) {
   const pct = maxScore > 0 ? score / maxScore : 0;
-  if (pct >= 0.8) return "#1a8a4a";
-  if (pct >= 0.6) return "#b45309";
-  return "#b91c1c";
+  if (pct >= 0.8) return "text-[var(--success)]";
+  if (pct >= 0.6) return "text-[var(--warn)]";
+  return "text-[var(--danger)]";
 }
 
-function statusDot(cell: ScoreCell) {
-  if (!cell) return <span style={{ color: "#b0bac9", fontSize: "0.8rem" }}>—</span>;
+function Cell({ cell }: { cell: ScoreCell }) {
+  if (!cell) return <span className="text-[var(--fg-subtle)]">—</span>;
   if (cell.score === null) {
-    if (cell.status === "completed") return <span style={{ color: "#b45309", fontSize: "0.8rem" }}>reviewed</span>;
-    if (cell.status === "reviewing") return <span style={{ color: "#2479a8", fontSize: "0.8rem" }}>reviewing</span>;
-    return <span style={{ color: "#6b7a99", fontSize: "0.8rem" }}>submitted</span>;
+    if (cell.status === "completed") return <span className="text-[11px] text-[var(--warn)]">reviewed</span>;
+    if (cell.status === "reviewing") return <span className="text-[11px] text-[var(--accent)]">reviewing</span>;
+    return <span className="text-[11px] text-[var(--fg-muted)]">submitted</span>;
   }
-  const color = scoreColor(cell.score, cell.maxScore ?? 100);
   return (
-    <span style={{ fontWeight: 700, color, fontSize: "0.92rem" }}>
-      {cell.score}<span style={{ color: "#b0bac9", fontWeight: 400 }}>/{cell.maxScore}</span>
+    <span className={cn("text-sm font-semibold tabular-nums", scoreTone(cell.score, cell.maxScore ?? 100))}>
+      {cell.score}
+      <span className="text-[var(--fg-subtle)] font-normal">/{cell.maxScore}</span>
     </span>
   );
 }
@@ -65,77 +70,85 @@ export default function GradebookPage() {
 
   return (
     <TeacherShell section="gradebook">
-      <div className="page stack">
-        <div className="section-header">
-          <h1 className="page-title">Gradebook</h1>
-          <button
-            className="button secondary"
-            style={{ padding: "8px 10px", lineHeight: 1 }}
-            type="button"
-            title="Refresh"
-            onClick={() => setRefreshKey((k) => k + 1)}
-          >
-            <svg fill="none" height="16" viewBox="0 0 24 24" width="16"><path d="M4 12a8 8 0 0 1 14.93-4H15v2h7V3h-2v3.1A9.97 9.97 0 0 0 2 12h2Zm16 0a8 8 0 0 1-14.93 4H9v-2H2v7h2v-3.1A9.97 9.97 0 0 0 22 12h-2Z" fill="currentColor"/></svg>
-          </button>
-        </div>
+      <div className="flex flex-col gap-6">
+        <PageHeader
+          title="Gradebook"
+          description="Scores across every student and assignment."
+          actions={
+            <Button variant="secondary" size="sm" onClick={() => setRefreshKey((k) => k + 1)}>
+              <Icon.Refresh className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
+          }
+        />
 
-        {loading && <div className="muted">Loading gradebook...</div>}
+        {loading && <div className="text-sm text-[var(--fg-muted)]">Loading gradebook...</div>}
 
         {!loading && assignments.length === 0 && (
-          <div className="card muted" style={{ padding: 24 }}>No assignments or submissions yet.</div>
+          <Card className="p-10 text-center text-sm text-[var(--fg-muted)]">
+            No assignments or submissions yet.
+          </Card>
         )}
 
         {!loading && assignments.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid var(--border)" }}>
-                  <th style={{ textAlign: "left", padding: "10px 14px", fontWeight: 700, minWidth: 180 }}>Student</th>
-                  {assignments.map((a) => (
-                    <th key={a.id} style={{ textAlign: "center", padding: "10px 12px", fontWeight: 600, minWidth: 110, color: "#44516d" }}>
-                      <div style={{ maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={a.title}>{a.title}</div>
-                      <div style={{ fontWeight: 400, color: "#9aaabf", fontSize: "0.8rem" }}>/{a.maxScore}</div>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-[var(--surface-muted)]">
+                  <tr className="border-b border-[var(--border)]">
+                    <th className="sticky left-0 z-10 bg-[var(--surface-muted)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                      Student
                     </th>
-                  ))}
-                  <th style={{ textAlign: "center", padding: "10px 12px", fontWeight: 700, minWidth: 100, borderLeft: "2px solid var(--border)" }}>
-                    Grand Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.student.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                    <td style={{ padding: "10px 14px" }}>
-                      <div style={{ fontWeight: 700 }}>{row.student.fullName}</div>
-                      <div style={{ fontSize: "0.8rem", color: "#9aaabf" }}>{row.student.email.endsWith("@historical.reviewai.local") ? "—" : row.student.email}</div>
-                    </td>
-                    {assignments.map((a) => {
-                      const cell = row.scores[a.id];
-                      return (
-                        <td key={a.id} style={{ textAlign: "center", padding: "10px 12px" }}>
-                          {cell?.submissionId ? (
-                            <Link to={`/teacher/review/${cell.submissionId}`} style={{ textDecoration: "none" }}>
-                              {statusDot(cell)}
-                            </Link>
-                          ) : statusDot(cell)}
-                        </td>
-                      );
-                    })}
-                    <td style={{ textAlign: "center", padding: "10px 12px", borderLeft: "2px solid var(--border)", fontWeight: 700 }}>
-                      {row.grandMaxTotal > 0 ? (
-                        <span style={{ color: scoreColor(row.grandTotal, row.grandMaxTotal) }}>
-                          {row.grandTotal}
-                          <span style={{ color: "#b0bac9", fontWeight: 400 }}>/{row.grandMaxTotal}</span>
-                        </span>
-                      ) : (
-                        <span style={{ color: "#b0bac9" }}>—</span>
-                      )}
-                    </td>
+                    {assignments.map((a) => (
+                      <th key={a.id} className="min-w-[120px] px-3 py-3 text-center font-medium">
+                        <div className="truncate text-xs text-[var(--fg)]" title={a.title}>{a.title}</div>
+                        <div className="text-[10px] font-normal text-[var(--fg-subtle)]">/{a.maxScore}</div>
+                      </th>
+                    ))}
+                    <th className="border-l-2 border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wider text-[var(--fg)]">
+                      Total
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {rows.map((row) => (
+                    <tr key={row.student.id} className="transition-colors hover:bg-[var(--surface-muted)]/40">
+                      <td className="sticky left-0 z-10 bg-[var(--surface)] px-4 py-3">
+                        <div className="font-medium text-[var(--fg)]">{row.student.fullName}</div>
+                        <div className="text-[11px] text-[var(--fg-muted)]">
+                          {row.student.email.endsWith("@historical.reviewai.local") ? "—" : row.student.email}
+                        </div>
+                      </td>
+                      {assignments.map((a) => {
+                        const cell = row.scores[a.id];
+                        return (
+                          <td key={a.id} className="px-3 py-3 text-center">
+                            {cell?.submissionId ? (
+                              <Link to={`/teacher/review/${cell.submissionId}`} className="hover:underline">
+                                <Cell cell={cell} />
+                              </Link>
+                            ) : (
+                              <Cell cell={cell} />
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="border-l-2 border-[var(--border)] px-3 py-3 text-center font-semibold tabular-nums">
+                        {row.grandMaxTotal > 0 ? (
+                          <span className={scoreTone(row.grandTotal, row.grandMaxTotal)}>
+                            {row.grandTotal}
+                            <span className="text-[var(--fg-subtle)] font-normal">/{row.grandMaxTotal}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[var(--fg-subtle)]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
         )}
       </div>
     </TeacherShell>
