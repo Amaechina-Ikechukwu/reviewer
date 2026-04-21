@@ -44,8 +44,9 @@ export const reviewRoutes = {
     // (happens after container restarts / redeployments that wipe the uploads folder)
     if (!filePath || !existsSync(filePath)) {
       if (!submission.githubUrl) {
-        return json({ error: "Submission has no files and no GitHub URL." }, 400);
+        return json({ error: "Submission has no files and no GitHub URL to re-clone from." }, 400);
       }
+      console.log(`[review.run] Re-cloning missing dir for submission ${submission.id} from ${submission.githubUrl}`);
       const destDir = join(UPLOAD_DIR, submission.id);
       await cloneGithubRepo(submission.githubUrl, destDir);
       filePath = destDir;
@@ -111,9 +112,12 @@ export const reviewRoutes = {
 
       const [updated] = await db.select().from(reviews).where(eq(reviews.submissionId, submission.id)).limit(1);
       audit({ actorId: user.userId, action: "review.run", targetType: "submission", targetId: submission.id, details: { score: result.totalScore } });
+      console.log(`[review.run] submission=${submission.id} score=${result.totalScore} model=${result.model} duration=${result.durationMs}ms`);
       return json(updated);
     } catch (error) {
       const message = error instanceof Error ? error.message : "AI review failed.";
+      const stack = error instanceof Error ? error.stack : undefined;
+      console.error(`[review.run] FAILED submission=${submission.id} githubUrl=${submission.githubUrl ?? "none"}`, message, stack ?? "");
 
       await db
         .update(reviews)

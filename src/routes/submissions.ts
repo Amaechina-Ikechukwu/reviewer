@@ -3,13 +3,13 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { cloneGithubRepo } from "../services/github";
 import { db } from "../db/connection";
 import { assignments, reviews, submissionOverrides, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../services/code-reader";
 import { extractZip } from "../services/file-extractor";
-import { cloneGithubRepo } from "../services/github";
 import { isWithinDeadline } from "../utils/deadline";
 import { json } from "../utils/json";
 import { sendSubmissionNotification } from "../services/email";
@@ -391,11 +391,29 @@ export const submissionRoutes = {
       return json({ error: "Forbidden" }, 403);
     }
 
-    if (!submission.filePath) {
-      return json({ files: [] });
+    let filePath = submission.filePath;
+
+    // Re-clone GitHub submissions whose files were wiped (container restart / new deploy)
+    if (!filePath || !existsSync(filePath)) {
+      if (submission.githubUrl) {
+        console.log(`[getFiles] Re-cloning missing dir for submission ${submission.id}`);
+        const destDir = join(UPLOAD_DIR, submission.id);
+        try {
+          await cloneGithubRepo(submission.githubUrl, destDir);
+          filePath = destDir;
+          await db.update(submissions).set({ filePath }).where(eq(submissions.id, submission.id));
+        } catch (cloneErr) {
+          const msg = cloneErr instanceof Error ? cloneErr.message : String(cloneErr);
+          console.error(`[getFiles] Re-clone failed for submission ${submission.id}:`, msg);
+          return json({ files: [], warning: "Could not fetch files — repository may be private or unavailable." });
+        }
+      } else {
+        // ZIP upload whose files are gone — nothing we can do
+        return json({ files: [], warning: "Uploaded files are no longer available on this server." });
+      }
     }
 
-    const files = await readSubmissionFiles(submission.filePath);
+    const files = await readSubmissionFiles(filePath);
     return json({ files });
   },
 
