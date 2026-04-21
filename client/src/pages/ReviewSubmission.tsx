@@ -50,6 +50,99 @@ function structureLabel(classification?: string) {
   }
 }
 
+function stripImports(code: string): string {
+  // Multi-line and single-line import removal
+  return code
+    .replace(/import\s+[\s\S]*?\bfrom\s+['"][^'"]+['"]\s*;?/g, "")
+    .replace(/import\s+['"][^'"]+['"]\s*;?/g, "");
+}
+
+function stripExports(code: string): string {
+  return code
+    // export default function Foo / class Foo → function Foo / class Foo
+    .replace(/\bexport\s+default\s+(function|class)\s+/g, "$1 ")
+    // export default identifier; → (removed — component name already declared above)
+    .replace(/^\s*export\s+default\s+\w+\s*;?\s*$/gm, "")
+    // export { Foo, Bar } → removed
+    .replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, "")
+    // export const/let/var/function/class Foo → const/let/var/function/class Foo
+    .replace(/\bexport\s+(const|let|var|function|class)\s+/g, "$1 ");
+}
+
+function buildReactPreviewDocument(files: CodeFile[]): string {
+  const reactFiles = files.filter((f) => /\.(jsx|tsx|js|ts)$/i.test(f.filename));
+  if (reactFiles.length === 0) return "";
+
+  const cssContent = files
+    .filter((f) => f.filename.endsWith(".css"))
+    .map((f) => f.content)
+    .join("\n");
+
+  // Sort: component files before entry points so App is defined before index
+  const entryNames = ["App.jsx", "App.tsx", "index.jsx", "index.tsx", "main.jsx", "main.tsx"];
+  const sorted = [...reactFiles].sort((a, b) => {
+    const aName = a.filename.split("/").pop() || "";
+    const bName = b.filename.split("/").pop() || "";
+    const aIdx = entryNames.indexOf(aName);
+    const bIdx = entryNames.indexOf(bName);
+    if (aIdx === -1 && bIdx === -1) return a.filename.localeCompare(b.filename);
+    if (aIdx === -1) return -1;
+    if (bIdx === -1) return 1;
+    return aIdx - bIdx;
+  });
+
+  const processedCode = sorted
+    .map((f) => {
+      const cleaned = stripExports(stripImports(f.content));
+      return `/* === ${f.filename} === */\n${cleaned.trim()}`;
+    })
+    .join("\n\n");
+
+  // Find the App component name to render
+  const appFile =
+    sorted.find((f) => {
+      const name = f.filename.split("/").pop() || "";
+      return name === "App.jsx" || name === "App.tsx";
+    }) || sorted.find((f) => /\.(jsx|tsx)$/i.test(f.filename));
+
+  const appMatch = appFile?.content.match(/(?:export\s+default\s+(?:function\s+)?|function\s+)([A-Z]\w*)/);
+  const mainComponent = appMatch?.[1] || "App";
+
+  // If there's an index/main with its own ReactDOM.render call, don't add another
+  const indexFile = sorted.find((f) => {
+    const name = f.filename.split("/").pop() || "";
+    return ["index.jsx", "index.tsx", "main.jsx", "main.tsx"].includes(name);
+  });
+  const hasOwnRenderer = !!indexFile && /ReactDOM/.test(indexFile.content);
+
+  const renderCode = hasOwnRenderer
+    ? ""
+    : `\ntry {\n  const __root = document.getElementById('root');\n  if (__root && typeof ${mainComponent} !== 'undefined') {\n    ReactDOM.createRoot(__root).render(React.createElement(${mainComponent}));\n  }\n} catch(e) { document.getElementById('root').textContent = 'Error: ' + e.message; }`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; }
+${cssContent}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react,env">
+${processedCode}
+${renderCode}
+</script>
+</body>
+</html>`;
+}
+
 function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile) {
   const dir = htmlFile.filename.includes("/")
     ? htmlFile.filename.slice(0, htmlFile.filename.lastIndexOf("/") + 1)
@@ -127,10 +220,24 @@ export default function ReviewSubmission() {
 
   const selectedFile = files[selectedFileIndex] || files[0];
   const isHtmlFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".html");
-  const previewDoc = useMemo(
-    () => (selectedFile && isHtmlFile(selectedFile) ? buildPreviewDocument(files, selectedFile) : null),
-    [files, selectedFile],
-  );
+  const isImageFile = (f?: CodeFile) => f?.language === "image";
+  const isSvgFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".svg");
+
+  const reactPreviewDoc = useMemo(() => {
+    const hasReact = files.some((f) => /\.(jsx|tsx)$/i.test(f.filename));
+    return hasReact ? buildReactPreviewDocument(files) : null;
+  }, [files]);
+
+  const previewDoc = useMemo(() => {
+    if (selectedFile && isHtmlFile(selectedFile)) return buildPreviewDocument(files, selectedFile);
+    return reactPreviewDoc;
+  }, [files, selectedFile, reactPreviewDoc]);
+
+  const previewLabel = useMemo(() => {
+    if (selectedFile && isHtmlFile(selectedFile)) return "HTML Preview";
+    if (reactPreviewDoc) return "React Preview";
+    return "Preview";
+  }, [selectedFile, reactPreviewDoc]);
 
   const maxScore = review?.maxScore || submission?.assignment.maxScore || 100;
   const geminiSummary = review?.feedback?.summary || "No Gemini review has been run for this submission yet.";
@@ -141,7 +248,10 @@ export default function ReviewSubmission() {
   const fileScores = review?.feedback?.fileScores || [];
   const averageFileScore = review?.feedback?.averageFileScore;
   const questionGroups = review?.feedback?.questionGroups || [];
-  const selectedFileLineCount = selectedFile?.content.split("\n").length || 0;
+  const selectedFileLineCount =
+    selectedFile && !isImageFile(selectedFile) && !isSvgFile(selectedFile)
+      ? selectedFile.content.split("\n").length
+      : 0;
   const selectedFileScore = selectedFile
     ? fileScores.find((entry) => entry.filename === selectedFile.filename)
     : undefined;
@@ -291,9 +401,33 @@ export default function ReviewSubmission() {
             <div className="flex min-w-0 flex-col border-r border-[var(--border)]">
               <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)]/30 px-4 py-2 text-[11px] text-[var(--fg-muted)]">
                 <span className="truncate font-mono">{selectedFile?.filename || "—"}</span>
-                <span>{selectedFile ? `${selectedFileLineCount} lines` : ""}</span>
+                <span>
+                  {selectedFile && isImageFile(selectedFile)
+                    ? "image"
+                    : selectedFile && isSvgFile(selectedFile)
+                      ? "svg"
+                      : selectedFile
+                        ? `${selectedFileLineCount} lines`
+                        : ""}
+                </span>
               </div>
-              {selectedFile ? (
+              {selectedFile && isImageFile(selectedFile) ? (
+                <div className="flex max-h-[520px] items-center justify-center overflow-auto bg-[var(--surface)] p-4">
+                  <img
+                    src={selectedFile.content}
+                    alt={selectedFile.filename}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : selectedFile && isSvgFile(selectedFile) ? (
+                <div className="flex max-h-[520px] items-center justify-center overflow-auto bg-[var(--surface)] p-4">
+                  <img
+                    src={`data:image/svg+xml,${encodeURIComponent(selectedFile.content)}`}
+                    alt={selectedFile.filename}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : selectedFile ? (
                 <pre className="m-0 max-h-[520px] overflow-auto bg-[var(--surface)] p-4 font-mono text-xs leading-relaxed text-[var(--fg)]">
                   {selectedFile.content}
                 </pre>
@@ -313,7 +447,7 @@ export default function ReviewSubmission() {
                   <div className="ml-2 flex flex-1 items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
                     <Icon.Link className="h-3 w-3 shrink-0" />
                     <span className="truncate">
-                      {submission.studentName || "Student"} — {submission.assignment.title}
+                      {previewLabel} — {submission.studentName || "Student"}
                     </span>
                   </div>
                 </div>

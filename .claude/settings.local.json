@@ -19,7 +19,10 @@
       "Bash(git add *)",
       "Bash(git commit -m 'Redesign student dashboard and refresh client UI *)",
       "Bash(git push *)",
-      "Bash(bunx tsc *)"
+      "Bash(bunx tsc *)",
+      "Bash(grep -n \"submissions/:id\\\\|router\\\\\\\\.get\\\\|\\\\\"/:id\\\\\\\\|\\\\\"/:submissionId\" C:/Users/User/March/Projects/Services/reviewer/src/routes/submissions.ts)",
+      "Bash(xargs grep *)",
+      "Bash(xargs ls *)"
     ]
   }
 }

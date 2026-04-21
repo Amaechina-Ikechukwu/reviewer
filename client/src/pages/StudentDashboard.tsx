@@ -154,7 +154,7 @@ function ResultCard({ row, review }: { row: SubmissionRow; review: Review | unde
 
   return (
     <Link
-      to={`/student/results#${row.submission.id}`}
+      to={`/student/results/${row.submission.id}`}
       className="group relative block overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-sm)] transition hover:border-[var(--accent)]/50 hover:shadow-[var(--shadow-md)]"
     >
       <div className="absolute left-0 top-0 h-full w-1 bg-[var(--success)]" />

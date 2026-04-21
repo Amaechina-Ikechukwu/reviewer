@@ -21,12 +21,23 @@ const LANGUAGE_MAP: Record<string, string> = {
   ".md": "markdown",
   ".py": "python",
   ".sql": "sql",
+  ".svg": "svg",
   ".ts": "typescript",
   ".tsx": "tsx",
   ".txt": "text",
   ".xml": "xml",
   ".yaml": "yaml",
   ".yml": "yaml",
+};
+
+const IMAGE_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
 };
 
 function extname(name: string) {
@@ -67,6 +78,20 @@ async function walk(dir: string, rootDir: string, acc: CodeFile[]) {
 
     const fileStat = await stat(fullPath);
     if (fileStat.size > MAX_FILE_SIZE_BYTES) {
+      continue;
+    }
+
+    const ext = extname(entry.name);
+    const imageMime = IMAGE_MIME[ext];
+
+    if (imageMime) {
+      const buffer = await readFile(fullPath).catch(() => null);
+      if (!buffer || buffer.length === 0) continue;
+      acc.push({
+        filename: relative(rootDir, fullPath).replace(/\\/g, "/"),
+        content: `data:${imageMime};base64,${buffer.toString("base64")}`,
+        language: "image",
+      });
       continue;
     }
 

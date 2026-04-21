@@ -104,15 +104,16 @@ export default function StudentResults() {
             const maxScore = review?.maxScore ?? 100;
             const isFocused = focusedId === row.submission.id;
             return (
-              <Card
+              <Link
                 key={row.submission.id}
+                to={`/student/results/${row.submission.id}`}
                 id={`submission-${row.submission.id}`}
                 className={cn(
-                  "scroll-mt-20 transition-shadow",
+                  "group block rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)] scroll-mt-20 transition hover:border-[var(--accent)]/50 hover:shadow-[var(--shadow-md)]",
                   isFocused && "ring-2 ring-[var(--accent)] shadow-[var(--shadow-md)]",
                 )}
               >
-                <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
                     <div
                       className={cn(
@@ -157,9 +158,10 @@ export default function StudentResults() {
                       )}
                     </div>
                     <ReviewStatusPill status={review?.status} />
+                    <Icon.ChevronRight className="h-4 w-4 text-[var(--fg-subtle)] transition-transform group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </Link>
             );
           })}
         </div>

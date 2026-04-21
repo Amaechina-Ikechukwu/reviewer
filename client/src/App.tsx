@@ -12,6 +12,7 @@ import SetupAccount from "./pages/SetupAccount";
 import ReviewSubmission from "./pages/ReviewSubmission";
 import StudentDashboard from "./pages/StudentDashboard";
 import StudentResults from "./pages/StudentResults";
+import StudentResultDetail from "./pages/StudentResultDetail";
 import StudentsPage from "./pages/StudentsPage";
 import SubmitAssignment from "./pages/SubmitAssignment";
 import SubmissionsList from "./pages/SubmissionsList";
@@ -153,6 +154,14 @@ export default function App() {
         element={(
           <ProtectedRoute role="student">
             <StudentResults />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/student/results/:submissionId"
+        element={(
+          <ProtectedRoute role="student">
+            <StudentResultDetail />
           </ProtectedRoute>
         )}
       />
