@@ -7,8 +7,8 @@ export interface CodeFile {
   language: string;
 }
 
-const MAX_FILES = 30;
-const MAX_FILE_SIZE_BYTES = 200_000;
+const MAX_FILES = 100;
+const MAX_FILE_SIZE_BYTES = 500_000;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", ".turbo"]);
 
 const LANGUAGE_MAP: Record<string, string> = {

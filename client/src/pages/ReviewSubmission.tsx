@@ -50,81 +50,206 @@ function structureLabel(classification?: string) {
   }
 }
 
-function stripImports(code: string): string {
-  // Multi-line and single-line import removal
-  return code
-    .replace(/import\s+[\s\S]*?\bfrom\s+['"][^'"]+['"]\s*;?/g, "")
-    .replace(/import\s+['"][^'"]+['"]\s*;?/g, "");
-}
-
-function stripExports(code: string): string {
-  return code
-    // export default function Foo / class Foo → function Foo / class Foo
-    .replace(/\bexport\s+default\s+(function|class)\s+/g, "$1 ")
-    // export default identifier; → (removed — component name already declared above)
-    .replace(/^\s*export\s+default\s+\w+\s*;?\s*$/gm, "")
-    // export { Foo, Bar } → removed
-    .replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, "")
-    // export const/let/var/function/class Foo → const/let/var/function/class Foo
-    .replace(/\bexport\s+(const|let|var|function|class)\s+/g, "$1 ");
-}
-
 function buildReactPreviewDocument(files: CodeFile[]): string | null {
-  const reactFiles = files.filter((f) => /\.(jsx|tsx)$/i.test(f.filename));
-  if (reactFiles.length === 0) return null;
+  const hasReact = files.some((f) => /\.(jsx|tsx)$/i.test(f.filename));
+  if (!hasReact) return null;
 
-  const cssContent = files
-    .filter((f) => f.filename.endsWith(".css"))
-    .map((f) => f.content)
-    .join("\n");
-
-  // Sort: App files first (most likely the entry component), then others
-  const sorted = [...reactFiles].sort((a, b) => {
-    const aName = a.filename.toLowerCase();
-    const bName = b.filename.toLowerCase();
-    const aIsApp = aName.includes("app");
-    const bIsApp = bName.includes("app");
-    if (aIsApp && !bIsApp) return -1;
-    if (!aIsApp && bIsApp) return 1;
-    return a.filename.localeCompare(b.filename);
-  });
-
-  // Combine all code, strip imports/exports per file
-  const allCode = sorted
-    .map((f) => stripExports(stripImports(f.content)))
-    .join("\n\n");
-
-  // Extract component name from App file
-  const appFile = sorted.find((f) => f.filename.toLowerCase().includes("app"));
-  let componentName = "App";
-  if (appFile) {
-    const nameMatch = appFile.content.match(/(?:export\s+default\s+)?(?:function|const)\s+([A-Z]\w*)/);
-    componentName = nameMatch?.[1] || "App";
+  // Partition files into text sources and binary images
+  const textFiles: Record<string, string> = {};
+  const imageFiles: Record<string, string> = {};
+  for (const file of files) {
+    if (file.language === "image") imageFiles[file.filename] = file.content;
+    else textFiles[file.filename] = file.content;
   }
 
-  const renderCode = `\n// Auto-render React component\nif (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof ${componentName} !== 'undefined') {\n  const root = document.getElementById('root');\n  if (root) {\n    try {\n      const rootEl = ReactDOM.createRoot(root);\n      rootEl.render(React.createElement(${componentName}));\n    } catch (err) {\n      console.error('Render error:', err);\n      root.innerHTML = '<div style="color:#d32f2f; padding: 20px; font-family: monospace;">Error: ' + err.message + '<\/div>';\n    }\n  }\n}`;
+  // Find an entry file: prefer src/main, src/index, then App
+  const entryCandidates = [
+    "src/main.jsx", "src/main.tsx", "src/index.jsx", "src/index.tsx",
+    "main.jsx", "main.tsx", "index.jsx", "index.tsx",
+    "src/App.jsx", "src/App.tsx", "App.jsx", "App.tsx",
+  ];
+  const allKeys = Object.keys(textFiles);
+  let entry = entryCandidates.find((c) => textFiles[c]) ||
+    allKeys.find((k) => /\/(main|index)\.(jsx|tsx)$/i.test(k)) ||
+    allKeys.find((k) => /\.(jsx|tsx)$/i.test(k));
+  if (!entry) return null;
+
+  // Loader runs inside the iframe — written as a plain string, no interpolation inside.
+  const loaderScript = `
+(async () => {
+  const root = document.getElementById('root');
+  const errBox = document.getElementById('__err');
+  const showErr = (msg) => {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+    if (root) root.innerHTML = '';
+    console.error(msg);
+  };
+
+  try {
+    const FILES = window.__FILES__;
+    const IMAGES = window.__IMAGES__;
+    const ENTRY = window.__ENTRY__;
+
+    const TEXT_EXT = ['.jsx', '.tsx', '.js', '.ts', '.mjs', '.cjs'];
+
+    function normalize(p) {
+      const parts = p.split('/');
+      const out = [];
+      for (const part of parts) {
+        if (part === '..') out.pop();
+        else if (part !== '.' && part !== '') out.push(part);
+      }
+      return out.join('/');
+    }
+
+    function resolveRel(base, rel) {
+      const lastSlash = base.lastIndexOf('/');
+      const baseDir = lastSlash >= 0 ? base.substring(0, lastSlash) : '';
+      return normalize((baseDir ? baseDir + '/' : '') + rel);
+    }
+
+    function findFile(path) {
+      if (FILES[path]) return path;
+      if (IMAGES[path]) return path;
+      for (const ext of TEXT_EXT) {
+        if (FILES[path + ext]) return path + ext;
+      }
+      for (const ext of TEXT_EXT) {
+        if (FILES[path + '/index' + ext]) return path + '/index' + ext;
+      }
+      return null;
+    }
+
+    const blobCache = {};
+    const cssInjected = new Set();
+
+    async function loadModule(path) {
+      if (blobCache[path]) return blobCache[path];
+
+      const found = findFile(path);
+      if (!found) throw new Error('Cannot resolve module: ' + path);
+
+      if (IMAGES[found]) {
+        const js = 'export default ' + JSON.stringify(IMAGES[found]) + ';';
+        const blob = new Blob([js], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        blobCache[path] = url;
+        return url;
+      }
+
+      let code = FILES[found];
+
+      // Side-effect CSS imports → inject <style>
+      code = code.replace(/import\\s+['"]([^'"]+\\.css)['"]\\s*;?/g, (_, p) => {
+        const resolved = resolveRel(found, p);
+        if (!cssInjected.has(resolved)) {
+          cssInjected.add(resolved);
+          const css = FILES[resolved];
+          if (css) {
+            const style = document.createElement('style');
+            style.textContent = css;
+            document.head.appendChild(style);
+          }
+        }
+        return '';
+      });
+
+      // Rewrite bare package imports (except react*) to esm.sh — do this BEFORE blob substitution
+      code = code.replace(/(\\bfrom\\s+|\\bimport\\s*\\(\\s*)(["\\'])(@?[a-zA-Z][\\w\\-.]*(?:\\/[\\w\\-.@]+)*)\\2/g, (m, prefix, q, spec) => {
+        if (spec === 'react' || spec === 'react-dom' || spec.startsWith('react/') || spec.startsWith('react-dom/')) return m;
+        return prefix + q + 'https://esm.sh/' + spec + q;
+      });
+
+      // Collect relative specifiers
+      const specs = new Set();
+      code.replace(/\\bfrom\\s+['"](\\.[^'"]+)['"]/g, (_, s) => { specs.add(s); return ''; });
+      code.replace(/\\bimport\\s*\\(\\s*['"](\\.[^'"]+)['"]\\s*\\)/g, (_, s) => { specs.add(s); return ''; });
+
+      // Resolve each relative import to a blob URL
+      for (const spec of specs) {
+        const resolvedPath = resolveRel(found, spec);
+        const blobUrl = await loadModule(resolvedPath);
+        const escaped = spec.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+        code = code.replace(new RegExp('(\\\\bfrom\\\\s+|\\\\bimport\\\\s*\\\\(\\\\s*)(["\\'])' + escaped + '\\\\2', 'g'), (_, prefix, q) => prefix + q + blobUrl + q);
+      }
+
+      // Transform JSX / TS with Babel
+      const presets = [['react', { runtime: 'automatic' }]];
+      if (/\\.tsx?$/i.test(found)) {
+        presets.push(['typescript', { isTSX: true, allExtensions: true }]);
+      }
+      let transformed;
+      try {
+        transformed = Babel.transform(code, { presets, filename: found, sourceType: 'module' }).code;
+      } catch (e) {
+        throw new Error('Babel failed in ' + found + ': ' + e.message);
+      }
+
+      const blob = new Blob([transformed], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      blobCache[path] = url;
+      return url;
+    }
+
+    const url = await loadModule(ENTRY);
+    const entryCode = FILES[ENTRY] || '';
+    const hasRenderCall = /createRoot\\s*\\(|ReactDOM\\.render\\s*\\(/.test(entryCode);
+
+    if (hasRenderCall) {
+      await import(url);
+    } else {
+      const mod = await import(url);
+      const Component = mod.default;
+      if (!Component) throw new Error('Entry ' + ENTRY + ' has no default export to render.');
+      const React = await import('react');
+      const ReactDOMClient = await import('react-dom/client');
+      ReactDOMClient.createRoot(root).render(React.createElement(Component));
+    }
+  } catch (err) {
+    showErr('Preview error: ' + (err && err.message ? err.message : String(err)) + (err && err.stack ? '\\n\\n' + err.stack : ''));
+  }
+})();
+`;
+
+  const filesJson = JSON.stringify(textFiles).replace(/</g, "\\u003c");
+  const imagesJson = JSON.stringify(imageFiles).replace(/</g, "\\u003c");
+  const entryJson = JSON.stringify(entry);
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime"
+  }
+}
+</script>
+<script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
 body { font-family: system-ui, -apple-system, sans-serif; background: #fff; }
 #root { min-height: 100vh; }
-${cssContent}
+#__err { display: none; color: #b42318; background: #fef3f2; border: 1px solid #fda29b; padding: 16px; margin: 16px; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; }
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel">
-${allCode}
-${renderCode}
-<\/script>
+<pre id="__err"></pre>
+<script>
+window.__FILES__ = ${filesJson};
+window.__IMAGES__ = ${imagesJson};
+window.__ENTRY__ = ${entryJson};
+</script>
+<script>${loaderScript}</script>
 </body>
 </html>`;
 }
