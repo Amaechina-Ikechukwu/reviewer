@@ -39,14 +39,37 @@ function RowMenu({
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const items: Array<{ key: string; label: string; danger?: boolean }> = [
+  const normalItems: Array<{ key: string; label: string }> = [
     { key: "open", label: "Open submission" },
     { key: "submit-for", label: "Submit for student" },
     { key: "edit", label: "Edit details" },
-    { key: "reset", label: "Reset password" },
-    { key: "merge", label: "Merge into another…", danger: true },
-    { key: "delete", label: "Delete student", danger: true },
   ];
+
+  const warnItems: Array<{ key: string; label: string }> = [
+    { key: "reset", label: "Reset password" },
+  ];
+
+  const dangerItems: Array<{ key: string; label: string }> = [
+    { key: "merge", label: "Merge into another…" },
+    { key: "delete", label: "Delete student" },
+  ];
+
+  const menuBtn = (key: string, label: string, tone: "normal" | "warn" | "danger") => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => { setOpen(false); onAction(key); }}
+      className={
+        tone === "danger"
+          ? "block w-full px-3 py-2 text-left text-xs font-medium transition-colors text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+          : tone === "warn"
+          ? "block w-full px-3 py-2 text-left text-xs font-medium transition-colors text-[var(--warn)] hover:bg-[var(--warn-soft)]"
+          : "block w-full px-3 py-2 text-left text-xs font-medium transition-colors text-[var(--fg)] hover:bg-[var(--surface-muted)]"
+      }
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="relative" ref={ref}>
@@ -54,22 +77,16 @@ function RowMenu({
         <Icon.MoreHorizontal className="h-4 w-4" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] animate-fade-in">
-          {items.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onAction(item.key);
-              }}
-              className={`block w-full px-3 py-2 text-left text-xs font-medium transition-colors hover:bg-[var(--surface-muted)] ${
-                item.danger ? "text-[var(--danger)] hover:bg-[var(--danger-soft)]" : "text-[var(--fg)]"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+        <div className="absolute right-0 top-full z-30 mt-1 w-52 overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] animate-fade-in">
+          <div className="py-1">
+            {normalItems.map((i) => menuBtn(i.key, i.label, "normal"))}
+          </div>
+          <div className="border-t border-[var(--border)] py-1">
+            {warnItems.map((i) => menuBtn(i.key, i.label, "warn"))}
+          </div>
+          <div className="border-t border-[var(--border)] py-1">
+            {dangerItems.map((i) => menuBtn(i.key, i.label, "danger"))}
+          </div>
         </div>
       )}
     </div>
