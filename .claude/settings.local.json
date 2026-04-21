@@ -22,7 +22,10 @@
       "Bash(bunx tsc *)",
       "Bash(grep -n \"submissions/:id\\\\|router\\\\\\\\.get\\\\|\\\\\"/:id\\\\\\\\|\\\\\"/:submissionId\" C:/Users/User/March/Projects/Services/reviewer/src/routes/submissions.ts)",
       "Bash(xargs grep *)",
-      "Bash(xargs ls *)"
+      "Bash(xargs ls *)",
+      "Bash(git commit -m ' *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }

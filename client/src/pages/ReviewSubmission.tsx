@@ -69,76 +69,62 @@ function stripExports(code: string): string {
     .replace(/\bexport\s+(const|let|var|function|class)\s+/g, "$1 ");
 }
 
-function buildReactPreviewDocument(files: CodeFile[]): string {
-  const reactFiles = files.filter((f) => /\.(jsx|tsx|js|ts)$/i.test(f.filename));
-  if (reactFiles.length === 0) return "";
+function buildReactPreviewDocument(files: CodeFile[]): string | null {
+  const reactFiles = files.filter((f) => /\.(jsx|tsx)$/i.test(f.filename));
+  if (reactFiles.length === 0) return null;
 
   const cssContent = files
     .filter((f) => f.filename.endsWith(".css"))
     .map((f) => f.content)
     .join("\n");
 
-  // Sort: component files before entry points so App is defined before index
-  const entryNames = ["App.jsx", "App.tsx", "index.jsx", "index.tsx", "main.jsx", "main.tsx"];
+  // Sort: App files first (most likely the entry component), then others
   const sorted = [...reactFiles].sort((a, b) => {
-    const aName = a.filename.split("/").pop() || "";
-    const bName = b.filename.split("/").pop() || "";
-    const aIdx = entryNames.indexOf(aName);
-    const bIdx = entryNames.indexOf(bName);
-    if (aIdx === -1 && bIdx === -1) return a.filename.localeCompare(b.filename);
-    if (aIdx === -1) return -1;
-    if (bIdx === -1) return 1;
-    return aIdx - bIdx;
+    const aName = a.filename.toLowerCase();
+    const bName = b.filename.toLowerCase();
+    const aIsApp = aName.includes("app");
+    const bIsApp = bName.includes("app");
+    if (aIsApp && !bIsApp) return -1;
+    if (!aIsApp && bIsApp) return 1;
+    return a.filename.localeCompare(b.filename);
   });
 
-  const processedCode = sorted
-    .map((f) => {
-      const cleaned = stripExports(stripImports(f.content));
-      return `/* === ${f.filename} === */\n${cleaned.trim()}`;
-    })
+  // Combine all code, strip imports/exports per file
+  const allCode = sorted
+    .map((f) => stripExports(stripImports(f.content)))
     .join("\n\n");
 
-  // Find the App component name to render
-  const appFile =
-    sorted.find((f) => {
-      const name = f.filename.split("/").pop() || "";
-      return name === "App.jsx" || name === "App.tsx";
-    }) || sorted.find((f) => /\.(jsx|tsx)$/i.test(f.filename));
+  // Extract component name from App file
+  const appFile = sorted.find((f) => f.filename.toLowerCase().includes("app"));
+  let componentName = "App";
+  if (appFile) {
+    const nameMatch = appFile.content.match(/(?:export\s+default\s+)?(?:function|const)\s+([A-Z]\w*)/);
+    componentName = nameMatch?.[1] || "App";
+  }
 
-  const appMatch = appFile?.content.match(/(?:export\s+default\s+(?:function\s+)?|function\s+)([A-Z]\w*)/);
-  const mainComponent = appMatch?.[1] || "App";
-
-  // If there's an index/main with its own ReactDOM.render call, don't add another
-  const indexFile = sorted.find((f) => {
-    const name = f.filename.split("/").pop() || "";
-    return ["index.jsx", "index.tsx", "main.jsx", "main.tsx"].includes(name);
-  });
-  const hasOwnRenderer = !!indexFile && /ReactDOM/.test(indexFile.content);
-
-  const renderCode = hasOwnRenderer
-    ? ""
-    : `\ntry {\n  const __root = document.getElementById('root');\n  if (__root && typeof ${mainComponent} !== 'undefined') {\n    ReactDOM.createRoot(__root).render(React.createElement(${mainComponent}));\n  }\n} catch(e) { document.getElementById('root').textContent = 'Error: ' + e.message; }`;
+  const renderCode = `\n// Auto-render React component\nif (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined' && typeof ${componentName} !== 'undefined') {\n  const root = document.getElementById('root');\n  if (root) {\n    try {\n      const rootEl = ReactDOM.createRoot(root);\n      rootEl.render(React.createElement(${componentName}));\n    } catch (err) {\n      console.error('Render error:', err);\n      root.innerHTML = '<div style="color:#d32f2f; padding: 20px; font-family: monospace;">Error: ' + err.message + '<\/div>';\n    }\n  }\n}`;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
 <style>
-* { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #fff; }
+#root { min-height: 100vh; }
 ${cssContent}
 </style>
 </head>
 <body>
 <div id="root"></div>
-<script type="text/babel" data-presets="react,env">
-${processedCode}
+<script type="text/babel">
+${allCode}
 ${renderCode}
-</script>
+<\/script>
 </body>
 </html>`;
 }
