@@ -144,3 +144,31 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   border-radius: 4px;
 }
 
+
+/* Markdown content rendering */
+.mdcontent { line-height: 1.75; color: var(--fg); }
+.mdcontent h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 1rem; line-height: 1.25; letter-spacing: -0.02em; color: var(--fg); }
+.mdcontent h2 { font-size: 1.2rem; font-weight: 600; margin: 2rem 0 0.75rem; line-height: 1.3; color: var(--fg); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+.mdcontent h3 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: var(--fg); }
+.mdcontent h4, .mdcontent h5, .mdcontent h6 { font-size: 0.9rem; font-weight: 600; margin: 1rem 0 0.4rem; color: var(--fg); }
+.mdcontent p { margin: 0 0 1rem; }
+.mdcontent p:last-child { margin-bottom: 0; }
+.mdcontent ul, .mdcontent ol { margin: 0 0 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.25rem; }
+.mdcontent li { line-height: 1.7; }
+.mdcontent li > ul, .mdcontent li > ol { margin-top: 0.25rem; margin-bottom: 0; }
+.mdcontent ul { list-style-type: disc; }
+.mdcontent ol { list-style-type: decimal; }
+.mdcontent a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.mdcontent a:hover { opacity: 0.8; }
+.mdcontent strong { font-weight: 600; color: var(--fg); }
+.mdcontent em { font-style: italic; }
+.mdcontent code { font-family: var(--font-mono); font-size: 0.8em; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 4px; padding: 0.15em 0.4em; }
+.mdcontent pre { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; overflow-x: auto; margin: 0 0 1rem; }
+.mdcontent pre code { background: none; border: none; padding: 0; font-size: 0.85em; }
+.mdcontent blockquote { border-left: 3px solid var(--accent); margin: 0 0 1rem; padding: 0.5rem 0 0.5rem 1rem; color: var(--fg-muted); font-style: italic; }
+.mdcontent hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.mdcontent table { width: 100%; border-collapse: collapse; margin: 0 0 1rem; font-size: 0.9em; }
+.mdcontent th { background: var(--surface-muted); padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid var(--border); }
+.mdcontent td { padding: 0.5rem 0.75rem; border: 1px solid var(--border); vertical-align: top; }
+.mdcontent tr:nth-child(even) td { background: var(--surface-muted)/40; }
+.mdcontent img { max-width: 100%; border-radius: 6px; }
