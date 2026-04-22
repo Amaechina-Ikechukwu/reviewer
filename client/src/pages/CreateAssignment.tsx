@@ -36,6 +36,13 @@ export default function CreateAssignment() {
     setSourceMarkdown(await file.text());
   }
 
+  async function handleClassNotesFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setClassNotes(await file.text());
+    event.target.value = "";
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -269,17 +276,26 @@ export default function CreateAssignment() {
                 />
               </Label>
 
-              <Label>
-                <span>
-                  Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
-                </span>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
+                  </span>
+                  <label className="cursor-pointer text-xs text-[var(--accent)] hover:underline">
+                    Upload .md file
+                    <input accept=".md,.markdown,.txt" type="file" className="sr-only" onChange={handleClassNotesFile} />
+                  </label>
+                </div>
                 <Textarea
                   placeholder="Paste any notes, instructions, or resources students should read before submitting..."
                   rows={5}
                   value={classNotes}
                   onChange={(e) => setClassNotes(e.target.value)}
                 />
-              </Label>
+                {classNotes && (
+                  <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
+                )}
+              </div>
 
               {error && (
                 <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
