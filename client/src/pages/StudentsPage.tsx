@@ -366,7 +366,7 @@ export default function StudentsPage() {
         </Card>
 
         <Card className="overflow-visible">
-          <Table>
+          <Table overflowVisible>
             <THead>
               <TR>
                 <TH>Student</TH>

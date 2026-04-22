@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { marked } from "marked";
 import StudentShell from "../components/StudentShell";
 import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
@@ -134,9 +135,10 @@ export default function SubmitAssignment() {
                 <CardTitle>Class notes</CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--fg)]">
-                  {assignment.classNotes}
-                </pre>
+                <div
+                  className="prose prose-sm max-w-none text-[var(--fg)] [&_a]:text-[var(--accent)] [&_code]:rounded [&_code]:bg-[var(--surface-muted)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-[var(--surface-muted)] [&_pre]:p-3 [&_pre]:text-xs"
+                  dangerouslySetInnerHTML={{ __html: marked(assignment.classNotes) as string }}
+                />
               </CardContent>
             </Card>
           )}

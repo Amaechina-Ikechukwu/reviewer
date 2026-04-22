@@ -1,9 +1,11 @@
 import type { HTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
-export function Table({ className, ...rest }: HTMLAttributes<HTMLTableElement>) {
+type TableProps = HTMLAttributes<HTMLTableElement> & { overflowVisible?: boolean };
+
+export function Table({ className, overflowVisible, ...rest }: TableProps) {
   return (
-    <div className="w-full overflow-x-auto">
+    <div className={overflowVisible ? "w-full overflow-visible" : "w-full overflow-x-auto"}>
       <table className={cn("responsive-table w-full text-sm", className)} {...rest} />
     </div>
   );
