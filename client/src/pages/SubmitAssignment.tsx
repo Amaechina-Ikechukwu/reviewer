@@ -238,7 +238,7 @@ export default function SubmitAssignment() {
       {assignment.sourceMarkdown ? (
         <div className="flex h-[calc(100svh-56px-3rem)] gap-6 overflow-hidden">
           {/* Markdown pane — scrolls independently */}
-          <div className="flex min-w-0 flex-1 flex-col gap-5 overflow-y-auto pr-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
             <div className="flex flex-col gap-1">
               <div className="text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">Assignment</div>
               <h1 className="text-3xl font-semibold leading-tight tracking-tight">{assignment.title}</h1>
@@ -257,10 +257,12 @@ export default function SubmitAssignment() {
                 Open assignment brief
               </a>
             )}
-            <div
-              className="mdcontent"
-              dangerouslySetInnerHTML={{ __html: marked(assignment.sourceMarkdown) as string }}
-            />
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-8 py-7">
+              <div
+                className="mdcontent"
+                dangerouslySetInnerHTML={{ __html: marked(assignment.sourceMarkdown) as string }}
+              />
+            </div>
           </div>
 
           {/* Sticky sidebar */}
