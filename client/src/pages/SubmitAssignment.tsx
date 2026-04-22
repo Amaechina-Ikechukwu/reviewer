@@ -110,6 +110,20 @@ export default function SubmitAssignment() {
             </a>
           )}
 
+          {assignment.sourceMarkdown && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Assignment brief</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div
+                  className="prose prose-sm max-w-none text-[var(--fg)] [&_a]:text-[var(--accent)] [&_code]:rounded [&_code]:bg-[var(--surface-muted)] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-[var(--surface-muted)] [&_pre]:p-3 [&_pre]:text-xs"
+                  dangerouslySetInnerHTML={{ __html: marked(assignment.sourceMarkdown) as string }}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardContent className="flex items-center justify-between gap-4">
               <div>
