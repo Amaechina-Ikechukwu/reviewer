@@ -98,7 +98,7 @@ export const reviewRoutes = {
         .update(reviews)
         .set({
           status: "completed",
-          aiScore: result.totalScore,
+          aiScore: Math.round(result.totalScore),
           maxScore: assignment.maxScore,
           feedback: {
             ...result.feedback,
