@@ -20,11 +20,52 @@ Be encouraging but honest. Reward correctness and understanding, not just surfac
 Return only valid JSON. No markdown fences. No explanatory text before or after the JSON.`;
 }
 
+/** Rough chars-per-token for source code. Used for a conservative size budget. */
+const CHARS_PER_TOKEN = 3.5;
+/** Leave this many tokens for the model's output + static prompt overhead. */
+const OUTPUT_BUDGET_TOKENS = 8_000;
+/** Max context we assume any provider can handle safely (most support 128k+). */
+const MAX_CONTEXT_TOKENS = 120_000;
+const MAX_CODE_CHARS = Math.floor((MAX_CONTEXT_TOKENS - OUTPUT_BUDGET_TOKENS) * CHARS_PER_TOKEN);
+/** Per-file cap so a single giant file doesn't consume the whole budget. */
+const MAX_FILE_CHARS = 40_000;
+
+function truncateCodeSection(files: PromptInput["codeFiles"]): string {
+  let totalChars = 0;
+  const parts: string[] = [];
+
+  for (const file of files) {
+    const header = `--- ${file.filename} (${file.language}) ---\n`;
+    let content = file.content;
+
+    // Truncate a single file that is too large
+    if (content.length > MAX_FILE_CHARS) {
+      content =
+        content.slice(0, MAX_FILE_CHARS) +
+        `\n\n[... truncated: file is ${content.length.toLocaleString()} chars, showing first ${MAX_FILE_CHARS.toLocaleString()} ...]`;
+    }
+
+    const chunk = header + content;
+
+    // Stop adding files once the total budget is exhausted
+    if (totalChars + chunk.length > MAX_CODE_CHARS) {
+      const remaining = files.length - parts.length;
+      parts.push(
+        `[... ${remaining} more file(s) omitted — submission exceeds context limit. Review above files only. ...]`,
+      );
+      break;
+    }
+
+    parts.push(chunk);
+    totalChars += chunk.length;
+  }
+
+  return parts.join("\n\n");
+}
+
 export function buildUserPrompt(input: PromptInput) {
   const fileList = input.codeFiles.map((file) => file.filename).join(", ");
-  const codeSection = input.codeFiles
-    .map((file) => `--- ${file.filename} (${file.language}) ---\n${file.content}`)
-    .join("\n\n");
+  const codeSection = truncateCodeSection(input.codeFiles);
 
   return `Assignment Title: ${input.assignmentTitle}
 
