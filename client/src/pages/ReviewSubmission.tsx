@@ -7,6 +7,7 @@ import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { Input, Label, Textarea } from "../components/ui/Input";
+import { Modal } from "../components/ui/Modal";
 import { api } from "../api";
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
@@ -298,6 +299,8 @@ export default function ReviewSubmission() {
   const [review, setReview] = useState<Review | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [releasing, setReleasing] = useState(false);
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<"nvidia" | "gemini">("nvidia");
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [overrideScore, setOverrideScore] = useState("");
   const [finalFeedback, setFinalFeedback] = useState("");
@@ -372,15 +375,16 @@ export default function ReviewSubmission() {
     if (nextIndex >= 0) setSelectedFileIndex(nextIndex);
   }
 
-  async function runReview() {
+  async function runReview(provider: "nvidia" | "gemini" = "nvidia") {
     if (!submissionId) return;
+    setShowProviderModal(false);
     setReviewing(true);
     setMessage("");
 
     try {
       const nextReview = await api<Review>(`/reviews/${submissionId}/run`, {
         method: "POST",
-        body: JSON.stringify({ provider: "gemini" }),
+        body: JSON.stringify({ provider }),
       });
       setReview(nextReview);
       const score = nextReview.teacherOverrideScore ?? nextReview.aiScore;
@@ -761,7 +765,7 @@ export default function ReviewSubmission() {
                   <Button
                     variant="secondary"
                     className="w-full"
-                    onClick={runReview}
+                    onClick={() => setShowProviderModal(true)}
                     loading={reviewing}
                   >
                     <Icon.Sparkles className="h-3.5 w-3.5" />
@@ -773,6 +777,61 @@ export default function ReviewSubmission() {
           </aside>
         </div>
       </div>
+      <Modal
+        open={showProviderModal}
+        onClose={() => setShowProviderModal(false)}
+        title="Choose AI model"
+        description="Select which model to use for this review."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowProviderModal(false)}>Cancel</Button>
+            <Button onClick={() => runReview(selectedProvider)}>
+              <Icon.Sparkles className="h-3.5 w-3.5" />
+              Run review
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-2">
+          {(["nvidia", "gemini"] as const).map((p) => {
+            const label = p === "nvidia" ? "Gemma 4 31B" : "Gemini 2.5 Flash";
+            const sub = p === "nvidia" ? "NVIDIA Build · Free tier available" : "Google · Pay per token";
+            const isSelected = selectedProvider === p;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setSelectedProvider(p)}
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
+                  isSelected
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                    : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]/60",
+                )}
+              >
+                <div className={cn(
+                  "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center",
+                  isSelected ? "border-[var(--accent)]" : "border-[var(--fg-muted)]",
+                )}>
+                  {isSelected && <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[var(--fg)]">{label}</span>
+                    {p === "nvidia" && (
+                      <span className="rounded-full bg-[var(--success-soft)] px-1.5 py-px text-[10px] font-semibold text-[var(--success)]">
+                        Default
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-[var(--fg-muted)]">{sub}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Modal>
     </TeacherShell>
   );
 }

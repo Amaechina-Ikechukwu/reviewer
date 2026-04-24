@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.3",
     "mime-types": "^2.1.35",
     "nodemailer": "^8.0.4",
+    "openai": "^6.34.0",
     "postgres": "^3.4.7"
   },
   "devDependencies": {

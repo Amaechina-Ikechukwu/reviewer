@@ -5,7 +5,7 @@ import { db } from "../db/connection";
 import { assignments, reviews, submissions, users } from "../db/schema";
 import type { AuthenticatedRequest } from "../middleware/auth";
 import { audit } from "../services/audit";
-import { getAvailableProviders, reviewCode } from "../services/ai/reviewer";
+import { getAvailableProviders, reviewCode, type ProviderName } from "../services/ai/reviewer";
 import { readCodeFiles } from "../services/code-reader";
 import { cloneGithubRepo } from "../services/github";
 import { sendGradeRelease } from "../services/email";
@@ -91,7 +91,8 @@ export const reviewRoutes = {
     };
 
     try {
-      const result = await reviewCode(reviewInput);
+      const providerName = (body.provider === "gemini" ? "gemini" : "nvidia") as ProviderName;
+      const result = await reviewCode(reviewInput, providerName);
 
       await db
         .update(reviews)
