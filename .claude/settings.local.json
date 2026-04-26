@@ -27,7 +27,8 @@
       "Bash(npm run *)",
       "Bash(curl -s http://localhost:5173)",
       "Bash(git commit -m 'Implement proper in-browser React module loader for preview *)",
-      "Bash(git commit -m 'Fix ENOENT crash on getFiles and add AI review logging *)"
+      "Bash(git commit -m 'Fix ENOENT crash on getFiles and add AI review logging *)",
+      "Bash(npm install *)"
     ]
   }
 }

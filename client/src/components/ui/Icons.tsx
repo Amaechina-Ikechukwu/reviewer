@@ -109,4 +109,7 @@ export const Icon = {
   Clock: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
   ),
+  FileText: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M14 3v5h5M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M9 13h6M9 17h4" /></svg>
+  ),
 };

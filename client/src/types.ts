@@ -94,6 +94,14 @@ export type ProviderInfo = {
   model: string;
 };
 
+export type ClassNote = {
+  id: string;
+  title: string;
+  filename: string;
+  createdAt: string;
+  content?: string;
+};
+
 export type StudentRecord = {
   id: string;
   email: string;

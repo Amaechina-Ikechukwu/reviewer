@@ -9,6 +9,7 @@ import type { AuthenticatedRequest } from "./middleware/auth";
 import { verifyAuth } from "./middleware/auth";
 import { audit } from "./services/audit";
 import { assignmentRoutes } from "./routes/assignments";
+import { classNoteRoutes } from "./routes/classNotes";
 import { auditLogRoutes } from "./routes/auditLogs";
 import { authRoutes } from "./routes/auth";
 import { gradebookRoutes } from "./routes/gradebook";
@@ -122,6 +123,11 @@ addRoute("GET", "/api/gradebook", gradebookRoutes.get);
 addRoute("GET", "/api/teachers/join-link", teacherRoutes.getJoinLink);
 addRoute("GET", "/api/teachers/join/:code", teacherRoutes.getTeacherByCode, false);
 addRoute("POST", "/api/teachers/join/:code", teacherRoutes.joinViaLink, false);
+
+addRoute("POST", "/api/class-notes", classNoteRoutes.upload);
+addRoute("GET", "/api/class-notes", classNoteRoutes.list);
+addRoute("GET", "/api/class-notes/:id", classNoteRoutes.get);
+addRoute("DELETE", "/api/class-notes/:id", classNoteRoutes.remove);
 
 addRoute("POST", "/api/reviews/:submissionId/run", reviewRoutes.run);
 addRoute("GET", "/api/reviews/:submissionId", reviewRoutes.get);

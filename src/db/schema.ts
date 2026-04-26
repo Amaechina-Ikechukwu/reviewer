@@ -168,6 +168,15 @@ export const auditLogs = pgTable("audit_logs", {
   actorIdx: index("idx_audit_logs_actor").on(table.actorId),
 }));
 
+export const classNoteFiles = pgTable("class_note_files", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  title: varchar("title", { length: 500 }).notNull(),
+  filename: varchar("filename", { length: 500 }).notNull(),
+  content: text("content").notNull(),
+  createdBy: uuid("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type Assignment = typeof assignments.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
@@ -175,3 +184,4 @@ export type Review = typeof reviews.$inferSelect;
 export type AuthToken = typeof authTokens.$inferSelect;
 export type SubmissionOverride = typeof submissionOverrides.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type ClassNoteFile = typeof classNoteFiles.$inferSelect;

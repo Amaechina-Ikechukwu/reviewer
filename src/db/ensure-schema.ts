@@ -69,6 +69,18 @@ export async function ensureSchema() {
     await db.execute(sqlTag`CREATE UNIQUE INDEX IF NOT EXISTS "users_join_code_unique" ON "users" ("join_code")`);
 
 
+    // Class note files
+    await db.execute(sqlTag`
+      CREATE TABLE IF NOT EXISTS "class_note_files" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "title" varchar(500) NOT NULL,
+        "filename" varchar(500) NOT NULL,
+        "content" text NOT NULL,
+        "created_by" uuid NOT NULL REFERENCES "users"("id"),
+        "created_at" timestamp with time zone DEFAULT now() NOT NULL
+      )
+    `);
+
     console.log("[schema] Production schema sync complete");
   } catch (err) {
     console.error("[schema] Schema sync failed:", err);

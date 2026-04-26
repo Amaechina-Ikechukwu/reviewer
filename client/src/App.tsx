@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import AuditLogsPage from "./pages/AuditLogsPage";
+import ClassNotesPage from "./pages/ClassNotesPage";
+import StudentNotesPage from "./pages/StudentNotesPage";
 import GradebookPage from "./pages/GradebookPage";
 import CreateAssignment from "./pages/CreateAssignment";
 import ImportSubmissions from "./pages/ImportSubmissions";
@@ -132,6 +134,14 @@ export default function App() {
           </ProtectedRoute>
         )}
       />
+      <Route
+        path="/teacher/notes"
+        element={(
+          <ProtectedRoute role="teacher">
+            <ClassNotesPage />
+          </ProtectedRoute>
+        )}
+      />
 
       <Route
         path="/student"
@@ -162,6 +172,14 @@ export default function App() {
         element={(
           <ProtectedRoute role="student">
             <StudentResultDetail />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/student/notes"
+        element={(
+          <ProtectedRoute role="student">
+            <StudentNotesPage />
           </ProtectedRoute>
         )}
       />
