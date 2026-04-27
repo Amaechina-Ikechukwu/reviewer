@@ -122,10 +122,12 @@ export default function TeacherDashboard() {
   }
 
   const recentSubmissions = useMemo(() => submissions.slice(0, 6), [submissions]);
-  const upcomingAssignments = useMemo(
-    () => [...assignments].sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime()).slice(0, 5),
-    [assignments],
-  );
+  const upcomingAssignments = useMemo(() => {
+    const now = new Date();
+    return [...assignments]
+      .filter((a) => new Date(a.closesAt) > now)
+      .sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime());
+  }, [assignments]);
   const completedReviews = Object.values(reviews).filter((review) => review.status === "completed").length;
   const pendingReviews = submissions.length - completedReviews;
 
