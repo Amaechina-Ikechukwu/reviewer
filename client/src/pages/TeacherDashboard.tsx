@@ -256,20 +256,29 @@ export default function TeacherDashboard() {
                         {formatDateTime(assignment.closesAt)}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      title="Delete assignment"
-                      onClick={() => {
-                        setDeleteTarget(assignment);
-                        setDeleteAction("delete_all");
-                        setMoveTargetId("");
-                        setMoveNewTitle("");
-                        setDeleteError("");
-                      }}
-                      className="shrink-0 rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                    >
-                      <Icon.Trash className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Link
+                        to={`/teacher/assignments/${assignment.id}/edit`}
+                        title="Edit assignment"
+                        className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                      >
+                        <Icon.Edit className="h-3.5 w-3.5" />
+                      </Link>
+                      <button
+                        type="button"
+                        title="Delete assignment"
+                        onClick={() => {
+                          setDeleteTarget(assignment);
+                          setDeleteAction("delete_all");
+                          setMoveTargetId("");
+                          setMoveNewTitle("");
+                          setDeleteError("");
+                        }}
+                        className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                      >
+                        <Icon.Trash className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </CardContent>

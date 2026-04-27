@@ -6,6 +6,7 @@ import ClassNotesPage from "./pages/ClassNotesPage";
 import StudentNotesPage from "./pages/StudentNotesPage";
 import GradebookPage from "./pages/GradebookPage";
 import CreateAssignment from "./pages/CreateAssignment";
+import EditAssignment from "./pages/EditAssignment";
 import ImportSubmissions from "./pages/ImportSubmissions";
 import JoinClass from "./pages/JoinClass";
 import Login from "./pages/Login";
@@ -83,6 +84,14 @@ export default function App() {
         element={(
           <ProtectedRoute role="teacher">
             <CreateAssignment />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/assignments/:id/edit"
+        element={(
+          <ProtectedRoute role="teacher">
+            <EditAssignment />
           </ProtectedRoute>
         )}
       />

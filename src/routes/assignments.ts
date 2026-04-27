@@ -191,6 +191,79 @@ export const assignmentRoutes = {
     return json({ deleted: true, title: assignment.title });
   },
 
+  async update(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+
+    if (user.role !== "teacher") {
+      return json({ error: "Only teachers can edit assignments." }, 403);
+    }
+
+    const [existing] = await db
+      .select()
+      .from(assignments)
+      .where(and(eq(assignments.id, params.id), eq(assignments.createdBy, user.userId)))
+      .limit(1);
+
+    if (!existing) return json({ error: "Assignment not found." }, 404);
+
+    const body = await parseJson<AssignmentBody>(request);
+
+    const newAllowGithub = body.allowGithub !== undefined ? body.allowGithub : existing.allowGithub;
+    const newAllowFileUpload = body.allowFileUpload !== undefined ? body.allowFileUpload : existing.allowFileUpload;
+    if (!newAllowGithub && !newAllowFileUpload) {
+      return json({ error: "At least one submission method must be enabled." }, 400);
+    }
+
+    type AssignmentUpdate = {
+      title?: string;
+      description?: string;
+      rubric?: string;
+      sourceType?: string;
+      sourceMarkdown?: string | null;
+      sourceUrl?: string | null;
+      allowGithub?: boolean;
+      allowFileUpload?: boolean;
+      maxScore?: number;
+      classNotes?: string | null;
+      closesAt?: Date;
+    };
+
+    const updateValues: AssignmentUpdate = {};
+
+    if (body.title !== undefined) updateValues.title = body.title.trim();
+    if (body.description !== undefined) updateValues.description = body.description?.trim() ?? "";
+    if (body.rubric !== undefined) updateValues.rubric = body.rubric?.trim() ?? "";
+    if (body.sourceType !== undefined) updateValues.sourceType = body.sourceType;
+    if (body.sourceMarkdown !== undefined) updateValues.sourceMarkdown = body.sourceMarkdown?.trim() || null;
+    if (body.sourceUrl !== undefined) updateValues.sourceUrl = body.sourceUrl?.trim() || null;
+    if (body.allowGithub !== undefined) updateValues.allowGithub = body.allowGithub;
+    if (body.allowFileUpload !== undefined) updateValues.allowFileUpload = body.allowFileUpload;
+    if (body.maxScore !== undefined) updateValues.maxScore = body.maxScore > 0 ? Math.round(body.maxScore) : 100;
+    if (body.classNotes !== undefined) updateValues.classNotes = body.classNotes?.trim() || null;
+
+    if (body.closesAt !== undefined) {
+      const newClosesAt = new Date(body.closesAt);
+      if (Number.isNaN(newClosesAt.getTime())) {
+        return json({ error: "Please provide a valid deadline." }, 400);
+      }
+      const existingClosesAt = new Date(existing.closesAt);
+      if (newClosesAt.getTime() !== existingClosesAt.getTime() && newClosesAt <= new Date()) {
+        return json({ error: "Please provide a valid deadline in the future." }, 400);
+      }
+      updateValues.closesAt = newClosesAt;
+    }
+
+    if (Object.keys(updateValues).length === 0) return json(existing);
+
+    const [updated] = await db
+      .update(assignments)
+      .set(updateValues)
+      .where(eq(assignments.id, params.id))
+      .returning();
+
+    return json(updated);
+  },
+
   async get(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
 
