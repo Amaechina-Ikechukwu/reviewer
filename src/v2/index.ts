@@ -1,0 +1,59 @@
+import { assignmentRoutes } from "./routes/assignments";
+import { auditLogRoutes } from "./routes/auditLogs";
+import { authRoutes } from "./routes/auth";
+import { classNoteRoutes } from "./routes/classNotes";
+import { gradebookRoutes } from "./routes/gradebook";
+import { reviewRoutes } from "./routes/reviews";
+import { studentRoutes } from "./routes/students";
+import { submissionRoutes } from "./routes/submissions";
+import { teacherRoutes } from "./routes/teachers";
+
+export type V2RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
+export type V2RouteSpec = { method: string; path: string; handler: V2RouteHandler; requiresAuth: boolean };
+
+export const v2Routes: V2RouteSpec[] = [
+  { method: "POST", path: "/v2/api/auth/register", handler: authRoutes.register, requiresAuth: false },
+  { method: "POST", path: "/v2/api/auth/login", handler: authRoutes.login, requiresAuth: false },
+  { method: "GET", path: "/v2/api/auth/me", handler: authRoutes.me, requiresAuth: true },
+  { method: "GET", path: "/v2/api/auth/token/:token", handler: authRoutes.validateToken, requiresAuth: false },
+  { method: "POST", path: "/v2/api/auth/invite/:token", handler: authRoutes.acceptInvite, requiresAuth: false },
+  { method: "POST", path: "/v2/api/auth/reset/:token", handler: authRoutes.resetPassword, requiresAuth: false },
+
+  { method: "POST", path: "/v2/api/assignments", handler: assignmentRoutes.create, requiresAuth: true },
+  { method: "GET", path: "/v2/api/assignments", handler: assignmentRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/assignments/:id", handler: assignmentRoutes.get, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/assignments/:id", handler: assignmentRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/assignments/:id", handler: assignmentRoutes.remove, requiresAuth: true },
+
+  { method: "POST", path: "/v2/api/submissions", handler: submissionRoutes.create, requiresAuth: true },
+  { method: "POST", path: "/v2/api/submissions/import", handler: submissionRoutes.import, requiresAuth: true },
+  { method: "GET", path: "/v2/api/submissions", handler: submissionRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/submissions/:id", handler: submissionRoutes.get, requiresAuth: true },
+  { method: "GET", path: "/v2/api/submissions/:id/files", handler: submissionRoutes.getFiles, requiresAuth: true },
+  { method: "POST", path: "/v2/api/submissions/submit-for-student", handler: submissionRoutes.submitForStudent, requiresAuth: true },
+
+  { method: "GET", path: "/v2/api/students", handler: studentRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/students/my-overrides", handler: studentRoutes.myOverrides, requiresAuth: true },
+  { method: "POST", path: "/v2/api/students", handler: studentRoutes.create, requiresAuth: true },
+  { method: "POST", path: "/v2/api/students/merge", handler: studentRoutes.merge, requiresAuth: true },
+  { method: "POST", path: "/v2/api/students/reset-password", handler: studentRoutes.resetPassword, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/students/:studentId", handler: studentRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/students/:studentId", handler: studentRoutes.delete, requiresAuth: true },
+  { method: "POST", path: "/v2/api/students/:studentId/open-submission", handler: studentRoutes.openSubmission, requiresAuth: true },
+
+  { method: "GET", path: "/v2/api/audit-logs", handler: auditLogRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/gradebook", handler: gradebookRoutes.get, requiresAuth: true },
+
+  { method: "GET", path: "/v2/api/teachers/join-link", handler: teacherRoutes.getJoinLink, requiresAuth: true },
+  { method: "GET", path: "/v2/api/teachers/join/:code", handler: teacherRoutes.getTeacherByCode, requiresAuth: false },
+  { method: "POST", path: "/v2/api/teachers/join/:code", handler: teacherRoutes.joinViaLink, requiresAuth: false },
+
+  { method: "POST", path: "/v2/api/class-notes", handler: classNoteRoutes.upload, requiresAuth: true },
+  { method: "GET", path: "/v2/api/class-notes", handler: classNoteRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/class-notes/:id", handler: classNoteRoutes.get, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/class-notes/:id", handler: classNoteRoutes.remove, requiresAuth: true },
+
+  { method: "POST", path: "/v2/api/reviews/:submissionId/run", handler: reviewRoutes.run, requiresAuth: true },
+  { method: "GET", path: "/v2/api/reviews/:submissionId", handler: reviewRoutes.get, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/reviews/:submissionId/override", handler: reviewRoutes.override, requiresAuth: true },
+];

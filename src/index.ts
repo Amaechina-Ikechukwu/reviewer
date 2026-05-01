@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { ensureSchema } from "./db/ensure-schema";
 import { startReminderJob } from "./jobs/reminders";
+import { startReminderJobV2 } from "./v2/jobs/reminders";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import mime from "mime-types";
@@ -17,6 +18,7 @@ import { reviewRoutes } from "./routes/reviews";
 import { studentRoutes } from "./routes/students";
 import { submissionRoutes } from "./routes/submissions";
 import { teacherRoutes } from "./routes/teachers";
+import { v2Routes } from "./v2";
 
 type RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 
@@ -134,6 +136,11 @@ addRoute("POST", "/api/reviews/:submissionId/run", reviewRoutes.run);
 addRoute("GET", "/api/reviews/:submissionId", reviewRoutes.get);
 addRoute("PATCH", "/api/reviews/:submissionId/override", reviewRoutes.override);
 
+// /v2 — Firestore-backed mirror of the same routes
+for (const r of v2Routes) {
+  addRoute(r.method, r.path, r.handler, r.requiresAuth);
+}
+
 const port = Number(process.env.PORT || 3000);
 
 Bun.serve({
@@ -236,7 +243,7 @@ Bun.serve({
       });
     }
 
-    if (pathname.startsWith("/api/")) {
+    if (pathname.startsWith("/api/") || pathname.startsWith("/v2/api/")) {
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
         headers: {
@@ -256,5 +263,8 @@ mkdirSync(UPLOAD_DIR, { recursive: true });
 // Sync schema on startup (idempotent — safe to run every deploy)
 ensureSchema().then(() => {
   startReminderJob();
+  if (process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    startReminderJobV2();
+  }
   console.log(`Reviewer app listening on port ${port}`);
 });

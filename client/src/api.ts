@@ -1,4 +1,9 @@
-const API_BASE = "/api";
+function getApiBase() {
+  if (typeof window !== "undefined" && window.location.pathname.startsWith("/v2")) {
+    return "/v2/api";
+  }
+  return "/api";
+}
 
 let authToken: string | null = localStorage.getItem("token");
 
@@ -22,7 +27,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await fetch(`${getApiBase()}${path}`, {
     ...init,
     headers,
   });

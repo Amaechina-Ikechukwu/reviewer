@@ -1,0 +1,391 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
+import type { AuthenticatedRequest } from "../../middleware/auth";
+import { audit } from "../services/audit";
+import { readSubmissionFiles } from "../../services/code-reader";
+import { sendSubmissionNotification } from "../../services/email";
+import { extractZip } from "../../services/file-extractor";
+import { cloneGithubRepo } from "../../services/github";
+import { isWithinDeadline } from "../../utils/deadline";
+import { json } from "../../utils/json";
+import { hashPassword } from "../../utils/password";
+import { data } from "../data";
+import { COLLECTIONS } from "../firebase";
+
+const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 52_428_800);
+
+type ImportEntry = { fullName?: string; email?: string; githubUrl?: string };
+
+function generatePassword() {
+  return `Std-${randomBytes(5).toString("base64url")}`;
+}
+
+function slugifyName(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.+|\.+$/g, "") || "student";
+}
+
+function normalizeGithubUrl(value?: string | null) {
+  const trimmed = value?.trim() || "";
+  if (!trimmed) return "";
+  const noLabel = trimmed.replace(/^(link|github|repo|repository)\s*:\s*/i, "").trim();
+  if (/^https?:\/\/github\.com\/[^\s]+$/i.test(noLabel)) return noLabel;
+  const m1 = noLabel.match(/^([a-z0-9_.-]+\/[a-z0-9_.-]+(?:\.git)?)$/i);
+  if (m1) return `https://github.com/${m1[1]}`;
+  const m2 = noLabel.match(/github\.com\/([a-z0-9_.-]+\/[a-z0-9_.-]+(?:\.git)?)/i);
+  if (m2) return `https://github.com/${m2[1]}`;
+  return noLabel;
+}
+
+async function createHistoricalEmail(fullName: string) {
+  const base = slugifyName(fullName);
+  for (let i = 1; i <= 100; i++) {
+    const email = i === 1 ? `${base}@historical.reviewai.local` : `${base}.${i}@historical.reviewai.local`;
+    const exists = await data.findOne(COLLECTIONS.users, [["email", "==", email]]);
+    if (!exists) return email;
+  }
+  return `${base}.${randomUUID()}@historical.reviewai.local`;
+}
+
+const isHistorical = (e: string) => e.endsWith("@historical.reviewai.local");
+
+function normalizeName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+}
+function nameMatchScore(a: string, b: string): number {
+  const na = normalizeName(a);
+  const nb = normalizeName(b);
+  if (na === nb) return 1;
+  const ta = new Set(na.split(" "));
+  const tb = new Set(nb.split(" "));
+  const inter = [...ta].filter((t) => tb.has(t)).length;
+  const union = new Set([...ta, ...tb]).size;
+  return inter / union;
+}
+async function findStudentByFuzzyName(fullName: string) {
+  const all = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+  let best: any = null;
+  let bestScore = 0;
+  for (const s of all) {
+    const score = nameMatchScore(fullName, s.fullName);
+    if (score > bestScore) { bestScore = score; best = s; }
+  }
+  return bestScore >= 0.4 ? best : null;
+}
+
+async function removeFiles(filePath?: string | null) {
+  if (!filePath || !existsSync(filePath)) return;
+  await rm(filePath, { recursive: true, force: true });
+}
+
+export const submissionRoutes = {
+  async create(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "student") return json({ error: "Only students can submit assignments." }, 403);
+
+    const ct = request.headers.get("content-type") || "";
+    let assignmentId = "";
+    let submissionType: "github" | "file_upload";
+    let githubUrl: string | null = null;
+    let uploadedFile: File | null = null;
+
+    if (ct.includes("multipart/form-data")) {
+      const fd = await request.formData();
+      assignmentId = String(fd.get("assignmentId") || "");
+      submissionType = "file_upload";
+      uploadedFile = fd.get("file") as File | null;
+    } else {
+      const body = await request.json() as { assignmentId?: string; githubUrl?: string };
+      assignmentId = String(body.assignmentId || "");
+      submissionType = "github";
+      githubUrl = body.githubUrl?.trim() || null;
+    }
+
+    if (!assignmentId) return json({ error: "Assignment is required." }, 400);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, assignmentId);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    if (submissionType === "github" && !assignment.allowGithub) return json({ error: "GitHub submissions are not enabled for this assignment." }, 400);
+    if (submissionType === "file_upload" && !assignment.allowFileUpload) return json({ error: "ZIP uploads are not enabled for this assignment." }, 400);
+    if (uploadedFile && uploadedFile.size > MAX_FILE_SIZE) return json({ error: "Uploaded file is too large." }, 400);
+
+    const deadline = isWithinDeadline(new Date(assignment.opensAt), new Date(assignment.closesAt));
+    if (!deadline.canSubmit) {
+      const ov = await data.findOne<any>(COLLECTIONS.submissionOverrides, [
+        ["studentId", "==", user.userId],
+        ["assignmentId", "==", assignmentId],
+      ]);
+      if (!ov) return json({ error: deadline.reason }, 400);
+      if (ov.closesAt && new Date() > new Date(ov.closesAt)) return json({ error: "Your extended deadline has also passed." }, 400);
+    }
+
+    const previous = await data.findOne(COLLECTIONS.submissions, [
+      ["assignmentId", "==", assignmentId],
+      ["studentId", "==", user.userId],
+    ]);
+    if (previous) return json({ error: "You have already submitted for this assignment." }, 409);
+
+    const submissionId = randomUUID();
+    let filePath: string | null = null;
+
+    if (submissionType === "file_upload") {
+      if (!uploadedFile) return json({ error: "Please attach a ZIP file." }, 400);
+      const dest = join(UPLOAD_DIR, submissionId);
+      await extractZip(uploadedFile, dest);
+      filePath = dest;
+    } else {
+      if (!githubUrl) return json({ error: "Please provide a GitHub URL." }, 400);
+    }
+
+    const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
+      assignmentId,
+      studentId: user.userId,
+      submissionType,
+      githubUrl,
+      filePath,
+      submittedAt: new Date(),
+      isLate: false,
+    });
+
+    const teacher = await data.getById<any>(COLLECTIONS.users, assignment.createdBy);
+    if (teacher) {
+      const student = await data.getById<any>(COLLECTIONS.users, user.userId);
+      sendSubmissionNotification(teacher, { fullName: student?.fullName || "A student" }, assignment, submissionId).catch(console.error);
+    }
+
+    audit({ actorId: user.userId, action: "submission.created", targetType: "submission", targetId: submissionId, details: { assignmentId, submissionType } });
+    return json(submission, 201);
+  },
+
+  async submitForStudent(request: Request) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (actor.role !== "teacher") return json({ error: "Only teachers can submit on behalf of a student." }, 403);
+
+    const body = await request.json() as { studentId?: string; assignmentId?: string; githubUrl?: string };
+    const { studentId, assignmentId } = body;
+    if (!studentId || !assignmentId) return json({ error: "studentId and assignmentId are required." }, 400);
+
+    const githubUrl = normalizeGithubUrl(body.githubUrl);
+    if (!githubUrl) return json({ error: "A GitHub URL is required." }, 400);
+
+    const student = await data.getById<any>(COLLECTIONS.users, studentId);
+    if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, assignmentId);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    const existing = await data.findOne(COLLECTIONS.submissions, [["assignmentId", "==", assignmentId], ["studentId", "==", studentId]]);
+    if (existing) return json({ error: `${student.fullName} has already submitted for this assignment.` }, 409);
+
+    const submissionId = randomUUID();
+    const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
+      assignmentId,
+      studentId,
+      submissionType: "github",
+      githubUrl,
+      filePath: null,
+      submittedAt: new Date(),
+      isLate: false,
+    });
+
+    audit({ actorId: actor.userId, action: "submission.created_by_teacher", targetType: "submission", targetId: submissionId, details: { studentId, assignmentId, githubUrl } });
+    return json(submission, 201);
+  },
+
+  async list(request: Request) {
+    const url = new URL(request.url);
+    const user = (request as AuthenticatedRequest).user;
+    const assignmentId = url.searchParams.get("assignment_id");
+    const date = url.searchParams.get("date");
+
+    const where: any[] = [];
+    if (user.role === "student") where.push(["studentId", "==", user.userId]);
+    if (assignmentId) where.push(["assignmentId", "==", assignmentId]);
+    if (date) {
+      where.push(["submittedAt", ">=", new Date(`${date}T00:00:00`)]);
+      where.push(["submittedAt", "<=", new Date(`${date}T23:59:59.999`)]);
+    }
+
+    const subs = await data.findMany<any>(COLLECTIONS.submissions, {
+      where: where.length ? where : undefined,
+      orderBy: ["submittedAt", "desc"],
+    });
+
+    // Hydrate student + assignment fields (mirror the LEFT JOIN result shape)
+    const studentIds = [...new Set(subs.map((s) => s.studentId))];
+    const assignmentIds = [...new Set(subs.map((s) => s.assignmentId))];
+    const [students, assignments] = await Promise.all([
+      Promise.all(studentIds.map((id) => data.getById<any>(COLLECTIONS.users, id))),
+      Promise.all(assignmentIds.map((id) => data.getById<any>(COLLECTIONS.assignments, id))),
+    ]);
+    const sMap = new Map(students.filter(Boolean).map((s) => [s!.id, s]));
+    const aMap = new Map(assignments.filter(Boolean).map((a) => [a!.id, a]));
+
+    const rows = subs.map((submission) => {
+      const s = sMap.get(submission.studentId);
+      const a = aMap.get(submission.assignmentId);
+      return {
+        submission,
+        studentName: s?.fullName || null,
+        studentEmail: s?.email || null,
+        assignmentTitle: a?.title || null,
+        assignmentDefaultProvider: a?.defaultProvider || null,
+      };
+    });
+
+    return json(rows);
+  },
+
+  async get(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+    if (user.role === "student" && submission.studentId !== user.userId) return json({ error: "Forbidden" }, 403);
+
+    const [assignment, student] = await Promise.all([
+      data.getById<any>(COLLECTIONS.assignments, submission.assignmentId),
+      data.getById<any>(COLLECTIONS.users, submission.studentId),
+    ]);
+
+    return json({
+      submission,
+      assignment,
+      studentName: student?.fullName || null,
+      studentEmail: student?.email || null,
+    });
+  },
+
+  async getFiles(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+    if (user.role === "student" && submission.studentId !== user.userId) return json({ error: "Forbidden" }, 403);
+
+    let filePath = submission.filePath;
+    if (!filePath || !existsSync(filePath)) {
+      if (submission.githubUrl) {
+        const dest = join(UPLOAD_DIR, submission.id);
+        try {
+          await cloneGithubRepo(submission.githubUrl, dest);
+          filePath = dest;
+          await data.update(COLLECTIONS.submissions, submission.id, { filePath });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[v2.getFiles] Re-clone failed:`, msg);
+          return json({ files: [], warning: "Could not fetch files — repository may be private or unavailable." });
+        }
+      } else {
+        return json({ files: [], warning: "Uploaded files are no longer available on this server." });
+      }
+    }
+
+    const files = await readSubmissionFiles(filePath);
+    return json({ files });
+  },
+
+  async import(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "teacher") return json({ error: "Only teachers can import submissions." }, 403);
+
+    const body = await request.json().catch(() => ({})) as {
+      assignmentId?: string; assignmentTitle?: string; entries?: ImportEntry[];
+    };
+
+    const entries = body.entries || [];
+    if (entries.length === 0) return json({ error: "At least one import entry is required." }, 400);
+
+    let assignment: any;
+    if (body.assignmentId?.trim()) {
+      assignment = await data.getById<any>(COLLECTIONS.assignments, body.assignmentId.trim());
+      if (!assignment) return json({ error: "Assignment not found." }, 404);
+    } else if (body.assignmentTitle?.trim()) {
+      const titleSearch = body.assignmentTitle.trim().toLowerCase();
+      const all = await data.findMany<any>(COLLECTIONS.assignments, {});
+      assignment = all.find((a) => String(a.title).toLowerCase().includes(titleSearch));
+      if (!assignment) return json({ error: `No assignment found matching "${body.assignmentTitle}".` }, 404);
+    } else {
+      return json({ error: "Provide assignmentTitle to identify the assignment." }, 400);
+    }
+
+    if (!assignment.allowGithub) return json({ error: "This assignment does not allow GitHub submissions." }, 400);
+
+    const results: any[] = [];
+    for (const entry of entries) {
+      const fullName = entry.fullName?.trim();
+      const githubUrl = normalizeGithubUrl(entry.githubUrl);
+      const email = entry.email?.trim().toLowerCase();
+      if (!fullName || !githubUrl) return json({ error: "Each import row must include full name and GitHub URL." }, 400);
+
+      let student: any = null;
+      let resolvedEmail = email || "";
+      let mappedByFuzzy = false;
+
+      if (email) student = await data.findOne<any>(COLLECTIONS.users, [["email", "==", email]]);
+      if (!student) {
+        const all = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+        student = all.find((u) => String(u.fullName).toLowerCase() === fullName.toLowerCase()) || null;
+      }
+      if (!student) {
+        const fuzzy = await findStudentByFuzzyName(fullName);
+        if (fuzzy) { student = fuzzy; mappedByFuzzy = true; }
+      }
+
+      if (student) resolvedEmail = student.email;
+      else resolvedEmail = email || await createHistoricalEmail(fullName);
+
+      let createdStudent = false;
+      if (student && student.role !== "student") {
+        return json({ error: `The account for ${resolvedEmail} already exists and is not a student account.` }, 400);
+      }
+
+      if (!student) {
+        const password = generatePassword();
+        const newId = randomUUID();
+        student = await data.insert<any>(COLLECTIONS.users, newId, {
+          email: resolvedEmail,
+          fullName,
+          passwordHash: await hashPassword(password),
+          role: "student",
+          joinCode: null,
+          teacherId: null,
+        });
+        createdStudent = true;
+      }
+
+      const previous = await data.findOne<any>(COLLECTIONS.submissions, [["assignmentId", "==", assignment.id], ["studentId", "==", student.id]]);
+      if (previous) {
+        await removeFiles(previous.filePath);
+        await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", previous.id]]);
+        await data.del(COLLECTIONS.submissions, previous.id);
+      }
+
+      const submissionId = randomUUID();
+      const dest = join(UPLOAD_DIR, submissionId);
+      await cloneGithubRepo(githubUrl, dest);
+
+      const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
+        assignmentId: assignment.id,
+        studentId: student.id,
+        submissionType: "github",
+        githubUrl,
+        filePath: dest,
+        submittedAt: new Date(),
+        isLate: false,
+      });
+
+      results.push({
+        email: email || (resolvedEmail && !isHistorical(resolvedEmail) ? resolvedEmail : undefined),
+        fullName: student.fullName,
+        githubUrl,
+        createdStudent,
+        mappedByFuzzy,
+        submissionId: submission.id,
+      });
+    }
+
+    return json({ imported: results }, 201);
+  },
+};
