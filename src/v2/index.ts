@@ -24,6 +24,9 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "GET", path: "/v2/api/assignments/:id", handler: assignmentRoutes.get, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/assignments/:id", handler: assignmentRoutes.update, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/assignments/:id", handler: assignmentRoutes.remove, requiresAuth: true },
+  { method: "GET", path: "/v2/api/assignments/:id/groups", handler: assignmentRoutes.listGroups, requiresAuth: true },
+  { method: "PUT", path: "/v2/api/assignments/:id/groups", handler: assignmentRoutes.updateGroups, requiresAuth: true },
+  { method: "POST", path: "/v2/api/assignments/:id/groups/regenerate", handler: assignmentRoutes.regenerateGroups, requiresAuth: true },
 
   { method: "POST", path: "/v2/api/submissions", handler: submissionRoutes.create, requiresAuth: true },
   { method: "POST", path: "/v2/api/submissions/import", handler: submissionRoutes.import, requiresAuth: true },

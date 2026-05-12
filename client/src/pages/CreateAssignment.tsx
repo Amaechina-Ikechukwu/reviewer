@@ -25,6 +25,8 @@ export default function CreateAssignment() {
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [maxScore, setMaxScore] = useState(100);
   const [classNotes, setClassNotes] = useState("");
+  const [isGroupAssignment, setIsGroupAssignment] = useState(false);
+  const [groupCount, setGroupCount] = useState(3);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Assignment | null>(null);
@@ -65,6 +67,8 @@ export default function CreateAssignment() {
           allowFileUpload,
           defaultProvider: "gemini",
           classNotes: classNotes || null,
+          isGroupAssignment,
+          groupCount: isGroupAssignment ? groupCount : 0,
         }),
       });
 
@@ -129,6 +133,12 @@ export default function CreateAssignment() {
 
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => navigate("/teacher")}>Back to dashboard</Button>
+                {created.isGroupAssignment && (
+                  <Button variant="secondary" onClick={() => navigate(`/teacher/assignments/${created.id}/groups`)}>
+                    <Icon.Users className="h-3.5 w-3.5" />
+                    Manage groups
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={resetForm}>
                   <Icon.Plus className="h-3.5 w-3.5" />
                   New assignment
@@ -263,6 +273,36 @@ export default function CreateAssignment() {
                     ZIP upload
                   </label>
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={isGroupAssignment}
+                    onChange={(e) => setIsGroupAssignment(e.target.checked)}
+                    className="h-4 w-4 accent-[var(--accent)]"
+                  />
+                  Group project
+                </label>
+                {isGroupAssignment && (
+                  <div className="flex flex-col gap-2">
+                    <Label>
+                      Number of groups
+                      <Input
+                        min={1}
+                        max={50}
+                        type="number"
+                        value={groupCount}
+                        onChange={(e) => setGroupCount(Math.max(1, Number(e.target.value) || 1))}
+                        className="max-w-[140px]"
+                      />
+                    </Label>
+                    <p className="text-xs text-[var(--fg-muted)]">
+                      Students will be auto-distributed across {groupCount} group{groupCount === 1 ? "" : "s"}. You can drag-and-drop members afterwards. Every member of a group gets the same score.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <Label>

@@ -122,11 +122,27 @@ export const submissionRoutes = {
       if (ov.closesAt && new Date() > new Date(ov.closesAt)) return json({ error: "Your extended deadline has also passed." }, 400);
     }
 
-    const previous = await data.findOne(COLLECTIONS.submissions, [
-      ["assignmentId", "==", assignmentId],
-      ["studentId", "==", user.userId],
-    ]);
-    if (previous) return json({ error: "You have already submitted for this assignment." }, 409);
+    let groupId: string | null = null;
+    if (assignment.isGroupAssignment) {
+      const groups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
+        where: [["assignmentId", "==", assignmentId]],
+      });
+      const myGroup = groups.find((g) => (g.memberIds || []).includes(user.userId));
+      if (!myGroup) return json({ error: "You are not assigned to a group for this project." }, 403);
+      groupId = myGroup.id;
+
+      const previousGroup = await data.findOne(COLLECTIONS.submissions, [
+        ["assignmentId", "==", assignmentId],
+        ["groupId", "==", groupId],
+      ]);
+      if (previousGroup) return json({ error: "Your group has already submitted for this assignment." }, 409);
+    } else {
+      const previous = await data.findOne(COLLECTIONS.submissions, [
+        ["assignmentId", "==", assignmentId],
+        ["studentId", "==", user.userId],
+      ]);
+      if (previous) return json({ error: "You have already submitted for this assignment." }, 409);
+    }
 
     const submissionId = randomUUID();
     let filePath: string | null = null;
@@ -143,6 +159,7 @@ export const submissionRoutes = {
     const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
       assignmentId,
       studentId: user.userId,
+      groupId,
       submissionType,
       githubUrl,
       filePath,
@@ -177,13 +194,26 @@ export const submissionRoutes = {
     const assignment = await data.getById<any>(COLLECTIONS.assignments, assignmentId);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
 
-    const existing = await data.findOne(COLLECTIONS.submissions, [["assignmentId", "==", assignmentId], ["studentId", "==", studentId]]);
-    if (existing) return json({ error: `${student.fullName} has already submitted for this assignment.` }, 409);
+    let groupId: string | null = null;
+    if (assignment.isGroupAssignment) {
+      const groups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
+        where: [["assignmentId", "==", assignmentId]],
+      });
+      const studentGroup = groups.find((g) => (g.memberIds || []).includes(studentId));
+      if (!studentGroup) return json({ error: `${student.fullName} is not in a group for this assignment.` }, 400);
+      groupId = studentGroup.id;
+      const existingGroup = await data.findOne(COLLECTIONS.submissions, [["assignmentId", "==", assignmentId], ["groupId", "==", groupId]]);
+      if (existingGroup) return json({ error: `${studentGroup.name} has already submitted for this assignment.` }, 409);
+    } else {
+      const existing = await data.findOne(COLLECTIONS.submissions, [["assignmentId", "==", assignmentId], ["studentId", "==", studentId]]);
+      if (existing) return json({ error: `${student.fullName} has already submitted for this assignment.` }, 409);
+    }
 
     const submissionId = randomUUID();
     const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
       assignmentId,
       studentId,
+      groupId,
       submissionType: "github",
       githubUrl,
       filePath: null,
@@ -202,17 +232,24 @@ export const submissionRoutes = {
     const date = url.searchParams.get("date");
 
     const where: any[] = [];
-    if (user.role === "student") where.push(["studentId", "==", user.userId]);
     if (assignmentId) where.push(["assignmentId", "==", assignmentId]);
     if (date) {
       where.push(["submittedAt", ">=", new Date(`${date}T00:00:00`)]);
       where.push(["submittedAt", "<=", new Date(`${date}T23:59:59.999`)]);
     }
 
-    const subs = await data.findMany<any>(COLLECTIONS.submissions, {
+    let subs = await data.findMany<any>(COLLECTIONS.submissions, {
       where: where.length ? where : undefined,
       orderBy: ["submittedAt", "desc"],
     });
+
+    if (user.role === "student") {
+      const myGroups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
+        where: [["memberIds", "array-contains", user.userId]],
+      });
+      const myGroupIds = new Set(myGroups.map((g) => g.id));
+      subs = subs.filter((s) => s.studentId === user.userId || (s.groupId && myGroupIds.has(s.groupId)));
+    }
 
     // Hydrate student + assignment fields (mirror the LEFT JOIN result shape)
     const studentIds = [...new Set(subs.map((s) => s.studentId))];
@@ -243,7 +280,14 @@ export const submissionRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
     if (!submission) return json({ error: "Submission not found." }, 404);
-    if (user.role === "student" && submission.studentId !== user.userId) return json({ error: "Forbidden" }, 403);
+    if (user.role === "student" && submission.studentId !== user.userId) {
+      let allowed = false;
+      if (submission.groupId) {
+        const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+        if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
+      }
+      if (!allowed) return json({ error: "Forbidden" }, 403);
+    }
 
     const [assignment, student] = await Promise.all([
       data.getById<any>(COLLECTIONS.assignments, submission.assignmentId),
@@ -262,7 +306,14 @@ export const submissionRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
     if (!submission) return json({ error: "Submission not found." }, 404);
-    if (user.role === "student" && submission.studentId !== user.userId) return json({ error: "Forbidden" }, 403);
+    if (user.role === "student" && submission.studentId !== user.userId) {
+      let allowed = false;
+      if (submission.groupId) {
+        const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+        if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
+      }
+      if (!allowed) return json({ error: "Forbidden" }, 403);
+    }
 
     let filePath = submission.filePath;
     if (!filePath || !existsSync(filePath)) {

@@ -45,4 +45,5 @@ export const COLLECTIONS = {
   submissionOverrides: "submission_overrides",
   auditLogs: "audit_logs",
   classNoteFiles: "class_note_files",
+  assignmentGroups: "assignment_groups",
 } as const;

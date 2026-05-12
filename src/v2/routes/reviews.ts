@@ -102,7 +102,13 @@ export const reviewRoutes = {
 
     if (user.role === "student") {
       const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
-      if (!submission || submission.studentId !== user.userId) return json({ error: "Forbidden" }, 403);
+      if (!submission) return json({ error: "Forbidden" }, 403);
+      let allowed = submission.studentId === user.userId;
+      if (!allowed && submission.groupId) {
+        const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+        if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
+      }
+      if (!allowed) return json({ error: "Forbidden" }, 403);
     }
     return json(review);
   },
@@ -150,10 +156,17 @@ export const reviewRoutes = {
     });
     const review = await data.getById<any>(COLLECTIONS.reviews, existing.id);
 
-    const student = await data.getById<any>(COLLECTIONS.users, submission.studentId);
-    if (student && !String(student.email).endsWith("@historical.reviewai.local")) {
+    const recipientIds = new Set<string>();
+    if (submission.studentId) recipientIds.add(submission.studentId);
+    if (submission.groupId) {
+      const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+      for (const id of group?.memberIds || []) recipientIds.add(id);
+    }
+    const recipients = await Promise.all([...recipientIds].map((id) => data.getById<any>(COLLECTIONS.users, id)));
+    for (const r of recipients) {
+      if (!r || String(r.email).endsWith("@historical.reviewai.local")) continue;
       sendGradeRelease(
-        { email: student.email, fullName: student.fullName },
+        { email: r.email, fullName: r.fullName },
         { title: assignment?.title ?? "Assignment", id: submission.assignmentId },
         {
           score: Math.round(score),

@@ -25,13 +25,23 @@ export type Assignment = {
   allowFileUpload: boolean;
   defaultProvider: ProviderName;
   classNotes: string | null;
+  isGroupAssignment?: boolean;
+  groupCount?: number;
   createdAt: string;
+};
+
+export type AssignmentGroup = {
+  id: string;
+  assignmentId: string;
+  name: string;
+  memberIds: string[];
 };
 
 export type Submission = {
   id: string;
   assignmentId: string;
   studentId: string;
+  groupId?: string | null;
   submissionType: "github" | "file_upload";
   githubUrl: string | null;
   filePath: string | null;

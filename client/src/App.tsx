@@ -7,6 +7,7 @@ import StudentNotesPage from "./pages/StudentNotesPage";
 import GradebookPage from "./pages/GradebookPage";
 import CreateAssignment from "./pages/CreateAssignment";
 import EditAssignment from "./pages/EditAssignment";
+import ManageGroups from "./pages/ManageGroups";
 import ImportSubmissions from "./pages/ImportSubmissions";
 import JoinClass from "./pages/JoinClass";
 import Login from "./pages/Login";
@@ -28,6 +29,7 @@ import V2StudentNotesPage from "./v2/pages/StudentNotesPage";
 import V2GradebookPage from "./v2/pages/GradebookPage";
 import V2CreateAssignment from "./v2/pages/CreateAssignment";
 import V2EditAssignment from "./v2/pages/EditAssignment";
+import V2ManageGroups from "./v2/pages/ManageGroups";
 import V2ImportSubmissions from "./v2/pages/ImportSubmissions";
 import V2JoinClass from "./v2/pages/JoinClass";
 import V2Login from "./v2/pages/Login";
@@ -112,6 +114,14 @@ export default function App() {
         element={(
           <ProtectedRoute role="teacher">
             <EditAssignment />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/assignments/:id/groups"
+        element={(
+          <ProtectedRoute role="teacher">
+            <ManageGroups />
           </ProtectedRoute>
         )}
       />
@@ -223,6 +233,7 @@ export default function App() {
       <Route path="/v2/teacher" element={<V2Wrapper><ProtectedRoute role="teacher"><V2TeacherDashboard /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/assignments/new" element={<V2Wrapper><ProtectedRoute role="teacher"><V2CreateAssignment /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/assignments/:id/edit" element={<V2Wrapper><ProtectedRoute role="teacher"><V2EditAssignment /></ProtectedRoute></V2Wrapper>} />
+      <Route path="/v2/teacher/assignments/:id/groups" element={<V2Wrapper><ProtectedRoute role="teacher"><V2ManageGroups /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/submissions" element={<V2Wrapper><ProtectedRoute role="teacher"><V2SubmissionsList /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/review/:submissionId" element={<V2Wrapper><ProtectedRoute role="teacher"><V2ReviewSubmission /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/students" element={<V2Wrapper><ProtectedRoute role="teacher"><V2StudentsPage /></ProtectedRoute></V2Wrapper>} />

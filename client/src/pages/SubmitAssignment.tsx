@@ -11,7 +11,9 @@ import { Input, Label, Textarea } from "../components/ui/Input";
 import { api } from "../api";
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
-import type { Assignment } from "../types";
+import type { Assignment, AssignmentGroup } from "../types";
+
+type GroupMember = { id: string; fullName: string; email: string };
 
 export default function SubmitAssignment() {
   const { assignmentId } = useParams();
@@ -19,6 +21,8 @@ export default function SubmitAssignment() {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [hasOverride, setHasOverride] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string } | null>(null);
+  const [myGroup, setMyGroup] = useState<AssignmentGroup | null>(null);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [submissionType, setSubmissionType] = useState<"github" | "file_upload">("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [notes, setNotes] = useState("");
@@ -32,6 +36,15 @@ export default function SubmitAssignment() {
       .then((data) => {
         setAssignment(data);
         if (!data.allowGithub && data.allowFileUpload) setSubmissionType("file_upload");
+        if (data.isGroupAssignment) {
+          api<{ groups: AssignmentGroup[]; members: Record<string, GroupMember>; myGroupId: string | null }>(`/assignments/${data.id}/groups`)
+            .then((res) => {
+              const g = res.groups.find((x) => x.id === res.myGroupId) || null;
+              setMyGroup(g);
+              setGroupMembers(g ? g.memberIds.map((id) => res.members[id]).filter(Boolean) : []);
+            })
+            .catch(() => {});
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load assignment"));
 
@@ -106,6 +119,35 @@ export default function SubmitAssignment() {
           </div>
         </CardContent>
       </Card>
+
+      {assignment.isGroupAssignment && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{myGroup ? myGroup.name : "Your group"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {myGroup ? (
+              <>
+                <div className="mb-2 text-xs text-[var(--fg-muted)]">
+                  Any member can submit on behalf of the group. Everyone receives the same score.
+                </div>
+                <ul className="flex flex-col gap-1.5">
+                  {groupMembers.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 px-2.5 py-1.5 text-sm">
+                      <Icon.Users className="h-3.5 w-3.5 text-[var(--fg-muted)]" />
+                      <span className="truncate">{m.fullName}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <div className="text-sm text-[var(--fg-muted)]">
+                You haven't been assigned to a group yet. Contact your teacher.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {assignment.classNotes && (
         <Card>

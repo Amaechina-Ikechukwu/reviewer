@@ -259,6 +259,15 @@ export default function TeacherDashboard() {
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      {assignment.isGroupAssignment && (
+                        <Link
+                          to={`/teacher/assignments/${assignment.id}/groups`}
+                          title="Manage groups"
+                          className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                        >
+                          <Icon.Users className="h-3.5 w-3.5" />
+                        </Link>
+                      )}
                       <Link
                         to={`/teacher/assignments/${assignment.id}/edit`}
                         title="Edit assignment"
