@@ -244,7 +244,16 @@ export const authRoutes = {
       ["token", "==", token],
       ["type", "==", type],
     ]);
-    if (!row || row.usedAt || (row.expiresAt && new Date(row.expiresAt) < new Date())) {
+    if (!row) {
+      console.error(`[validateToken] Token not found: token=${token?.slice(0, 8)}..., type=${type}`);
+      return json({ valid: false }, 200);
+    }
+    if (row.usedAt) {
+      console.error(`[validateToken] Token already used: token=${token?.slice(0, 8)}..., usedAt=${row.usedAt}`);
+      return json({ valid: false }, 200);
+    }
+    if (row.expiresAt && new Date(row.expiresAt) < new Date()) {
+      console.error(`[validateToken] Token expired: token=${token?.slice(0, 8)}..., expiresAt=${row.expiresAt}`);
       return json({ valid: false }, 200);
     }
 
