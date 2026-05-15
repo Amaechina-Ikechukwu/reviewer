@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import { marked } from "marked";
 import StudentShell from "../components/StudentShell";
 import { toast } from "../components/Toast";
@@ -18,9 +19,11 @@ type GroupMember = { id: string; fullName: string; email: string };
 export default function SubmitAssignment() {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
   const [hasOverride, setHasOverride] = useState(false);
-  const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string } | null>(null);
+  const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string; submittedByStudentId?: string; submittedByName?: string } | null>(null);
   const [myGroup, setMyGroup] = useState<AssignmentGroup | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [submissionType, setSubmissionType] = useState<"github" | "file_upload">("github");
@@ -36,6 +39,15 @@ export default function SubmitAssignment() {
       .then((data) => {
         setAssignment(data);
         if (!data.allowGithub && data.allowFileUpload) setSubmissionType("file_upload");
+        if (data.sourceType === "pdf" && data.sourcePdfPath) {
+          const token = localStorage.getItem("token");
+          fetch(`/v2/api/assignments/${data.id}/brief`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+            .then((r) => r.blob())
+            .then((blob) => setPdfBriefUrl(URL.createObjectURL(blob)))
+            .catch(() => {});
+        }
         if (data.isGroupAssignment) {
           api<{ groups: AssignmentGroup[]; members: Record<string, GroupMember>; myGroupId: string | null }>(`/assignments/${data.id}/groups`)
             .then((res) => {
@@ -52,9 +64,16 @@ export default function SubmitAssignment() {
       .then((r) => setHasOverride(r.assignmentIds.includes(assignmentId!)))
       .catch(() => setHasOverride(false));
 
-    api<Array<{ submission: { id: string; submittedAt: string } }>>(`/submissions?assignment_id=${assignmentId}`)
+    api<Array<{ submission: { id: string; submittedAt: string; studentId: string; groupId?: string | null }; studentName?: string | null }>>(`/submissions?assignment_id=${assignmentId}`)
       .then((rows) => {
-        if (rows.length > 0) setAlreadySubmitted({ submittedAt: rows[0].submission.submittedAt });
+        if (rows.length > 0) {
+          const row = rows[0];
+          setAlreadySubmitted({
+            submittedAt: row.submission.submittedAt,
+            submittedByStudentId: row.submission.studentId,
+            submittedByName: row.studentName ?? undefined,
+          });
+        }
       })
       .catch(() => {});
   }, [assignmentId]);
@@ -68,7 +87,7 @@ export default function SubmitAssignment() {
       if (submissionType === "github") {
         await api("/submissions", { method: "POST", body: JSON.stringify({ assignmentId, githubUrl, notes }) });
       } else {
-        if (!file) throw new Error("Please attach a ZIP file.");
+        if (!file) throw new Error("Please attach a ZIP or PDF file.");
         const formData = new FormData();
         formData.append("assignmentId", assignmentId);
         formData.append("file", file);
@@ -129,7 +148,7 @@ export default function SubmitAssignment() {
             {myGroup ? (
               <>
                 <div className="mb-2 text-xs text-[var(--fg-muted)]">
-                  Any member can submit on behalf of the group. Everyone receives the same score.
+                  The first member to submit represents the group. Only they can update the submission. Everyone receives the same score.
                 </div>
                 <ul className="flex flex-col gap-1.5">
                   {groupMembers.map((m) => (
@@ -168,7 +187,22 @@ export default function SubmitAssignment() {
           <CardTitle>Your submission</CardTitle>
         </CardHeader>
         <CardContent>
-          {alreadySubmitted ? (
+          {alreadySubmitted && assignment.isGroupAssignment && alreadySubmitted.submittedByStudentId !== currentUser?.id ? (
+            /* Another group member submitted — read-only */
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success-soft)] px-4 py-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success)]/20 text-[var(--success)]">
+                <Icon.Check className="h-6 w-6" />
+              </div>
+              <div className="text-base font-semibold">Already submitted</div>
+              {alreadySubmitted.submittedByName && (
+                <div className="text-sm font-medium text-[var(--fg)]">by {alreadySubmitted.submittedByName}</div>
+              )}
+              <div className="text-xs text-[var(--fg-muted)]">
+                {formatDateTime(alreadySubmitted.submittedAt)}
+              </div>
+            </div>
+          ) : alreadySubmitted && (!assignment.isGroupAssignment || isPast) ? (
+            /* Non-group already submitted, or group submitter but deadline passed */
             <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success-soft)] px-4 py-8 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success)]/20 text-[var(--success)]">
                 <Icon.Check className="h-6 w-6" />
@@ -189,7 +223,13 @@ export default function SubmitAssignment() {
               </div>
             </div>
           ) : (
+            /* Fresh submission or original group submitter updating */
             <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+              {alreadySubmitted && assignment.isGroupAssignment && (
+                <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent)]">
+                  You are updating your group&apos;s submission.
+                </div>
+              )}
               {assignment.allowGithub && assignment.allowFileUpload && (
                 <div className="inline-flex w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
                   <button
@@ -219,7 +259,7 @@ export default function SubmitAssignment() {
                   >
                     <span className="inline-flex items-center gap-1.5">
                       <Icon.Upload className="h-3.5 w-3.5" />
-                      ZIP upload
+                      File upload
                     </span>
                   </button>
                 </div>
@@ -237,8 +277,8 @@ export default function SubmitAssignment() {
                 </Label>
               ) : (
                 <Label required>
-                  ZIP file
-                  <Input accept=".zip" onChange={(e) => setFile(e.target.files?.[0] || null)} type="file" />
+                  File <span className="font-normal text-[var(--fg-muted)]">(ZIP or PDF)</span>
+                  <Input accept=".zip,.pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} type="file" />
                   {file && (
                     <div className="mt-1 inline-flex items-center gap-1.5">
                       <Badge tone="accent">{file.name}</Badge>
@@ -265,7 +305,7 @@ export default function SubmitAssignment() {
               )}
 
               <Button type="submit" loading={submitting}>
-                Submit for review
+                {alreadySubmitted ? "Update submission" : "Submit for review"}
                 <Icon.ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </form>
@@ -277,7 +317,27 @@ export default function SubmitAssignment() {
 
   return (
     <StudentShell section="dashboard">
-      {assignment.sourceMarkdown ? (
+      {assignment.sourceType === "pdf" ? (
+        <div className="flex h-[calc(100svh-56px-3rem)] gap-6 overflow-hidden">
+          <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+            <div className="flex flex-col gap-1">
+              <div className="text-xs font-medium uppercase tracking-wider text-[var(--fg-muted)]">Assignment</div>
+              <h1 className="text-3xl font-semibold leading-tight tracking-tight">{assignment.title}</h1>
+              {assignment.description && (
+                <p className="text-sm leading-relaxed text-[var(--fg-muted)]">{assignment.description}</p>
+              )}
+            </div>
+            {pdfBriefUrl ? (
+              <iframe src={pdfBriefUrl} className="flex-1 rounded-lg border border-[var(--border)]" title="Assignment brief" />
+            ) : (
+              <div className="flex flex-1 items-center justify-center text-sm text-[var(--fg-muted)]">
+                Loading brief…
+              </div>
+            )}
+          </div>
+          <div className="w-80 shrink-0 overflow-y-auto">{sidebar}</div>
+        </div>
+      ) : assignment.sourceMarkdown ? (
         <div className="flex h-[calc(100svh-56px-3rem)] gap-6 overflow-hidden">
           {/* Markdown pane — scrolls independently */}
           <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto">

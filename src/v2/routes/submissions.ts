@@ -3,10 +3,11 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { AuthenticatedRequest } from "../../middleware/auth";
+import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../../services/code-reader";
 import { sendSubmissionNotification } from "../../services/email";
-import { extractZip } from "../../services/file-extractor";
+import { extractZip, savePdf } from "../../services/file-extractor";
 import { cloneGithubRepo } from "../../services/github";
 import { isWithinDeadline } from "../../utils/deadline";
 import { json } from "../../utils/json";
@@ -109,8 +110,11 @@ export const submissionRoutes = {
     if (!assignment) return json({ error: "Assignment not found." }, 404);
 
     if (submissionType === "github" && !assignment.allowGithub) return json({ error: "GitHub submissions are not enabled for this assignment." }, 400);
-    if (submissionType === "file_upload" && !assignment.allowFileUpload) return json({ error: "ZIP uploads are not enabled for this assignment." }, 400);
+    if (submissionType === "file_upload" && !assignment.allowFileUpload) return json({ error: "File uploads are not enabled for this assignment." }, 400);
     if (uploadedFile && uploadedFile.size > MAX_FILE_SIZE) return json({ error: "Uploaded file is too large." }, 400);
+    if (uploadedFile && !uploadedFile.name.toLowerCase().endsWith(".zip") && !uploadedFile.name.toLowerCase().endsWith(".pdf")) {
+      return json({ error: "Only .zip and .pdf uploads are supported." }, 400);
+    }
 
     const deadline = isWithinDeadline(new Date(assignment.opensAt), new Date(assignment.closesAt));
     if (!deadline.canSubmit) {
@@ -131,11 +135,18 @@ export const submissionRoutes = {
       if (!myGroup) return json({ error: "You are not assigned to a group for this project." }, 403);
       groupId = myGroup.id;
 
-      const previousGroup = await data.findOne(COLLECTIONS.submissions, [
+      const previousGroup = await data.findOne<any>(COLLECTIONS.submissions, [
         ["assignmentId", "==", assignmentId],
         ["groupId", "==", groupId],
       ]);
-      if (previousGroup) return json({ error: "Your group has already submitted for this assignment." }, 409);
+      if (previousGroup) {
+        if (previousGroup.studentId !== user.userId) {
+          return json({ error: "Your group has already submitted. Only the original submitter can update it." }, 409);
+        }
+        await removeFiles(previousGroup.filePath);
+        await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", previousGroup.id]]);
+        await data.del(COLLECTIONS.submissions, previousGroup.id);
+      }
     } else {
       const previous = await data.findOne(COLLECTIONS.submissions, [
         ["assignmentId", "==", assignmentId],
@@ -148,9 +159,13 @@ export const submissionRoutes = {
     let filePath: string | null = null;
 
     if (submissionType === "file_upload") {
-      if (!uploadedFile) return json({ error: "Please attach a ZIP file." }, 400);
+      if (!uploadedFile) return json({ error: "Please attach a ZIP or PDF file." }, 400);
       const dest = join(UPLOAD_DIR, submissionId);
-      await extractZip(uploadedFile, dest);
+      if (uploadedFile.name.toLowerCase().endsWith(".pdf")) {
+        await savePdf(uploadedFile, dest);
+      } else {
+        await extractZip(uploadedFile, dest);
+      }
       filePath = dest;
     } else {
       if (!githubUrl) return json({ error: "Please provide a GitHub URL." }, 400);
@@ -179,7 +194,7 @@ export const submissionRoutes = {
 
   async submitForStudent(request: Request) {
     const actor = (request as AuthenticatedRequest).user;
-    if (actor.role !== "teacher") return json({ error: "Only teachers can submit on behalf of a student." }, 403);
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
 
     const body = await request.json() as { studentId?: string; assignmentId?: string; githubUrl?: string };
     const { studentId, assignmentId } = body;
@@ -339,7 +354,7 @@ export const submissionRoutes = {
 
   async import(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can import submissions." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const body = await request.json().catch(() => ({})) as {
       assignmentId?: string; assignmentTitle?: string; entries?: ImportEntry[];
