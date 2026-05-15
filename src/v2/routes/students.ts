@@ -42,7 +42,7 @@ export const studentRoutes = {
     });
 
     const token = generateToken();
-    await data.insert(COLLECTIONS.authTokens, randomUUID(), {
+    await data.insert(COLLECTIONS.authTokens, token, {
       userId: student.id, token, type: "invite",
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
     });
@@ -157,7 +157,7 @@ export const studentRoutes = {
     if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
 
     const token = generateToken();
-    await data.insert(COLLECTIONS.authTokens, randomUUID(), {
+    await data.insert(COLLECTIONS.authTokens, token, {
       userId: student.id, token, type: "reset",
       expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), usedAt: null,
     });

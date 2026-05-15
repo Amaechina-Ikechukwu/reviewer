@@ -13,6 +13,10 @@ function generateOtp(): string {
 }
 
 async function findAuthToken(token: string, type: string) {
+  if (!token) return null;
+  const row = await data.getById<any>(COLLECTIONS.authTokens, token);
+  if (row && row.type === type) return row;
+  // Backward compat: older tokens were stored with a random doc id and the token in a field.
   const rows = await data.findMany<any>(COLLECTIONS.authTokens, {
     where: [["token", "==", token]],
     limit: 10,
@@ -133,7 +137,7 @@ export const authRoutes = {
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
-    await data.insert<any>(COLLECTIONS.authTokens, randomUUID(), {
+    await data.insert<any>(COLLECTIONS.authTokens, token, {
       userId: target.id, token, type: "reset",
       otp, otpUsed: false,
       expiresAt, usedAt: null,

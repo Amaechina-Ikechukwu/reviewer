@@ -51,7 +51,7 @@ export const staffRoutes = {
     });
 
     const token = generateToken();
-    await data.insert(COLLECTIONS.authTokens, randomUUID(), {
+    await data.insert(COLLECTIONS.authTokens, token, {
       userId: staff.id, token, type: "invite",
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
     });
@@ -102,7 +102,7 @@ export const staffRoutes = {
 
     await data.delMany(COLLECTIONS.authTokens, [["userId", "==", id]]);
     const token = generateToken();
-    await data.insert(COLLECTIONS.authTokens, randomUUID(), {
+    await data.insert(COLLECTIONS.authTokens, token, {
       userId: id, token, type: "invite",
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
     });
