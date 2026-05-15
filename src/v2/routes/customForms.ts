@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
-import { sendFormNotification } from "../../services/email";
+import { enqueueEmailJob } from "../services/emailJobs";
 import { json, parseJson } from "../../utils/json";
 import { audit } from "../services/audit";
 import { data } from "../data";
@@ -190,7 +190,13 @@ export const customFormRoutes = {
     if (status === "open") {
       const recipients = await getFormRecipients(form);
       if (recipients.length > 0) {
-        sendFormNotification(recipients, form).catch(console.error);
+        await enqueueEmailJob({
+          kind: "form",
+          recipients,
+          payload: form,
+          actorId: user.userId,
+          idempotencyKey: `form-open:${form.id}`,
+        });
       }
     }
 
@@ -327,7 +333,13 @@ export const customFormRoutes = {
     if (becomingOpen) {
       const recipients = await getFormRecipients(updated);
       if (recipients.length > 0) {
-        sendFormNotification(recipients, updated).catch(console.error);
+        await enqueueEmailJob({
+          kind: "form",
+          recipients,
+          payload: updated,
+          actorId: user.userId,
+          idempotencyKey: `form-open:${updated.id}`,
+        });
       }
     }
 

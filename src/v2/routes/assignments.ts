@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
-import { sendAssignmentNotification, sendGroupAssignmentNotification } from "../../services/email";
+import { enqueueEmailJob } from "../services/emailJobs";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS, storageUpload, storageDownload } from "../firebase";
@@ -92,12 +92,12 @@ async function notifyGroupMembers(
     if (members.length === 0) continue;
     for (const member of members) {
       const teammates = members.filter((m) => m.id !== member.id).map((m) => m.fullName);
-      sendGroupAssignmentNotification(
-        [{ email: member.email, fullName: member.fullName }],
-        assignment,
-        g.name,
-        teammates,
-      ).catch(console.error);
+      await enqueueEmailJob({
+        kind: "group_assignment",
+        recipients: [{ email: member.email, fullName: member.fullName }],
+        payload: { assignment, groupName: g.name, teammates },
+        idempotencyKey: `group:${assignment.id}:${g.name}:${member.id}`,
+      });
     }
   }
 }
@@ -172,7 +172,13 @@ export const assignmentRoutes = {
         .filter((s) => !String(s.email).endsWith("@historical.reviewai.local"))
         .map((s) => ({ email: s.email, fullName: s.fullName }));
       if (real.length > 0) {
-        sendAssignmentNotification(real, { ...assignment, closesAt: new Date(assignment.closesAt) }).catch(console.error);
+        await enqueueEmailJob({
+          kind: "assignment",
+          recipients: real,
+          payload: { ...assignment, closesAt: new Date(assignment.closesAt).toISOString() },
+          actorId: user.userId,
+          idempotencyKey: `assignment:${id}`,
+        });
       }
     }
 

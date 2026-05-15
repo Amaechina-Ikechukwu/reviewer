@@ -12,6 +12,7 @@ import { submissionRoutes } from "./routes/submissions";
 import { staffRoutes } from "./routes/staff";
 import { teacherRoutes } from "./routes/teachers";
 import { changelogRoutes } from "./routes/changelogs";
+import { emailJobRoutes } from "./routes/emailJobs";
 
 export type V2RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 export type V2RouteSpec = { method: string; path: string; handler: V2RouteHandler; requiresAuth: boolean };
@@ -96,6 +97,8 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "PATCH", path: "/v2/api/forms/:id/responses/:responseId", handler: customFormRoutes.decideResponse, requiresAuth: true },
 
   { method: "POST", path: "/v2/api/notifications/send", handler: notificationRoutes.send, requiresAuth: true },
+
+  { method: "GET", path: "/v2/api/email-jobs/:id", handler: emailJobRoutes.get, requiresAuth: true },
 
   { method: "GET", path: "/v2/api/changelogs", handler: changelogRoutes.list, requiresAuth: false },
   { method: "POST", path: "/v2/api/changelogs", handler: changelogRoutes.create, requiresAuth: true },

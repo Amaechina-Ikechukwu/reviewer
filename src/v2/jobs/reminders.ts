@@ -1,6 +1,7 @@
-import { sendDeadlineReminder } from "../../services/email";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
+import { enqueueEmailJob } from "../services/emailJobs";
+import { logger } from "../../utils/logger";
 
 const REMINDER_HOURS = [24, 1];
 
@@ -38,11 +39,15 @@ async function checkReminders() {
         .map((s) => ({ email: s.email, fullName: s.fullName }));
 
       if (pending.length > 0) {
-        await sendDeadlineReminder(
-          pending,
-          { ...assignment, closesAt: new Date(assignment.closesAt) },
-          hours,
-        );
+        await enqueueEmailJob({
+          kind: "deadline_reminder",
+          recipients: pending,
+          payload: {
+            assignment: { ...assignment, closesAt: new Date(assignment.closesAt).toISOString() },
+            hoursLeft: hours,
+          },
+          idempotencyKey: `reminder:${assignment.id}:${hours}h`,
+        });
       }
     }
   }
@@ -50,7 +55,7 @@ async function checkReminders() {
 
 export function startReminderJobV2() {
   setInterval(() => {
-    checkReminders().catch(console.error);
+    checkReminders().catch((err) => logger.error("reminders: tick failed", { error: err instanceof Error ? err.message : String(err) }));
   }, 30 * 60 * 1000);
-  checkReminders().catch(console.error);
+  checkReminders().catch((err) => logger.error("reminders: initial tick failed", { error: err instanceof Error ? err.message : String(err) }));
 }

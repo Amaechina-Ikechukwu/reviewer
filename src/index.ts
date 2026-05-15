@@ -1,5 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { startReminderJobV2 } from "./v2/jobs/reminders";
+import { startEmailWorker } from "./v2/services/emailJobs";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import mime from "mime-types";
@@ -179,4 +180,5 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 mkdirSync(UPLOAD_DIR, { recursive: true });
 
 startReminderJobV2();
+startEmailWorker();
 console.log(`Reviewer app listening on port ${port}`);

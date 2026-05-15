@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
-import { api } from "../api";
+import { api, pollEmailJob } from "../api";
 import { toast } from "../components/Toast";
 import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
@@ -444,7 +444,7 @@ function ChangelogTab() {
       if (!entry) { toast().error("Entry not found."); setSending(false); return; }
 
       const id = await ensureEntryInDb(entry);
-      const res = await api<{ sent: number; failed: number; total: number }>(
+      const res = await api<{ jobId?: string; total: number; status?: string; sent?: number; failed?: number; message?: string }>(
         `/changelogs/${id}/notify`,
         {
           method: "POST",
@@ -456,8 +456,20 @@ function ChangelogTab() {
           }),
         },
       );
-      setResult(res);
-      toast().success(`Sent to ${res.sent} of ${res.total} recipients.`);
+      if (!res.jobId) {
+        setResult({ sent: res.sent ?? 0, failed: res.failed ?? 0, total: res.total });
+        toast().info(res.message || "No eligible recipients found.");
+      } else {
+        toast().success(`Queued for ${res.total} recipient${res.total !== 1 ? "s" : ""}.`);
+        setResult({ sent: 0, failed: 0, total: res.total });
+        const final = await pollEmailJob(res.jobId);
+        setResult({ sent: final.sent, failed: final.failed, total: final.total });
+        if (final.failed === 0) {
+          toast().success(`Delivered to ${final.sent} recipient${final.sent !== 1 ? "s" : ""}.`);
+        } else {
+          toast().info(`Delivered ${final.sent}, ${final.failed} failed.`);
+        }
+      }
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to send.");
     } finally {

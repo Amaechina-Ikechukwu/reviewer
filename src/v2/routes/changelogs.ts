@@ -3,7 +3,7 @@ import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
-import { sendChangelogNotification } from "../../services/email";
+import { enqueueEmailJob } from "../services/emailJobs";
 
 type ChangelogItem = {
   icon: string;
@@ -111,15 +111,19 @@ export const changelogRoutes = {
     }
 
     const emailHeading = body.heading?.trim() || "New Update";
-    const { sent, failed } = await sendChangelogNotification(recipients, {
-      version: entry.version,
-      title: entry.title,
-      heading: emailHeading,
-      summary: entry.summary,
-      items: entry.items || [],
+    const job = await enqueueEmailJob({
+      kind: "changelog",
+      recipients,
+      payload: {
+        version: entry.version,
+        title: entry.title,
+        heading: emailHeading,
+        summary: entry.summary,
+        items: entry.items || [],
+      },
+      actorId: user.userId,
     });
-
-    return json({ sent, failed, total: recipients.length });
+    return json({ jobId: job.id, total: job.total, status: job.status }, 202);
   },
 
   async update(request: Request, params: Record<string, string>) {

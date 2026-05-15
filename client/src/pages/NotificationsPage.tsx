@@ -6,7 +6,7 @@ import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { Input, Label, Textarea } from "../components/ui/Input";
-import { api } from "../api";
+import { api, pollEmailJob } from "../api";
 import { cn } from "../lib/cn";
 import type { Cohort } from "../types";
 
@@ -167,7 +167,7 @@ export default function NotificationsPage() {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+  const [result, setResult] = useState<{ sent: number; failed: number; total: number; status?: string } | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedPeople, setSelectedPeople] = useState<Person[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(false);
@@ -203,7 +203,7 @@ export default function NotificationsPage() {
     setSending(true);
     setResult(null);
     try {
-      const res = await api<{ sent: number; failed: number; total: number; message?: string }>(
+      const res = await api<{ jobId?: string; total: number; status?: string; sent?: number; failed?: number; message?: string }>(
         "/notifications/send",
         {
           method: "POST",
@@ -216,13 +216,22 @@ export default function NotificationsPage() {
           }),
         },
       );
-      setResult(res);
-      if (res.total === 0) {
+      if (!res.jobId) {
+        // Empty-recipients short-circuit returns synchronously with {sent,failed,total,message}
+        setResult({ sent: res.sent ?? 0, failed: res.failed ?? 0, total: res.total });
         toast().info(res.message || "No eligible recipients found.");
-      } else if (res.failed === 0) {
-        toast().success(`Sent to ${res.sent} recipient${res.sent !== 1 ? "s" : ""}.`);
+        return;
+      }
+      toast().success(`Queued for ${res.total} recipient${res.total !== 1 ? "s" : ""} — sending in the background.`);
+      setResult({ sent: 0, failed: 0, total: res.total, status: res.status });
+      const final = await pollEmailJob(res.jobId);
+      setResult({ sent: final.sent, failed: final.failed, total: final.total, status: final.status });
+      if (final.failed === 0) {
+        toast().success(`Delivered to ${final.sent} recipient${final.sent !== 1 ? "s" : ""}.`);
+      } else if (final.sent > 0) {
+        toast().info(`Delivered ${final.sent}, ${final.failed} failed.`);
       } else {
-        toast().info(`Sent ${res.sent}, failed ${res.failed}.`);
+        toast().error(`All ${final.failed} sends failed. Check the server logs.`);
       }
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to send notification.");

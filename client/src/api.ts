@@ -72,3 +72,37 @@ export function addStudentsToCohort(cohortId: string, studentIds: string[]) {
 export function removeStudentFromCohort(cohortId: string, studentId: string) {
   return api<{ removed: boolean }>(`/cohorts/${cohortId}/students/${studentId}`, { method: "DELETE" });
 }
+
+// Email-job polling — used after async bulk-send endpoints return 202 { jobId }.
+export type EmailJobStatus = {
+  id: string;
+  kind: string;
+  status: "pending" | "running" | "completed" | "failed";
+  total: number;
+  sent: number;
+  failed: number;
+  attempts: number;
+  failures: Array<{ email: string; error: string; code: string }>;
+  failureCount: number;
+  error: string | null;
+};
+
+export function getEmailJob(id: string) {
+  return api<EmailJobStatus>(`/email-jobs/${id}`);
+}
+
+export async function pollEmailJob(
+  id: string,
+  opts: { intervalMs?: number; timeoutMs?: number; onTick?: (j: EmailJobStatus) => void } = {},
+): Promise<EmailJobStatus> {
+  const intervalMs = opts.intervalMs ?? 2000;
+  const timeoutMs = opts.timeoutMs ?? 10 * 60 * 1000;
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const job = await getEmailJob(id);
+    opts.onTick?.(job);
+    if (job.status === "completed" || job.status === "failed") return job;
+    if (Date.now() > deadline) return job;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}

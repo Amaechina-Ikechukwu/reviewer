@@ -79,4 +79,5 @@ export const COLLECTIONS = {
   customFormResponses: "custom_form_responses",
   cohorts: "cohorts",
   changelogs: "changelogs",
+  emailJobs: "email_jobs",
 } as const;

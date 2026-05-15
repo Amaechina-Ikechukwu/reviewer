@@ -2,7 +2,7 @@ import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
-import { sendCustomNotification } from "../../services/email";
+import { enqueueEmailJob } from "../services/emailJobs";
 
 const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 const STAFF_ROLES = new Set(["teacher", "owner", "admin", "manager", "instructor"]);
@@ -68,7 +68,12 @@ export const notificationRoutes = {
       return json({ sent: 0, failed: 0, total: 0, message: "No eligible recipients found." });
     }
 
-    const results = await sendCustomNotification(recipients, body.subject!, body.message!);
-    return json({ sent: results.sent, failed: results.failed, total: recipients.length });
+    const job = await enqueueEmailJob({
+      kind: "custom",
+      recipients,
+      payload: { subject: body.subject!, message: body.message! },
+      actorId: user.userId,
+    });
+    return json({ jobId: job.id, total: job.total, status: job.status }, 202);
   },
 };
