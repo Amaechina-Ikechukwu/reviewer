@@ -79,7 +79,8 @@ export const changelogRoutes = {
     const entry = await data.getById<any>(COLLECTIONS.changelogs, params.id);
     if (!entry) return json({ error: "Entry not found." }, 404);
 
-    const body = await parseJson<{ target?: string; cohortId?: string; recipientIds?: string[] }>(request);
+    const body = await parseJson<{ target?: string; cohortId?: string; recipientIds?: string[]; dryRun?: boolean }>(request);
+    if (body.dryRun) return json({ dryRun: true });
     const target = body.target || "all";
     const validTargets = ["all", "students", "staff", "cohort", "individual"];
     if (!validTargets.includes(target)) return json({ error: "Invalid target audience." }, 400);

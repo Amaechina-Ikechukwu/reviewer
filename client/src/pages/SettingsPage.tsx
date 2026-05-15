@@ -348,8 +348,15 @@ function emptyItem(): FormItem {
 
 type ChangelogEntry = { id: string; version: string; title: string; summary: string };
 
+const FALLBACK_ENTRIES: ChangelogEntry[] = [
+  { id: "v2.3", version: "v2.3", title: "Notifications & Changelog", summary: "Email notification center, changelog page, role-scoped notification access." },
+  { id: "v2.2", version: "v2.2", title: "Firebase Storage & Assignment Brief Viewer", summary: "Persistent file storage, inline brief viewer, toast notifications." },
+  { id: "v2.1", version: "v2.1", title: "Roles, Cohorts, Groups & Forms", summary: "Staff hierarchy, cohort management, group projects, custom form builder." },
+  { id: "v2.0", version: "v2.0", title: "Firebase / Firestore Migration", summary: "Complete PostgreSQL to Firestore migration, Cloud Run auto-scaling." },
+];
+
 function ChangelogTab() {
-  const [entries, setEntries] = useState<ChangelogEntry[]>([]);
+  const [entries, setEntries] = useState<ChangelogEntry[]>(FALLBACK_ENTRIES);
   const [selectedId, setSelectedId] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
@@ -374,7 +381,9 @@ function ChangelogTab() {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    api<ChangelogEntry[]>("/changelogs").then(setEntries).catch(() => setEntries([]));
+    api<ChangelogEntry[]>("/changelogs").then((data) => {
+      if (data && data.length > 0) setEntries(data);
+    }).catch(() => {});
     api<Cohort[]>("/cohorts").then(setCohorts).catch(() => setCohorts([]));
   }, []);
 
@@ -398,6 +407,30 @@ function ChangelogTab() {
 
   const selectedEntry = entries.find((e) => e.id === selectedId);
 
+  async function ensureEntryInDb(entry: ChangelogEntry): Promise<string> {
+    try {
+      await api(`/changelogs/${entry.id}/notify`, { method: "POST", body: JSON.stringify({ target: "all", dryRun: true }) });
+      return entry.id;
+    } catch {
+      const created = await api<any>("/changelogs", {
+        method: "POST",
+        body: JSON.stringify({
+          version: entry.version,
+          date: "",
+          label: "stable",
+          title: entry.title,
+          summary: entry.summary,
+          motivation: "",
+          deepDive: "",
+          items: [],
+        }),
+      });
+      setEntries((prev) => prev.map((e) => e.id === entry.id ? { ...e, id: created.id } : e));
+      if (selectedId === entry.id) setSelectedId(created.id);
+      return created.id;
+    }
+  }
+
   async function handleSend() {
     if (!selectedId) { toast().error("Select a changelog entry."); return; }
     if (target === "cohort" && !cohortId) { toast().error("Select a cohort."); return; }
@@ -406,8 +439,12 @@ function ChangelogTab() {
     setSending(true);
     setResult(null);
     try {
+      const entry = entries.find((e) => e.id === selectedId);
+      if (!entry) { toast().error("Entry not found."); setSending(false); return; }
+
+      const id = await ensureEntryInDb(entry);
       const res = await api<{ sent: number; failed: number; total: number }>(
-        `/changelogs/${selectedId}/notify`,
+        `/changelogs/${id}/notify`,
         {
           method: "POST",
           body: JSON.stringify({
