@@ -49,6 +49,9 @@ export const Icon = {
   Plus: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><path d="M12 5v14M5 12h14" /></svg>
   ),
+  Minus: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M5 12h14" /></svg>
+  ),
   Menu: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><path d="M3 6h18M3 12h18M3 18h18" /></svg>
   ),
@@ -111,5 +114,11 @@ export const Icon = {
   ),
   FileText: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><path d="M14 3v5h5M6 3h8l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M9 13h6M9 17h4" /></svg>
+  ),
+  Layers: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z" /><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65" /><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65" /></svg>
+  ),
+  Shield: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /></svg>
   ),
 };

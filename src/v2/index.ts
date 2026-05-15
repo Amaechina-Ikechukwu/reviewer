@@ -2,10 +2,13 @@ import { assignmentRoutes } from "./routes/assignments";
 import { auditLogRoutes } from "./routes/auditLogs";
 import { authRoutes } from "./routes/auth";
 import { classNoteRoutes } from "./routes/classNotes";
+import { cohortRoutes } from "./routes/cohorts";
+import { customFormRoutes } from "./routes/customForms";
 import { gradebookRoutes } from "./routes/gradebook";
 import { reviewRoutes } from "./routes/reviews";
 import { studentRoutes } from "./routes/students";
 import { submissionRoutes } from "./routes/submissions";
+import { staffRoutes } from "./routes/staff";
 import { teacherRoutes } from "./routes/teachers";
 
 export type V2RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
@@ -21,7 +24,9 @@ export const v2Routes: V2RouteSpec[] = [
 
   { method: "POST", path: "/v2/api/assignments", handler: assignmentRoutes.create, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments", handler: assignmentRoutes.list, requiresAuth: true },
+  { method: "POST", path: "/v2/api/assignments/upload-brief", handler: assignmentRoutes.uploadBrief, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id", handler: assignmentRoutes.get, requiresAuth: true },
+  { method: "GET", path: "/v2/api/assignments/:id/brief", handler: assignmentRoutes.getBrief, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/assignments/:id", handler: assignmentRoutes.update, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/assignments/:id", handler: assignmentRoutes.remove, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id/groups", handler: assignmentRoutes.listGroups, requiresAuth: true },
@@ -35,6 +40,14 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "GET", path: "/v2/api/submissions/:id/files", handler: submissionRoutes.getFiles, requiresAuth: true },
   { method: "POST", path: "/v2/api/submissions/submit-for-student", handler: submissionRoutes.submitForStudent, requiresAuth: true },
 
+  { method: "GET", path: "/v2/api/cohorts", handler: cohortRoutes.list, requiresAuth: true },
+  { method: "POST", path: "/v2/api/cohorts", handler: cohortRoutes.create, requiresAuth: true },
+  { method: "GET", path: "/v2/api/cohorts/:id", handler: cohortRoutes.get, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/cohorts/:id", handler: cohortRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/cohorts/:id", handler: cohortRoutes.remove, requiresAuth: true },
+  { method: "POST", path: "/v2/api/cohorts/:id/students", handler: cohortRoutes.addStudent, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/cohorts/:id/students/:studentId", handler: cohortRoutes.removeStudent, requiresAuth: true },
+
   { method: "GET", path: "/v2/api/students", handler: studentRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/students/my-overrides", handler: studentRoutes.myOverrides, requiresAuth: true },
   { method: "POST", path: "/v2/api/students", handler: studentRoutes.create, requiresAuth: true },
@@ -46,6 +59,12 @@ export const v2Routes: V2RouteSpec[] = [
 
   { method: "GET", path: "/v2/api/audit-logs", handler: auditLogRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/gradebook", handler: gradebookRoutes.get, requiresAuth: true },
+
+  { method: "GET", path: "/v2/api/staff", handler: staffRoutes.list, requiresAuth: true },
+  { method: "POST", path: "/v2/api/staff", handler: staffRoutes.invite, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/staff/:id/role", handler: staffRoutes.updateRole, requiresAuth: true },
+  { method: "POST", path: "/v2/api/staff/:id/resend-invite", handler: staffRoutes.resendInvite, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/staff/:id", handler: staffRoutes.remove, requiresAuth: true },
 
   { method: "GET", path: "/v2/api/teachers/join-link", handler: teacherRoutes.getJoinLink, requiresAuth: true },
   { method: "GET", path: "/v2/api/teachers/join/:code", handler: teacherRoutes.getTeacherByCode, requiresAuth: false },
@@ -59,4 +78,14 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/reviews/:submissionId/run", handler: reviewRoutes.run, requiresAuth: true },
   { method: "GET", path: "/v2/api/reviews/:submissionId", handler: reviewRoutes.get, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/reviews/:submissionId/override", handler: reviewRoutes.override, requiresAuth: true },
+
+  { method: "POST", path: "/v2/api/forms", handler: customFormRoutes.create, requiresAuth: true },
+  { method: "GET", path: "/v2/api/forms", handler: customFormRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/forms/my-responses", handler: customFormRoutes.myResponses, requiresAuth: true },
+  { method: "GET", path: "/v2/api/forms/:id", handler: customFormRoutes.get, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/forms/:id", handler: customFormRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/forms/:id", handler: customFormRoutes.remove, requiresAuth: true },
+  { method: "POST", path: "/v2/api/forms/:id/responses", handler: customFormRoutes.submitResponse, requiresAuth: true },
+  { method: "GET", path: "/v2/api/forms/:id/responses", handler: customFormRoutes.listResponses, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/forms/:id/responses/:responseId", handler: customFormRoutes.decideResponse, requiresAuth: true },
 ];
