@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
+import { isStaff } from "../../utils/jwt";
 import { json, parseJson } from "../../utils/json";
 import { signToken } from "../../utils/jwt";
 import { hashPassword } from "../../utils/password";
@@ -16,7 +17,7 @@ function userResponse(u: { id: string; email: string; fullName: string; role: "s
 export const teacherRoutes = {
   async getJoinLink(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can get join links." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     let teacher = await data.getById<any>(COLLECTIONS.users, user.userId);
     if (!teacher) return json({ error: "Account not found." }, 404);

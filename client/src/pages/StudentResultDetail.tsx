@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { marked } from "marked";
 import StudentShell from "../components/StudentShell";
 import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
@@ -24,6 +25,10 @@ type SubmissionResponse = {
     title: string;
     description: string;
     maxScore: number;
+    sourceType: string;
+    sourceMarkdown: string | null;
+    sourceUrl: string | null;
+    sourcePdfPath: string | null;
   };
 };
 
@@ -40,6 +45,21 @@ export default function StudentResultDetail() {
   const [review, setReview] = useState<Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!data?.assignment) return;
+    const { id, sourceType, sourcePdfPath } = data.assignment;
+    if (sourceType === "pdf" && sourcePdfPath) {
+      const token = localStorage.getItem("token");
+      fetch(`/v2/api/assignments/${id}/brief`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((r) => r.blob())
+        .then((blob) => setPdfBriefUrl(URL.createObjectURL(blob)))
+        .catch(() => toast().error("Failed to load assignment brief"));
+    }
+  }, [data]);
 
   useEffect(() => {
     if (!submissionId) return;
@@ -156,6 +176,71 @@ export default function StudentResultDetail() {
             )}
           </div>
         </div>
+
+        {/* Assignment doc */}
+        {assignment.sourceType === "pdf" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="inline-flex items-center gap-2">
+                  <Icon.FileText className="h-4 w-4 text-[var(--fg-muted)]" />
+                  Assignment brief
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {pdfBriefUrl ? (
+                <iframe
+                  src={pdfBriefUrl}
+                  className="h-[600px] w-full rounded-b-xl border-0"
+                  title="Assignment brief"
+                />
+              ) : (
+                <div className="flex h-32 items-center justify-center text-sm text-[var(--fg-muted)]">
+                  Loading brief…
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : assignment.sourceMarkdown ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="inline-flex items-center gap-2">
+                  <Icon.FileText className="h-4 w-4 text-[var(--fg-muted)]" />
+                  Assignment brief
+                </span>
+              </CardTitle>
+              {assignment.sourceUrl && (
+                <a
+                  href={assignment.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
+                >
+                  <Icon.External className="h-3 w-3" />
+                  Open source
+                </a>
+              )}
+            </CardHeader>
+            <CardContent>
+              <div
+                className="mdcontent text-sm leading-relaxed text-[var(--fg)]"
+                dangerouslySetInnerHTML={{ __html: marked(assignment.sourceMarkdown) as string }}
+              />
+            </CardContent>
+          </Card>
+        ) : assignment.sourceUrl ? (
+          <a
+            href={assignment.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex w-fit items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          >
+            <Icon.External className="h-3.5 w-3.5" />
+            Open assignment brief
+          </a>
+        ) : null}
 
         {feedback?.summary && (
           <Card>

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { AuthLayout } from "../components/AuthLayout";
+import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Input, Label } from "../components/ui/Input";
 import { useAuth } from "../context/AuthContext";
@@ -37,9 +38,12 @@ export default function ResetPassword() {
         body: JSON.stringify({ password }),
       });
       login(res.token, res.user);
+      toast().success("Password updated!");
       navigate(res.user.role === "teacher" ? "/teacher" : "/student");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reset password.");
+      const msg = err instanceof Error ? err.message : "Failed to reset password.";
+      setError(msg);
+      toast().error(msg);
     } finally {
       setSubmitting(false);
     }

@@ -8,5 +8,6 @@ export function json(data: unknown, status = 200): Response {
 }
 
 export async function parseJson<T>(request: Request): Promise<T> {
-  return (await request.json()) as T;
+  const text = await request.text();
+  return JSON.parse(text) as T;
 }

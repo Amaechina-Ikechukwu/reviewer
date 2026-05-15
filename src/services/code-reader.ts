@@ -38,6 +38,7 @@ const IMAGE_MIME: Record<string, string> = {
   ".webp": "image/webp",
   ".bmp": "image/bmp",
   ".ico": "image/x-icon",
+  ".pdf": "application/pdf",
 };
 
 function extname(name: string) {
@@ -87,10 +88,11 @@ async function walk(dir: string, rootDir: string, acc: CodeFile[]) {
     if (imageMime) {
       const buffer = await readFile(fullPath).catch(() => null);
       if (!buffer || buffer.length === 0) continue;
+      const language = ext === ".pdf" ? "pdf" : "image";
       acc.push({
         filename: relative(rootDir, fullPath).replace(/\\/g, "/"),
         content: `data:${imageMime};base64,${buffer.toString("base64")}`,
-        language: "image",
+        language,
       });
       continue;
     }

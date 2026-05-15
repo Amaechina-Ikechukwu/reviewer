@@ -1,16 +1,18 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
-import { signToken } from "../../utils/jwt";
+import { isStaff, signToken, type UserRole } from "../../utils/jwt";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
 import { audit } from "../services/audit";
 
-type RegisterBody = { email?: string; password?: string; fullName?: string; role?: "student" | "teacher" };
+const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
+
+type RegisterBody = { email?: string; password?: string; fullName?: string; role?: UserRole };
 type LoginBody = { email?: string; password?: string };
 
-function userResponse(u: { id: string; email: string; fullName: string; role: "student" | "teacher" }) {
+function userResponse(u: { id: string; email: string; fullName: string; role: UserRole }) {
   const token = signToken({ userId: u.id, email: u.email, fullName: u.fullName, role: u.role });
   return { token, user: { id: u.id, email: u.email, fullName: u.fullName, role: u.role } };
 }
@@ -21,7 +23,9 @@ export const authRoutes = {
     const email = body.email?.trim().toLowerCase();
     const password = body.password?.trim();
     const fullName = body.fullName?.trim();
-    const role = body.role === "teacher" ? "teacher" : "student";
+    const role: UserRole = body.role && (VALID_STAFF_ROLES as readonly string[]).includes(body.role)
+      ? body.role as UserRole
+      : body.role === "student" ? "student" : "student";
 
     if (!email || !password || !fullName) return json({ error: "Email, password, and full name are required." }, 400);
 
@@ -29,7 +33,7 @@ export const authRoutes = {
     if (existing) return json({ error: "An account with that email already exists." }, 409);
 
     const id = randomUUID();
-    const user = await data.insert<{ id: string; email: string; fullName: string; role: "student" | "teacher" }>(
+    const user = await data.insert<{ id: string; email: string; fullName: string; role: UserRole }>(
       COLLECTIONS.users,
       id,
       { email, passwordHash: await hashPassword(password), fullName, role, joinCode: null, teacherId: null },

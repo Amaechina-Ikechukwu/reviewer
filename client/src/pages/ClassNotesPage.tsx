@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
+import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
@@ -10,6 +11,18 @@ import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Tabl
 import { api } from "../api";
 import { formatRelative } from "../lib/format";
 import type { ClassNote } from "../types";
+
+const FILE_ICONS: Record<string, React.ReactNode> = {
+  md: <Icon.FileText className="h-4 w-4 shrink-0 text-[var(--fg-muted)]" />,
+  pdf: <Icon.FileCode className="h-4 w-4 shrink-0 text-[var(--danger)]" />,
+  docx: <Icon.Book className="h-4 w-4 shrink-0 text-[var(--accent)]" />,
+};
+
+const FILE_BADGE: Record<string, { tone: "success" | "accent" | "warn"; label: string }> = {
+  md: { tone: "success", label: "MD" },
+  pdf: { tone: "warn", label: "PDF" },
+  docx: { tone: "accent", label: "DOCX" },
+};
 
 export default function ClassNotesPage() {
   const [notes, setNotes] = useState<ClassNote[]>([]);
@@ -24,8 +37,9 @@ export default function ClassNotesPage() {
   }, []);
 
   async function uploadFile(file: File) {
-    if (!file.name.endsWith(".md")) {
-      toast().error("Only .md files are accepted.");
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !["md", "pdf", "docx"].includes(ext)) {
+      toast().error("Only .md, .pdf, and .docx files are accepted.");
       return;
     }
     setUploading(true);
@@ -75,7 +89,7 @@ export default function ClassNotesPage() {
       <div className="flex flex-col gap-6">
         <PageHeader
           title="Class Notes"
-          description="Upload markdown files to share notes with all students."
+          description="Upload files to share notes with all students. Supports Markdown, PDF, and DOCX."
         />
 
         <Card>
@@ -95,14 +109,14 @@ export default function ClassNotesPage() {
                 <Icon.Upload className="h-5 w-5" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-medium text-[var(--fg)]">Drop a .md file here or click to browse</p>
-                <p className="mt-1 text-xs text-[var(--fg-muted)]">Markdown files only · Max 2 MB</p>
+                <p className="text-sm font-medium text-[var(--fg)]">Drop a file here or click to browse</p>
+                <p className="mt-1 text-xs text-[var(--fg-muted)]">Markdown · PDF · DOCX · Max 10 MB</p>
               </div>
               {uploading && (
                 <p className="text-xs text-[var(--accent)]">Uploading…</p>
               )}
             </div>
-            <input ref={fileInputRef} type="file" accept=".md" className="hidden" onChange={onFileChange} />
+            <input ref={fileInputRef} type="file" accept=".md,.pdf,.docx" className="hidden" onChange={onFileChange} />
           </CardContent>
         </Card>
 
@@ -114,7 +128,7 @@ export default function ClassNotesPage() {
             <THead>
               <TR>
                 <TH>Title</TH>
-                <TH>Filename</TH>
+                <TH>Type</TH>
                 <TH>Uploaded</TH>
                 <TH className="text-right">Actions</TH>
               </TR>
@@ -124,11 +138,15 @@ export default function ClassNotesPage() {
                 <TR key={note.id}>
                   <TD label="Title">
                     <div className="flex items-center gap-2 font-medium">
-                      <Icon.FileText className="h-4 w-4 shrink-0 text-[var(--fg-muted)]" />
+                      {FILE_ICONS[note.fileType || "md"]}
                       {note.title}
                     </div>
                   </TD>
-                  <TD label="Filename" className="text-xs text-[var(--fg-muted)]">{note.filename}</TD>
+                  <TD label="Type">
+                    <Badge tone={FILE_BADGE[note.fileType || "md"].tone}>
+                      {FILE_BADGE[note.fileType || "md"].label}
+                    </Badge>
+                  </TD>
                   <TD label="Uploaded" className="text-xs text-[var(--fg-muted)]">{formatRelative(note.createdAt)}</TD>
                   <TD label="Actions" className="text-right">
                     <button
@@ -143,7 +161,7 @@ export default function ClassNotesPage() {
                 </TR>
               ))}
               {notes.length === 0 && (
-                <EmptyRow cols={4}>No notes uploaded yet. Drop a .md file above to get started.</EmptyRow>
+                <EmptyRow cols={4}>No notes uploaded yet. Drop a file above to get started.</EmptyRow>
               )}
             </TBody>
           </Table>

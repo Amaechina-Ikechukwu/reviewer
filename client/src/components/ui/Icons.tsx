@@ -121,4 +121,13 @@ export const Icon = {
   Shield: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /></svg>
   ),
+  Megaphone: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M3 11l19-9-9 19-2-8-8-2Z" /></svg>
+  ),
+  Newspaper: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M4 3h16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M4 7h16M4 11h16M4 15h8" /></svg>
+  ),
+  Send: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M22 2 11 13M22 2 15 22l-4-9-9-4 20-7Z" /></svg>
+  ),
 };

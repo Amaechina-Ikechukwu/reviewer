@@ -7,15 +7,15 @@ import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../../services/code-reader";
 import { sendSubmissionNotification } from "../../services/email";
-import { extractZip, savePdf } from "../../services/file-extractor";
+import { extractZipBuffer, savePdfBuffer } from "../../services/file-extractor";
 import { cloneGithubRepo } from "../../services/github";
 import { isWithinDeadline } from "../../utils/deadline";
 import { json } from "../../utils/json";
 import { hashPassword } from "../../utils/password";
 import { data } from "../data";
-import { COLLECTIONS } from "../firebase";
+import { COLLECTIONS, storageUpload, storageDownload, storageDelete } from "../firebase";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+const TMP_DIR = "/tmp/submissions";
 const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 52_428_800);
 
 type ImportEntry = { fullName?: string; email?: string; githubUrl?: string };
@@ -144,6 +144,7 @@ export const submissionRoutes = {
           return json({ error: "Your group has already submitted. Only the original submitter can update it." }, 409);
         }
         await removeFiles(previousGroup.filePath);
+        if (previousGroup.storageKey) await storageDelete(previousGroup.storageKey).catch(() => {});
         await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", previousGroup.id]]);
         await data.del(COLLECTIONS.submissions, previousGroup.id);
       }
@@ -157,16 +158,22 @@ export const submissionRoutes = {
 
     const submissionId = randomUUID();
     let filePath: string | null = null;
+    let storageKey: string | null = null;
 
     if (submissionType === "file_upload") {
       if (!uploadedFile) return json({ error: "Please attach a ZIP or PDF file." }, 400);
-      const dest = join(UPLOAD_DIR, submissionId);
-      if (uploadedFile.name.toLowerCase().endsWith(".pdf")) {
-        await savePdf(uploadedFile, dest);
+      const isPdf = uploadedFile.name.toLowerCase().endsWith(".pdf");
+      const ext = isPdf ? "pdf" : "zip";
+      const rawBuffer = Buffer.from(await uploadedFile.arrayBuffer());
+      const dest = join(TMP_DIR, submissionId);
+      if (isPdf) {
+        await savePdfBuffer(rawBuffer, uploadedFile.name, dest);
       } else {
-        await extractZip(uploadedFile, dest);
+        await extractZipBuffer(rawBuffer, dest);
       }
       filePath = dest;
+      storageKey = `submissions/${submissionId}.${ext}`;
+      await storageUpload(storageKey, rawBuffer, isPdf ? "application/pdf" : "application/zip").catch(console.error);
     } else {
       if (!githubUrl) return json({ error: "Please provide a GitHub URL." }, 400);
     }
@@ -178,6 +185,7 @@ export const submissionRoutes = {
       submissionType,
       githubUrl,
       filePath,
+      storageKey,
       submittedAt: new Date(),
       isLate: false,
     });
@@ -332,8 +340,23 @@ export const submissionRoutes = {
 
     let filePath = submission.filePath;
     if (!filePath || !existsSync(filePath)) {
-      if (submission.githubUrl) {
-        const dest = join(UPLOAD_DIR, submission.id);
+      if (submission.storageKey) {
+        const dest = join(TMP_DIR, submission.id);
+        try {
+          const rawBuffer = await storageDownload(submission.storageKey);
+          if (submission.storageKey.endsWith(".pdf")) {
+            await savePdfBuffer(rawBuffer, `submission.pdf`, dest);
+          } else {
+            await extractZipBuffer(rawBuffer, dest);
+          }
+          filePath = dest;
+          await data.update(COLLECTIONS.submissions, submission.id, { filePath });
+        } catch (err) {
+          console.error(`[v2.getFiles] Storage restore failed:`, err);
+          return json({ files: [], warning: "Uploaded files could not be restored from storage." });
+        }
+      } else if (submission.githubUrl) {
+        const dest = join(TMP_DIR, submission.id);
         try {
           await cloneGithubRepo(submission.githubUrl, dest);
           filePath = dest;

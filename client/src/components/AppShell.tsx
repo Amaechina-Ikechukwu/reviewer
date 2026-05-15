@@ -4,7 +4,9 @@ import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
 import { getTheme, toggleTheme } from "../lib/theme";
 import { Avatar } from "./ui/Avatar";
+import { Button } from "./ui/Button";
 import { Icon } from "./ui/Icons";
+import { Modal } from "./ui/Modal";
 import { Toaster } from "./Toast";
 
 export type NavItem = {
@@ -15,8 +17,13 @@ export type NavItem = {
   matches?: (pathname: string) => boolean;
 };
 
+export type NavSection = {
+  title: string;
+  items: NavItem[];
+};
+
 type Props = {
-  nav: NavItem[];
+  sections: NavSection[];
   portalLabel: string;
   activeKey?: string;
   primaryAction?: { label: string; to: string };
@@ -75,15 +82,27 @@ function NavLink({ item, active, collapsed, onNavigate }: { item: NavItem; activ
   );
 }
 
-export function AppShell({ nav, portalLabel, activeKey, primaryAction, children }: Props) {
+function SectionHeader({ title, collapsed }: { title: string; collapsed: boolean }) {
+  if (collapsed) return null;
+  return (
+    <div className="px-1 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-subtle)]">
+      {title}
+    </div>
+  );
+}
+
+export function AppShell({ sections, portalLabel, activeKey, primaryAction, children }: Props) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const collapsed = !sidebarHovered;
+
+  const allItems = sections.flatMap((s) => s.items);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -92,6 +111,11 @@ export function AppShell({ nav, portalLabel, activeKey, primaryAction, children 
   function handleLogout() {
     logout();
     navigate("/login");
+  }
+
+  function confirmLogout() {
+    setLogoutOpen(false);
+    handleLogout();
   }
 
   function onSidebarEnter() {
@@ -103,7 +127,7 @@ export function AppShell({ nav, portalLabel, activeKey, primaryAction, children 
     hoverTimeout.current = setTimeout(() => setSidebarHovered(false), 120);
   }
 
-  const activeItem = nav.find((n) => n.key === activeKey) || nav.find((n) => n.matches?.(location.pathname));
+  const activeItem = allItems.find((n) => n.key === activeKey) || allItems.find((n) => n.matches?.(location.pathname));
 
   const sidebar = (isMobile = false) => (
     <div className="flex h-full flex-col overflow-hidden">
@@ -132,37 +156,57 @@ export function AppShell({ nav, portalLabel, activeKey, primaryAction, children 
         </div>
       )}
 
-      {/* Nav */}
-      <div className={cn("pt-1 pb-2 transition-all duration-200", !isMobile && collapsed ? "px-2" : "px-3")}>
-        {(!collapsed || isMobile) && (
-          <div className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-subtle)]">Workspace</div>
-        )}
-        <nav className="flex flex-col gap-0.5">
-          {nav.map((item) => (
-            <NavLink
-              key={item.key}
-              item={item}
-              active={activeItem?.key === item.key}
-              collapsed={!isMobile && collapsed}
-              onNavigate={isMobile ? () => setMobileOpen(false) : undefined}
-            />
-          ))}
-        </nav>
+      {/* Sections */}
+      <div className={cn("flex-1 overflow-y-auto transition-all duration-200", !isMobile && collapsed ? "px-2" : "px-3")}>
+        {sections.map((section) => (
+          <div key={section.title} className="pb-1">
+            <SectionHeader title={section.title} collapsed={!isMobile && collapsed} />
+            <nav className="flex flex-col gap-0.5">
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.key}
+                  item={item}
+                  active={activeItem?.key === item.key}
+                  collapsed={!isMobile && collapsed}
+                  onNavigate={isMobile ? () => setMobileOpen(false) : undefined}
+                />
+              ))}
+            </nav>
+          </div>
+        ))}
       </div>
 
       {/* User footer */}
-      <div className="mt-auto border-t border-[var(--border)] p-2">
-        <div className="flex items-center gap-3 p-1 overflow-hidden">
-          <Avatar name={user?.fullName || "?"} size="sm" />
-          <div className={cn("min-w-0 flex-1 transition-all duration-200", !isMobile && collapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
-            <div className="truncate whitespace-nowrap text-xs font-semibold text-[var(--fg)]">{user?.fullName}</div>
-            <div className="truncate whitespace-nowrap text-[11px] text-[var(--fg-muted)]">{user?.email}</div>
-          </div>
+      <div className="border-t border-[var(--border)]">
+        <div className="p-2">
+          <Link
+            to="/teacher/settings"
+            title="Settings"
+            className={cn(
+              "flex items-center gap-3 rounded-lg p-1.5 transition-colors",
+              collapsed && !isMobile ? "justify-center" : "",
+              location.pathname.startsWith("/teacher/settings")
+                ? "bg-[var(--accent-soft)]"
+                : "hover:bg-[var(--surface-muted)]",
+            )}
+          >
+            <Avatar name={user?.fullName || "?"} size="sm" />
+            <div className={cn("min-w-0 flex-1 transition-all duration-200", !isMobile && collapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100")}>
+              <div className="truncate whitespace-nowrap text-xs font-semibold text-[var(--fg)]">{user?.fullName}</div>
+              <div className="truncate whitespace-nowrap text-[11px] text-[var(--fg-muted)]">{user?.email}</div>
+            </div>
+            <div className={cn("flex shrink-0 items-center gap-1", !isMobile && collapsed ? "hidden" : "")}>
+              <Icon.ChevronRight className="h-3.5 w-3.5 text-[var(--fg-muted)]" />
+            </div>
+          </Link>
+        </div>
+        <div className={cn("flex items-center gap-1 px-2 pb-2", collapsed && !isMobile ? "justify-center" : "")}>
+          <ThemeToggle />
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={() => setLogoutOpen(true)}
             title="Log out"
-            className={cn("shrink-0 p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--danger)] transition-colors", !isMobile && collapsed && "mx-auto")}
+            className="flex h-9 w-9 items-center justify-center border border-[var(--border)] text-[var(--fg-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--danger)] transition-colors"
           >
             <Icon.Logout className="h-4 w-4" />
           </button>
@@ -209,19 +253,21 @@ export function AppShell({ nav, portalLabel, activeKey, primaryAction, children 
 
           <div className="min-w-0 flex-1">
             <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
-              <Link to={nav[0]?.to ?? "/"} className="hover:text-[var(--fg)] transition-colors">
+              <Link to={allItems[0]?.to ?? "/"} className="hover:text-[var(--fg)] transition-colors">
                 {portalLabel}
               </Link>
               {activeItem && (
                 <>
                   <Icon.ChevronRight className="h-3 w-3" />
-                  <Link
-                    to={activeItem.to}
-                    aria-current="page"
-                    className="font-medium text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
-                  >
+                  <span className="font-medium text-[var(--fg)]">
                     {activeItem.label}
-                  </Link>
+                  </span>
+                </>
+              )}
+              {!activeItem && location.pathname.startsWith("/teacher/settings") && (
+                <>
+                  <Icon.ChevronRight className="h-3 w-3" />
+                  <span className="font-medium text-[var(--fg)]">Settings</span>
                 </>
               )}
             </nav>
@@ -238,6 +284,22 @@ export function AppShell({ nav, portalLabel, activeKey, primaryAction, children 
       </div>
 
       <Toaster />
+
+      <Modal
+        open={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        title="Log out"
+        description="Are you sure you want to log out?"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setLogoutOpen(false)}>Cancel</Button>
+            <Button variant="danger" onClick={confirmLogout}>Log out</Button>
+          </div>
+        }
+      >
+        <span />
+      </Modal>
     </div>
   );
 }

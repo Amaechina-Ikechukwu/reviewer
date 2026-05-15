@@ -336,6 +336,7 @@ export default function ReviewSubmission() {
   const isHtmlFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".html");
   const isImageFile = (f?: CodeFile) => f?.language === "image";
   const isSvgFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".svg");
+  const isPdfFile = (f?: CodeFile) => f?.language === "pdf";
 
   const reactPreviewDoc = useMemo(() => {
     const hasReact = files.some((f) => /\.(jsx|tsx)$/i.test(f.filename));
@@ -363,7 +364,7 @@ export default function ReviewSubmission() {
   const averageFileScore = review?.feedback?.averageFileScore;
   const questionGroups = review?.feedback?.questionGroups || [];
   const selectedFileLineCount =
-    selectedFile && !isImageFile(selectedFile) && !isSvgFile(selectedFile)
+    selectedFile && !isImageFile(selectedFile) && !isSvgFile(selectedFile) && !isPdfFile(selectedFile)
       ? selectedFile.content.split("\n").length
       : 0;
   const selectedFileScore = selectedFile
@@ -469,6 +470,10 @@ export default function ReviewSubmission() {
                 <span className="inline-flex items-center gap-1">
                   <Icon.Github className="h-3 w-3" /> GitHub
                 </span>
+              ) : files.some((f) => f.language === "pdf") ? (
+                <span className="inline-flex items-center gap-1">
+                  <Icon.Upload className="h-3 w-3" /> PDF
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1">
                   <Icon.Upload className="h-3 w-3" /> ZIP
@@ -521,9 +526,11 @@ export default function ReviewSubmission() {
                     ? "image"
                     : selectedFile && isSvgFile(selectedFile)
                       ? "svg"
-                      : selectedFile
-                        ? `${selectedFileLineCount} lines`
-                        : ""}
+                      : selectedFile && isPdfFile(selectedFile)
+                        ? "pdf"
+                        : selectedFile
+                          ? `${selectedFileLineCount} lines`
+                          : ""}
                 </span>
               </div>
               {selectedFile && isImageFile(selectedFile) ? (
@@ -542,6 +549,12 @@ export default function ReviewSubmission() {
                     className="max-h-full max-w-full object-contain"
                   />
                 </div>
+              ) : selectedFile && isPdfFile(selectedFile) ? (
+                <iframe
+                  src={selectedFile.content}
+                  title={selectedFile.filename}
+                  className="h-[520px] w-full border-0 bg-[var(--surface)]"
+                />
               ) : selectedFile ? (
                 <pre className="m-0 max-h-[520px] overflow-auto bg-[var(--surface)] p-4 font-mono text-xs leading-relaxed text-[var(--fg)]">
                   {selectedFile.content}

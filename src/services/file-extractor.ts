@@ -24,17 +24,31 @@ async function flattenSingleRootFolder(destDir: string) {
   await rm(innerPath, { recursive: true, force: true });
 }
 
+export async function savePdf(file: File, destDir: string): Promise<string> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return savePdfBuffer(buffer, file.name, destDir);
+}
+
+export async function savePdfBuffer(buffer: Buffer, filename: string, destDir: string): Promise<string> {
+  await mkdir(destDir, { recursive: true });
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const dest = join(destDir, safeName);
+  await writeFile(dest, buffer);
+  return dest;
+}
+
 export async function extractZip(file: File, destDir: string): Promise<void> {
   if (!file.name.toLowerCase().endsWith(".zip")) {
-    throw new Error("Only .zip uploads are supported.");
+    throw new Error("Only .zip or .pdf uploads are supported.");
   }
+  const buffer = Buffer.from(await file.arrayBuffer());
+  await extractZipBuffer(buffer, destDir);
+}
 
+export async function extractZipBuffer(buffer: Buffer, destDir: string): Promise<void> {
   await mkdir(destDir, { recursive: true });
-
   const tempPath = join(destDir, "__upload.zip");
-  const arrayBuffer = await file.arrayBuffer();
-  await writeFile(tempPath, Buffer.from(arrayBuffer));
-
+  await writeFile(tempPath, buffer);
   try {
     await extract(tempPath, { dir: destDir });
     await flattenSingleRootFolder(destDir);

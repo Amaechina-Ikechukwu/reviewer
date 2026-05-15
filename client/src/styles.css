@@ -24,11 +24,15 @@
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-full: 0;
+  --radius-none: 0;
 }
 
 :root {
@@ -171,4 +175,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .mdcontent th { background: var(--surface-muted); padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid var(--border); }
 .mdcontent td { padding: 0.5rem 0.75rem; border: 1px solid var(--border); vertical-align: top; }
 .mdcontent tr:nth-child(even) td { background: var(--surface-muted)/40; }
-.mdcontent img { max-width: 100%; border-radius: 6px; }
+.mdcontent img { max-width: 100%; border-radius: 0; }
+
+*, *::before, *::after { border-radius: 0 !important; }

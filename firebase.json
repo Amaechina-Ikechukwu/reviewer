@@ -1,0 +1,12 @@
+{
+  "firestore": [
+    {
+      "database": "(default)",
+      "indexes": "firestore.indexes.json"
+    },
+    {
+      "database": "dev-db",
+      "indexes": "firestore.indexes.json"
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 import admin from "firebase-admin";
+import { getFirestore as getFirestoreModular } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 let app: admin.app.App | null = null;
 
@@ -32,8 +34,35 @@ export function getFirebaseApp(): admin.app.App {
   return app;
 }
 
+/**
+ * Returns the Firestore instance for the configured database.
+ * Set FIRESTORE_DATABASE_ID=dev-db in your environment to use the dev database.
+ * Defaults to the project's default database when the variable is unset.
+ */
 export function getFirestore() {
+  const databaseId = process.env.FIRESTORE_DATABASE_ID;
+  if (databaseId && databaseId !== "(default)") {
+    return getFirestoreModular(getFirebaseApp(), databaseId);
+  }
   return getFirebaseApp().firestore();
+}
+
+function getStorageBucket() {
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+  return getStorage(getFirebaseApp()).bucket(bucketName || undefined);
+}
+
+export async function storageUpload(remotePath: string, buffer: Buffer, contentType: string): Promise<void> {
+  await getStorageBucket().file(remotePath).save(buffer, { contentType });
+}
+
+export async function storageDownload(remotePath: string): Promise<Buffer> {
+  const [buffer] = await getStorageBucket().file(remotePath).download();
+  return buffer as Buffer;
+}
+
+export async function storageDelete(remotePath: string): Promise<void> {
+  await getStorageBucket().file(remotePath).delete().catch(() => {});
 }
 
 export const COLLECTIONS = {
@@ -46,4 +75,8 @@ export const COLLECTIONS = {
   auditLogs: "audit_logs",
   classNoteFiles: "class_note_files",
   assignmentGroups: "assignment_groups",
+  customForms: "custom_forms",
+  customFormResponses: "custom_form_responses",
+  cohorts: "cohorts",
+  changelogs: "changelogs",
 } as const;

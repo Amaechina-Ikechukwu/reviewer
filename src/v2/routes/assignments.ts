@@ -1,18 +1,29 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { sendAssignmentNotification } from "../../services/email";
+import { isStaff } from "../../utils/jwt";
+import { sendAssignmentNotification, sendGroupAssignmentNotification } from "../../services/email";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
-import { COLLECTIONS } from "../firebase";
+import { COLLECTIONS, storageUpload, storageDownload } from "../firebase";
+
+type Track = "frontend" | "backend" | "data_analytics" | "product_design" | "digital_marketing" | "cyber_security";
+const CODE_TRACKS: Track[] = ["frontend", "backend", "cyber_security"];
+function trackAllowsGithub(track?: Track | null): boolean {
+  if (!track) return true;
+  return CODE_TRACKS.includes(track);
+}
+
+const MAX_BRIEF_SIZE = 20 * 1024 * 1024; // 20 MB
 
 type AssignmentBody = {
   title?: string;
   description?: string;
   rubric?: string;
   maxScore?: number;
-  sourceType?: "manual" | "markdown" | "notion" | "mixed";
+  sourceType?: "manual" | "markdown" | "notion" | "mixed" | "pdf";
   sourceMarkdown?: string;
   sourceUrl?: string;
+  sourcePdfPath?: string | null;
   opensAt?: string;
   closesAt?: string;
   allowGithub?: boolean;
@@ -21,6 +32,9 @@ type AssignmentBody = {
   classNotes?: string;
   isGroupAssignment?: boolean;
   groupCount?: number;
+  groupQuestionMode?: "same" | "per_group";
+  track?: Track | null;
+  cohortId?: string | null;
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -48,15 +62,50 @@ async function autoCreateGroups(assignmentId: string, groupCount: number) {
       assignmentId,
       name: g.name,
       memberIds: g.memberIds,
+      description: null,
+      rubric: null,
     });
   }
   return groups;
 }
 
+async function notifyGroupMembers(
+  assignment: { id: string; title: string },
+  groups: { name: string; memberIds: string[] }[],
+) {
+  const allMemberIds = [...new Set(groups.flatMap((g) => g.memberIds))];
+  if (allMemberIds.length === 0) return;
+  const users = await Promise.all(
+    allMemberIds.map((id) => data.getById<any>(COLLECTIONS.users, id)),
+  );
+  const userMap = new Map(
+    users
+      .filter((u): u is any => Boolean(u) && u.passwordHash !== "INVITE_PENDING")
+      .filter((u) => !String(u.email).endsWith("@historical.reviewai.local"))
+      .map((u) => [u.id, u]),
+  );
+
+  for (const g of groups) {
+    const members = g.memberIds
+      .map((id) => userMap.get(id))
+      .filter(Boolean) as Array<{ email: string; fullName: string; id: string }>;
+    if (members.length === 0) continue;
+    for (const member of members) {
+      const teammates = members.filter((m) => m.id !== member.id).map((m) => m.fullName);
+      sendGroupAssignmentNotification(
+        [{ email: member.email, fullName: member.fullName }],
+        assignment,
+        g.name,
+        teammates,
+      ).catch(console.error);
+    }
+  }
+}
+
 export const assignmentRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can create assignments." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Only staff can create assignments." }, 403);
 
     const body = await parseJson<AssignmentBody>(request);
     if (!body.title || !body.closesAt) return json({ error: "Missing required assignment fields." }, 400);
@@ -67,7 +116,15 @@ export const assignmentRoutes = {
       return json({ error: "Please provide a valid deadline in the future." }, 400);
     }
 
-    if (body.allowGithub === false && body.allowFileUpload === false) {
+    // Non-code tracks cannot use GitHub submissions
+    const track = body.track || null;
+    if (track && !trackAllowsGithub(track) && body.allowGithub) {
+      return json({ error: "GitHub submissions are not available for this track." }, 400);
+    }
+
+    const effectiveAllowGithub = track && !trackAllowsGithub(track) ? false : (body.allowGithub ?? true);
+
+    if (effectiveAllowGithub === false && body.allowFileUpload === false) {
       return json({ error: "At least one submission method must be enabled." }, 400);
     }
 
@@ -76,6 +133,8 @@ export const assignmentRoutes = {
     if (isGroupAssignment && groupCount < 1) {
       return json({ error: "Please provide a valid number of groups." }, 400);
     }
+    const groupQuestionMode: "same" | "per_group" =
+      isGroupAssignment && body.groupQuestionMode === "per_group" ? "per_group" : "same";
 
     const id = randomUUID();
     const assignment = await data.insert<any>(COLLECTIONS.assignments, id, {
@@ -85,20 +144,25 @@ export const assignmentRoutes = {
       sourceType: body.sourceType || "manual",
       sourceMarkdown: body.sourceMarkdown?.trim() || null,
       sourceUrl: body.sourceUrl?.trim() || null,
+      sourcePdfPath: body.sourcePdfPath || null,
       createdBy: user.userId,
       opensAt,
       closesAt,
       maxScore: body.maxScore && body.maxScore > 0 ? Math.round(body.maxScore) : 100,
-      allowGithub: body.allowGithub ?? true,
+      allowGithub: effectiveAllowGithub,
       allowFileUpload: body.allowFileUpload ?? true,
       defaultProvider: "gemini",
       classNotes: body.classNotes?.trim() || null,
       isGroupAssignment,
       groupCount,
+      groupQuestionMode,
+      track: track || null,
+      cohortId: body.cohortId?.trim() || null,
     });
 
     if (isGroupAssignment) {
-      await autoCreateGroups(id, groupCount);
+      const createdGroups = await autoCreateGroups(id, groupCount);
+      notifyGroupMembers({ id, title: assignment.title }, createdGroups).catch(console.error);
     }
 
     if (opensAt <= new Date()) {
@@ -117,7 +181,13 @@ export const assignmentRoutes = {
 
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    const where = user.role === "teacher" ? [["createdBy", "==", user.userId]] as any : undefined;
+    let where: any = undefined;
+    if (isStaff(user.role)) {
+      // Managers and instructors see only their own; owners/admins see all
+      if (["instructor", "teacher", "manager"].includes(user.role)) {
+        where = [["createdBy", "==", user.userId]];
+      }
+    }
     const rows = await data.findMany<any>(COLLECTIONS.assignments, { where, orderBy: ["createdAt", "desc"] });
     return json(rows);
   },
@@ -126,13 +196,15 @@ export const assignmentRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const a = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!a) return json({ error: "Assignment not found." }, 404);
-    if (user.role === "teacher" && a.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
+    if (["instructor", "teacher", "manager"].includes(user.role) && a.createdBy !== user.userId) {
+      return json({ error: "Assignment not found." }, 404);
+    }
     return json(a);
   },
 
   async update(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can edit assignments." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Only staff can edit assignments." }, 403);
 
     const existing = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!existing || existing.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
@@ -152,6 +224,7 @@ export const assignmentRoutes = {
     if (body.sourceType !== undefined) update.sourceType = body.sourceType;
     if (body.sourceMarkdown !== undefined) update.sourceMarkdown = body.sourceMarkdown?.trim() || null;
     if (body.sourceUrl !== undefined) update.sourceUrl = body.sourceUrl?.trim() || null;
+    if (body.sourcePdfPath !== undefined) update.sourcePdfPath = body.sourcePdfPath || null;
     if (body.allowGithub !== undefined) update.allowGithub = body.allowGithub;
     if (body.allowFileUpload !== undefined) update.allowFileUpload = body.allowFileUpload;
     if (body.maxScore !== undefined) update.maxScore = body.maxScore > 0 ? Math.round(body.maxScore) : 100;
@@ -174,7 +247,7 @@ export const assignmentRoutes = {
 
   async remove(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can delete assignments." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Only staff can delete assignments." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
@@ -286,13 +359,15 @@ export const assignmentRoutes = {
 
   async updateGroups(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can edit groups." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Only staff can edit groups." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
     if (!assignment.isGroupAssignment) return json({ error: "This assignment is not a group project." }, 400);
 
-    const body = await parseJson<{ groups?: { id?: string; name?: string; memberIds?: string[] }[] }>(request);
+    const body = await parseJson<{
+      groups?: { id?: string; name?: string; memberIds?: string[]; description?: string | null; rubric?: string | null; sourceType?: string | null; sourceUrl?: string | null; sourcePdfPath?: string | null }[];
+    }>(request);
     const incoming = body.groups || [];
     if (!Array.isArray(incoming) || incoming.length === 0) {
       return json({ error: "Provide at least one group." }, 400);
@@ -313,6 +388,14 @@ export const assignmentRoutes = {
       }
     }
 
+    const previousGroups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
+      where: [["assignmentId", "==", assignment.id]],
+    });
+    const previousMembership = new Map<string, string>();
+    for (const g of previousGroups) {
+      for (const m of g.memberIds || []) previousMembership.set(m, g.id);
+    }
+
     await data.delMany(COLLECTIONS.assignmentGroups, [["assignmentId", "==", assignment.id]]);
     const created: any[] = [];
     for (let i = 0; i < incoming.length; i++) {
@@ -320,21 +403,81 @@ export const assignmentRoutes = {
       const id = g.id || randomUUID();
       const name = (g.name?.trim()) || `Group ${i + 1}`;
       const memberIds = Array.isArray(g.memberIds) ? g.memberIds.filter(Boolean) : [];
+      const description = typeof g.description === "string" ? g.description.trim() || null : g.description ?? null;
+      const rubric = typeof g.rubric === "string" ? g.rubric.trim() || null : g.rubric ?? null;
+      const sourceType = g.sourceType ?? null;
+      const sourceUrl = typeof g.sourceUrl === "string" ? g.sourceUrl.trim() || null : g.sourceUrl ?? null;
+      const sourcePdfPath = typeof g.sourcePdfPath === "string" ? g.sourcePdfPath.trim() || null : g.sourcePdfPath ?? null;
       await data.insert(COLLECTIONS.assignmentGroups, id, {
         assignmentId: assignment.id,
         name,
         memberIds,
+        description,
+        rubric,
+        sourceType,
+        sourceUrl,
+        sourcePdfPath,
       });
-      created.push({ id, name, memberIds });
+      created.push({ id, name, memberIds, description, rubric, sourceType, sourceUrl, sourcePdfPath });
     }
 
     await data.update(COLLECTIONS.assignments, assignment.id, { groupCount: created.length });
+
+    // Notify only members whose group changed.
+    const movedGroups = created
+      .map((g) => ({
+        name: g.name,
+        memberIds: (g.memberIds as string[]).filter((m) => previousMembership.get(m) !== g.id),
+      }))
+      .filter((g) => g.memberIds.length > 0);
+    if (movedGroups.length > 0) {
+      notifyGroupMembers({ id: assignment.id, title: assignment.title }, movedGroups).catch(console.error);
+    }
+
     return json({ groups: created });
+  },
+
+  async uploadBrief(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (!isStaff(user.role)) return json({ error: "Only staff can upload assignment briefs." }, 403);
+
+    const ct = request.headers.get("content-type") || "";
+    if (!ct.includes("multipart/form-data")) return json({ error: "Multipart form data required." }, 400);
+
+    const fd = await request.formData();
+    const file = fd.get("file") as File | null;
+    if (!file) return json({ error: "No file provided." }, 400);
+    if (!file.name.toLowerCase().endsWith(".pdf")) return json({ error: "Only PDF files are accepted." }, 400);
+    if (file.size > MAX_BRIEF_SIZE) return json({ error: "PDF must be under 20 MB." }, 400);
+
+    const briefId = randomUUID();
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await storageUpload(`briefs/${briefId}.pdf`, buffer, "application/pdf");
+
+    return json({ briefId });
+  },
+
+  async getBrief(request: Request, params: Record<string, string>) {
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!assignment) return new Response("Not found", { status: 404 });
+
+    const briefId = assignment.sourcePdfPath;
+    if (!briefId) return new Response("Brief not found", { status: 404 });
+
+    const buffer = await storageDownload(`briefs/${briefId}.pdf`).catch(() => null);
+    if (!buffer) return new Response("Brief not found", { status: 404 });
+
+    return new Response(buffer, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": "inline",
+      },
+    });
   },
 
   async regenerateGroups(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can regenerate groups." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Only staff can regenerate groups." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
@@ -353,6 +496,7 @@ export const assignmentRoutes = {
     await data.delMany(COLLECTIONS.assignmentGroups, [["assignmentId", "==", assignment.id]]);
     const groups = await autoCreateGroups(assignment.id, groupCount);
     await data.update(COLLECTIONS.assignments, assignment.id, { groupCount });
+    notifyGroupMembers({ id: assignment.id, title: assignment.title }, groups).catch(console.error);
     return json({ groups });
   },
 };

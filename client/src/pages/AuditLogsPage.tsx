@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import TeacherShell from "../components/TeacherShell";
+import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -61,7 +62,10 @@ export default function AuditLogsPage() {
     setLoading(true);
     api<AuditLog[]>("/audit-logs?limit=200")
       .then(setLogs)
-      .catch(() => setLogs([]))
+      .catch(() => {
+        setLogs([]);
+        toast().error("Failed to load activity logs");
+      })
       .finally(() => setLoading(false));
   }, [refreshKey]);
 

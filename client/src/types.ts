@@ -1,6 +1,39 @@
-export type Role = "student" | "teacher";
+export type Track =
+  | "frontend"
+  | "backend"
+  | "data_analytics"
+  | "product_design"
+  | "digital_marketing"
+  | "cyber_security";
+
+export const TRACKS: { value: Track; label: string }[] = [
+  { value: "frontend", label: "Frontend" },
+  { value: "backend", label: "Backend" },
+  { value: "data_analytics", label: "Data Analytics" },
+  { value: "product_design", label: "Product Design" },
+  { value: "digital_marketing", label: "Digital Marketing" },
+  { value: "cyber_security", label: "Cyber Security" },
+];
+
+export const CODE_TRACKS: Track[] = ["frontend", "backend", "cyber_security"];
+
+export type StaffRole = "teacher" | "owner" | "admin" | "manager" | "instructor";
+export type Role = "student" | StaffRole;
+
+export function isStaffRole(role: Role | string): boolean {
+  return ["teacher", "owner", "admin", "manager", "instructor"].includes(role);
+}
+
+export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  manager: "Manager",
+  instructor: "Instructor",
+  teacher: "Instructor",
+};
+
 export type ProviderName = "gemini";
-export type AssignmentSourceType = "manual" | "markdown" | "notion" | "mixed";
+export type AssignmentSourceType = "manual" | "markdown" | "notion" | "mixed" | "pdf";
 
 export type User = {
   id: string;
@@ -17,6 +50,7 @@ export type Assignment = {
   sourceType: AssignmentSourceType;
   sourceMarkdown: string | null;
   sourceUrl: string | null;
+  sourcePdfPath: string | null;
   createdBy: string;
   opensAt: string;
   closesAt: string;
@@ -27,14 +61,24 @@ export type Assignment = {
   classNotes: string | null;
   isGroupAssignment?: boolean;
   groupCount?: number;
+  groupQuestionMode?: "same" | "per_group";
+  track?: Track | null;
+  cohortId?: string | null;
   createdAt: string;
 };
+
+export type GroupSourceType = "markdown" | "link" | "pdf";
 
 export type AssignmentGroup = {
   id: string;
   assignmentId: string;
   name: string;
   memberIds: string[];
+  description?: string | null;
+  rubric?: string | null;
+  sourceType?: GroupSourceType | null;
+  sourceUrl?: string | null;
+  sourcePdfPath?: string | null;
 };
 
 export type Submission = {
@@ -110,6 +154,8 @@ export type ClassNote = {
   filename: string;
   createdAt: string;
   content?: string;
+  fileType?: "md" | "pdf" | "docx";
+  storagePath?: string;
 };
 
 export type StudentRecord = {
@@ -117,5 +163,69 @@ export type StudentRecord = {
   email: string;
   fullName: string;
   role: "student";
+  cohortId?: string | null;
+  track?: Track | null;
   createdAt: string;
+};
+
+export type Cohort = {
+  id: string;
+  name: string;
+  track: Track;
+  description?: string | null;
+  createdAt: string;
+};
+
+export type CustomFormFieldType =
+  | "short_text"
+  | "long_text"
+  | "number"
+  | "single_choice"
+  | "multi_choice"
+  | "url";
+
+export type CustomFormField = {
+  id: string;
+  label: string;
+  type: CustomFormFieldType;
+  required: boolean;
+  options?: string[];
+  helpText?: string;
+  repeatCount?: number;
+};
+
+export type CustomFormStatus = "draft" | "open" | "closed";
+
+export type CustomFormTargetType = "all" | "specific";
+
+export type CustomForm = {
+  id: string;
+  title: string;
+  description: string;
+  fields: CustomFormField[];
+  status: CustomFormStatus;
+  closesAt: string | null;
+  createdBy: string;
+  createdAt: string;
+  targetType?: CustomFormTargetType;
+  targetStudentId?: string | null;
+  targetGroupId?: string | null;
+  assignmentId?: string | null;
+  publishedLink?: string | null;
+};
+
+export type CustomFormDecision = "pending" | "approved" | "rejected";
+
+export type CustomFormResponse = {
+  id: string;
+  formId: string;
+  studentId: string;
+  answers: Record<string, string | number | string[]>;
+  decision: CustomFormDecision;
+  reviewNotes: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  submittedAt: string;
+  updatedAt?: string;
+  updateCount?: number;
 };

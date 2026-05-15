@@ -5,10 +5,10 @@ import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
-import { Input } from "../components/ui/Input";
+import { Input, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
-import type { Assignment, AssignmentGroup } from "../types";
+import type { Assignment, AssignmentGroup, GroupSourceType } from "../types";
 
 type Member = { id: string; fullName: string; email: string };
 type GroupsPayload = {
@@ -81,11 +81,15 @@ export default function ManageGroups() {
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, name } : g)));
   }
 
+  function updateGroupField(groupId: string, patch: Partial<AssignmentGroup>) {
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...patch } : g)));
+  }
+
   function addGroup() {
     const num = groups.length + 1;
     setGroups((prev) => [
       ...prev,
-      { id: `new-${Date.now()}`, assignmentId: id!, name: `Group ${num}`, memberIds: [] },
+      { id: `new-${Date.now()}`, assignmentId: id!, name: `Group ${num}`, memberIds: [], description: null, rubric: null },
     ]);
   }
 
@@ -105,7 +109,13 @@ export default function ManageGroups() {
     setError("");
     try {
       const payload = {
-        groups: groups.map((g) => ({ id: g.id.startsWith("new-") ? undefined : g.id, name: g.name, memberIds: g.memberIds })),
+        groups: groups.map((g) => ({
+          id: g.id.startsWith("new-") ? undefined : g.id,
+          name: g.name,
+          memberIds: g.memberIds,
+          description: g.description ?? null,
+          rubric: g.rubric ?? null,
+        })),
       };
       const res = await api<{ groups: AssignmentGroup[] }>(`/assignments/${id}/groups`, {
         method: "PUT",
@@ -148,7 +158,7 @@ export default function ManageGroups() {
 
   if (loading) {
     return (
-      <TeacherShell section="assignments">
+      <TeacherShell section="groupProjects">
         <div className="flex min-h-[40vh] items-center justify-center text-sm text-[var(--fg-muted)]">
           Loading groups...
         </div>
@@ -158,29 +168,35 @@ export default function ManageGroups() {
 
   if (!assignment || !assignment.isGroupAssignment) {
     return (
-      <TeacherShell section="assignments">
+      <TeacherShell section="groupProjects">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 py-12 text-center">
           <PageHeader title="Not a group project" description="This assignment is not configured as a group project." />
-          <Button onClick={() => navigate("/teacher")}>Back to dashboard</Button>
+          <Button onClick={() => navigate("/teacher/group-projects")}>Back to group projects</Button>
         </div>
       </TeacherShell>
     );
   }
 
   return (
-    <TeacherShell section="assignments">
+    <TeacherShell section="groupProjects">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
         <div className="flex flex-col gap-2">
           <Link
-            to="/teacher"
+            to="/teacher/group-projects"
             className="inline-flex w-fit items-center gap-1 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--accent)]"
           >
             <Icon.ChevronLeft className="h-3 w-3" />
-            Dashboard
+            Group projects
           </Link>
           <PageHeader
             title={`Groups · ${assignment.title}`}
-            description={`${groups.length} group${groups.length === 1 ? "" : "s"} · ${totalAssigned} member${totalAssigned === 1 ? "" : "s"} assigned. Drag members between groups, then save.`}
+            description={
+              `${groups.length} group${groups.length === 1 ? "" : "s"} · ${totalAssigned} member${totalAssigned === 1 ? "" : "s"} assigned · ` +
+              (assignment.groupQuestionMode === "per_group"
+                ? "Each team has its own description and rubric."
+                : "All teams answer the same questions.") +
+              " Drag members between groups, then save. Students are emailed when teams change."
+            }
           />
         </div>
 
@@ -248,6 +264,80 @@ export default function ManageGroups() {
                     <Icon.Trash className="h-4 w-4" />
                   </button>
                 </div>
+                {assignment?.groupQuestionMode === "per_group" && (
+                  <div className="flex flex-col gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 p-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                      Team-specific questions
+                    </div>
+                    {/* Source type selector */}
+                    <div className="flex gap-1">
+                      {(["markdown", "link", "pdf"] as GroupSourceType[]).map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => updateGroupField(g.id, { sourceType: type })}
+                          className={`flex-1 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                            (g.sourceType ?? "markdown") === type
+                              ? "bg-[var(--accent)] text-white"
+                              : "bg-[var(--surface)] text-[var(--fg-muted)] border border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                          }`}
+                        >
+                          {type === "markdown" ? "Markdown" : type === "link" ? "Link" : "PDF"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Source input by type */}
+                    {(g.sourceType ?? "markdown") === "markdown" && (
+                      <Textarea
+                        rows={3}
+                        placeholder="Description / prompt for this team (markdown)…"
+                        value={g.description ?? ""}
+                        onChange={(e) => updateGroupField(g.id, { description: e.target.value })}
+                      />
+                    )}
+                    {g.sourceType === "link" && (
+                      <Input
+                        type="url"
+                        placeholder="https://docs.google.com/… or any URL"
+                        value={g.sourceUrl ?? ""}
+                        onChange={(e) => updateGroupField(g.id, { sourceUrl: e.target.value })}
+                      />
+                    )}
+                    {g.sourceType === "pdf" && (
+                      <div className="flex flex-col gap-1.5">
+                        <input
+                          type="file"
+                          accept=".pdf"
+                          className="text-xs text-[var(--fg-muted)] file:mr-2 file:rounded file:border file:border-[var(--border)] file:bg-[var(--surface)] file:px-2 file:py-1 file:text-xs file:text-[var(--fg)] file:hover:bg-[var(--surface-muted)]"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const fd = new FormData();
+                            fd.append("file", file);
+                            try {
+                              const res = await api<{ path: string; url: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+                              updateGroupField(g.id, { sourcePdfPath: res.path, sourceUrl: res.url });
+                            } catch (err: any) {
+                              toast().error(err.message ?? "Upload failed");
+                            }
+                          }}
+                        />
+                        {g.sourcePdfPath && (
+                          <span className="text-[11px] text-[var(--accent)]">PDF uploaded ✓</span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Rubric (always shown) */}
+                    <Textarea
+                      rows={2}
+                      placeholder="Rubric for this team only…"
+                      value={g.rubric ?? ""}
+                      onChange={(e) => updateGroupField(g.id, { rubric: e.target.value })}
+                    />
+                  </div>
+                )}
                 <div className="flex min-h-[80px] flex-col gap-1.5">
                   {g.memberIds.length === 0 && (
                     <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-4 text-center text-xs text-[var(--fg-muted)]">

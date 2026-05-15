@@ -1,0 +1,74 @@
+import type { AuthenticatedRequest } from "../../middleware/auth";
+import { json, parseJson } from "../../utils/json";
+import { data } from "../data";
+import { COLLECTIONS } from "../firebase";
+import { sendCustomNotification } from "../../services/email";
+
+const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
+const STAFF_ROLES = new Set(["teacher", "owner", "admin", "manager", "instructor"]);
+
+type Target = "all" | "students" | "staff" | "cohort" | "individual";
+
+type NotificationBody = {
+  subject?: string;
+  message?: string;
+  target?: Target;
+  cohortId?: string;
+  recipientIds?: string[];
+};
+
+const VALID_TARGETS = new Set<Target>(["all", "students", "staff", "cohort", "individual"]);
+
+export const notificationRoutes = {
+  async send(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (!MANAGER_ROLES.has(user.role)) {
+      return json({ error: "Only owners, admins, and managers can send notifications." }, 403);
+    }
+
+    const body = await parseJson<NotificationBody>(request);
+    if (!body.subject?.trim()) return json({ error: "Subject is required." }, 400);
+    if (!body.message?.trim()) return json({ error: "Message is required." }, 400);
+    if (!body.target || !VALID_TARGETS.has(body.target)) {
+      return json({ error: "Invalid target audience." }, 400);
+    }
+
+    let users: any[] = [];
+
+    if (body.target === "all") {
+      users = await data.findMany<any>(COLLECTIONS.users, {});
+    } else if (body.target === "students") {
+      users = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+    } else if (body.target === "staff") {
+      const all = await data.findMany<any>(COLLECTIONS.users, {});
+      users = all.filter((u: any) => STAFF_ROLES.has(u.role));
+    } else if (body.target === "cohort") {
+      if (!body.cohortId) return json({ error: "Cohort ID is required." }, 400);
+      users = await data.findMany<any>(COLLECTIONS.users, {
+        where: [["cohortId", "==", body.cohortId]],
+      });
+    } else if (body.target === "individual") {
+      if (!body.recipientIds || !Array.isArray(body.recipientIds) || body.recipientIds.length === 0) {
+        return json({ error: "At least one recipient is required." }, 400);
+      }
+      const all = await data.findMany<any>(COLLECTIONS.users, {});
+      users = all.filter((u: any) => body.recipientIds!.includes(u.id));
+    }
+
+    const recipients = users
+      .filter(
+        (u: any) =>
+          u.email &&
+          !u.email.endsWith("@historical.reviewai.local") &&
+          u.passwordHash !== "INVITE_PENDING",
+      )
+      .map((u: any) => ({ email: u.email as string, fullName: u.fullName as string }));
+
+    if (recipients.length === 0) {
+      return json({ sent: 0, failed: 0, total: 0, message: "No eligible recipients found." });
+    }
+
+    const results = await sendCustomNotification(recipients, body.subject!, body.message!);
+    return json({ sent: results.sent, failed: results.failed, total: recipients.length });
+  },
+};

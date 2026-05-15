@@ -10,9 +10,10 @@ import { Input, Label, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { cn } from "../lib/cn";
-import type { Assignment } from "../types";
+import type { Assignment, Track } from "../types";
+import { CODE_TRACKS, TRACKS } from "../types";
 
-type SourceMode = "markdown" | "notion";
+type SourceMode = "markdown" | "notion" | "pdf";
 
 export default function CreateAssignment() {
   const navigate = useNavigate();
@@ -20,13 +21,19 @@ export default function CreateAssignment() {
   const [sourceMode, setSourceMode] = useState<SourceMode>("markdown");
   const [sourceMarkdown, setSourceMarkdown] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourcePdfPath, setSourcePdfPath] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const [closesAt, setClosesAt] = useState("");
+  const [track, setTrack] = useState<Track | "">("");
   const [allowGithub, setAllowGithub] = useState(true);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
+  const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
   const [maxScore, setMaxScore] = useState(100);
   const [classNotes, setClassNotes] = useState("");
   const [isGroupAssignment, setIsGroupAssignment] = useState(false);
   const [groupCount, setGroupCount] = useState(3);
+  const [groupQuestionMode, setGroupQuestionMode] = useState<"same" | "per_group">("same");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Assignment | null>(null);
@@ -45,6 +52,24 @@ export default function CreateAssignment() {
     event.target.value = "";
   }
 
+  async function handlePdfBrief(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingPdf(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api<{ briefId: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+      setSourcePdfPath(res.briefId);
+      setPdfFileName(file.name);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "PDF upload failed.");
+    } finally {
+      setUploadingPdf(false);
+      event.target.value = "";
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -61,14 +86,17 @@ export default function CreateAssignment() {
           sourceType: sourceMode,
           sourceMarkdown: sourceMode === "markdown" ? sourceMarkdown : null,
           sourceUrl: sourceMode === "notion" ? sourceUrl : null,
+          sourcePdfPath: sourceMode === "pdf" ? sourcePdfPath : null,
           opensAt: new Date().toISOString(),
           closesAt: new Date(closesAt).toISOString(),
-          allowGithub,
+          allowGithub: isCodeTrack ? allowGithub : false,
           allowFileUpload,
           defaultProvider: "gemini",
           classNotes: classNotes || null,
           isGroupAssignment,
           groupCount: isGroupAssignment ? groupCount : 0,
+          groupQuestionMode: isGroupAssignment ? groupQuestionMode : "same",
+          track: track || null,
         }),
       });
 
@@ -93,10 +121,14 @@ export default function CreateAssignment() {
   function resetForm() {
     setCreated(null);
     setTitle("");
+    setTrack("");
     setSourceMarkdown("");
     setSourceUrl("");
+    setSourcePdfPath(null);
+    setPdfFileName(null);
     setClosesAt("");
     setClassNotes("");
+    setAllowGithub(true);
   }
 
   if (created) {
@@ -136,7 +168,7 @@ export default function CreateAssignment() {
                 {created.isGroupAssignment && (
                   <Button variant="secondary" onClick={() => navigate(`/teacher/assignments/${created.id}/groups`)}>
                     <Icon.Users className="h-3.5 w-3.5" />
-                    Manage groups
+                    Manage teams
                   </Button>
                 )}
                 <Button variant="ghost" onClick={resetForm}>
@@ -181,7 +213,7 @@ export default function CreateAssignment() {
               <div className="flex flex-col gap-3">
                 <div className="text-sm font-medium">Assignment source</div>
                 <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
-                  {(["markdown", "notion"] as const).map((mode) => (
+                  {(["markdown", "notion", "pdf"] as const).map((mode) => (
                     <button
                       key={mode}
                       type="button"
@@ -193,7 +225,7 @@ export default function CreateAssignment() {
                           : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                       )}
                     >
-                      {mode === "markdown" ? "Markdown file" : "Notion link"}
+                      {mode === "markdown" ? "Markdown file" : mode === "notion" ? "Notion link" : "PDF"}
                     </button>
                   ))}
                 </div>
@@ -223,6 +255,29 @@ export default function CreateAssignment() {
                     />
                   </Label>
                 )}
+
+                {sourceMode === "pdf" && (
+                  <div className="flex flex-col gap-2">
+                    <Label>
+                      Upload PDF brief
+                      <Input
+                        accept=".pdf"
+                        type="file"
+                        disabled={uploadingPdf}
+                        onChange={handlePdfBrief}
+                      />
+                    </Label>
+                    {uploadingPdf && (
+                      <div className="text-xs text-[var(--fg-muted)]">Uploading…</div>
+                    )}
+                    {pdfFileName && !uploadingPdf && (
+                      <div className="inline-flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+                        <Icon.Check className="h-3 w-3 text-[var(--success)]" />
+                        {pdfFileName} uploaded
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <Label required>
@@ -235,9 +290,32 @@ export default function CreateAssignment() {
                 />
               </Label>
 
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Track <span className="font-normal text-[var(--fg-muted)]">(optional)</span></span>
+                <select
+                  value={track}
+                  onChange={(e) => {
+                    const v = e.target.value as Track | "";
+                    setTrack(v);
+                    if (v && !CODE_TRACKS.includes(v as Track)) setAllowGithub(false);
+                    else setAllowGithub(true);
+                  }}
+                  className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                >
+                  <option value="">No specific track</option>
+                  {TRACKS.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                {track && !CODE_TRACKS.includes(track as Track) && (
+                  <p className="text-xs text-[var(--fg-muted)]">GitHub submissions are not available for this track.</p>
+                )}
+              </div>
+
               <div className="flex flex-col gap-3">
                 <div className="text-sm font-medium">Submission type</div>
                 <div className="flex flex-wrap gap-2">
+                  {isCodeTrack && (
                   <label
                     className={cn(
                       "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
@@ -255,6 +333,7 @@ export default function CreateAssignment() {
                     <Icon.Github className="h-4 w-4" />
                     GitHub repo
                   </label>
+                  )}
                   <label
                     className={cn(
                       "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
@@ -270,7 +349,7 @@ export default function CreateAssignment() {
                       className="h-4 w-4 accent-[var(--accent)]"
                     />
                     <Icon.Upload className="h-4 w-4" />
-                    ZIP upload
+                    ZIP / PDF upload
                   </label>
                 </div>
               </div>
@@ -286,7 +365,7 @@ export default function CreateAssignment() {
                   Group project
                 </label>
                 {isGroupAssignment && (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                     <Label>
                       Number of groups
                       <Input
@@ -298,8 +377,35 @@ export default function CreateAssignment() {
                         className="max-w-[140px]"
                       />
                     </Label>
+
+                    <div className="flex flex-col gap-2">
+                      <span className="text-sm font-medium">Questions per team</span>
+                      <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                        {(["same", "per_group"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setGroupQuestionMode(mode)}
+                            className={cn(
+                              "rounded-md px-4 py-1.5 text-xs font-medium transition-colors",
+                              groupQuestionMode === mode
+                                ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                                : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                            )}
+                          >
+                            {mode === "same" ? "Same for all teams" : "Different per team"}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-[var(--fg-muted)]">
+                        {groupQuestionMode === "same"
+                          ? "All teams answer the same questions and are graded on the same rubric."
+                          : "Each team gets its own description and rubric. Set them on the team management page after creating the assignment."}
+                      </p>
+                    </div>
+
                     <p className="text-xs text-[var(--fg-muted)]">
-                      Students will be auto-distributed across {groupCount} group{groupCount === 1 ? "" : "s"}. You can drag-and-drop members afterwards. Every member of a group gets the same score.
+                      Students will be auto-distributed across {groupCount} group{groupCount === 1 ? "" : "s"} and emailed about their team. You can drag-and-drop members afterwards. Every member of a group gets the same score.
                     </p>
                   </div>
                 )}

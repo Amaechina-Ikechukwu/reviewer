@@ -1,4 +1,5 @@
 import { assignmentRoutes } from "./routes/assignments";
+import { notificationRoutes } from "./routes/notifications";
 import { auditLogRoutes } from "./routes/auditLogs";
 import { authRoutes } from "./routes/auth";
 import { classNoteRoutes } from "./routes/classNotes";
@@ -10,6 +11,7 @@ import { studentRoutes } from "./routes/students";
 import { submissionRoutes } from "./routes/submissions";
 import { staffRoutes } from "./routes/staff";
 import { teacherRoutes } from "./routes/teachers";
+import { changelogRoutes } from "./routes/changelogs";
 
 export type V2RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 export type V2RouteSpec = { method: string; path: string; handler: V2RouteHandler; requiresAuth: boolean };
@@ -73,6 +75,7 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/class-notes", handler: classNoteRoutes.upload, requiresAuth: true },
   { method: "GET", path: "/v2/api/class-notes", handler: classNoteRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/class-notes/:id", handler: classNoteRoutes.get, requiresAuth: true },
+  { method: "GET", path: "/v2/api/class-notes/:id/download", handler: classNoteRoutes.download, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/class-notes/:id", handler: classNoteRoutes.remove, requiresAuth: true },
 
   { method: "POST", path: "/v2/api/reviews/:submissionId/run", handler: reviewRoutes.run, requiresAuth: true },
@@ -88,4 +91,11 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/forms/:id/responses", handler: customFormRoutes.submitResponse, requiresAuth: true },
   { method: "GET", path: "/v2/api/forms/:id/responses", handler: customFormRoutes.listResponses, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/forms/:id/responses/:responseId", handler: customFormRoutes.decideResponse, requiresAuth: true },
+
+  { method: "POST", path: "/v2/api/notifications/send", handler: notificationRoutes.send, requiresAuth: true },
+
+  { method: "GET", path: "/v2/api/changelogs", handler: changelogRoutes.list, requiresAuth: false },
+  { method: "POST", path: "/v2/api/changelogs", handler: changelogRoutes.create, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/changelogs/:id", handler: changelogRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/changelogs/:id", handler: changelogRoutes.remove, requiresAuth: true },
 ];

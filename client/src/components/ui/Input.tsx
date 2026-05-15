@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { Children, forwardRef, isValidElement, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
 const fieldBase =
@@ -31,12 +31,17 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 );
 
 export function Label({ className, children, required, ...rest }: React.LabelHTMLAttributes<HTMLLabelElement> & { required?: boolean }) {
+  const childArray = Children.toArray(children);
+  const textChildren = childArray.filter((c) => !isValidElement(c));
+  const elementChildren = childArray.filter((c) => isValidElement(c));
+
   return (
     <label className={cn("flex flex-col gap-1.5 text-xs font-medium text-[var(--fg-muted)]", className)} {...rest}>
       <span className="flex items-center gap-1">
-        {children}
+        {textChildren}
         {required && <span className="text-[var(--danger)]">*</span>}
       </span>
+      {elementChildren}
     </label>
   );
 }

@@ -192,7 +192,7 @@ export default function StaffPage() {
           </Button>
         </div>
 
-        <Table>
+        <Table overflowVisible>
           <THead>
             <TR>
               <TH>Name</TH>

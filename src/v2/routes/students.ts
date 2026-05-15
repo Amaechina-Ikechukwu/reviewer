@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
+import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { sendInvite, sendPasswordReset } from "../../services/email";
 import { json, parseJson } from "../../utils/json";
@@ -11,19 +12,21 @@ const generateToken = () => randomBytes(32).toString("hex");
 export const studentRoutes = {
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can manage students." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const rows = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
     rows.sort((a, b) => String(a.fullName).localeCompare(String(b.fullName)));
     return json(rows.map(({ passwordHash, ...r }) => ({
-      id: r.id, email: r.email, fullName: r.fullName, role: r.role, createdAt: r.createdAt,
+      id: r.id, email: r.email, fullName: r.fullName, role: r.role,
+      cohortId: r.cohortId ?? null,
+      createdAt: r.createdAt,
       pending: passwordHash === "INVITE_PENDING",
     })));
   },
 
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can create students." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<{ email?: string; fullName?: string }>(request);
     const email = body.email?.trim().toLowerCase();
@@ -44,7 +47,7 @@ export const studentRoutes = {
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
     });
 
-    try { await sendInvite(email, fullName, token); }
+    try { await sendInvite(email, fullName, token, "student"); }
     catch (err) { console.error("Failed to send invite email:", err); }
 
     return json({
@@ -62,7 +65,7 @@ export const studentRoutes = {
 
   async openSubmission(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can open submissions." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const { studentId } = params;
     const { assignmentId, closesAt: closesAtStr } = await parseJson<{ assignmentId?: string; closesAt?: string }>(request);
@@ -90,7 +93,7 @@ export const studentRoutes = {
 
   async merge(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can merge students." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const { sourceId, targetId } = await parseJson<{ sourceId?: string; targetId?: string }>(request);
     if (!sourceId || !targetId) return json({ error: "sourceId and targetId required." }, 400);
@@ -145,7 +148,7 @@ export const studentRoutes = {
 
   async resetPassword(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can trigger password resets." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const { studentId } = await parseJson<{ studentId?: string }>(request);
     if (!studentId) return json({ error: "studentId required." }, 400);
@@ -168,7 +171,7 @@ export const studentRoutes = {
 
   async delete(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (actor.role !== "teacher") return json({ error: "Only teachers can delete students." }, 403);
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
 
     const { studentId } = params;
     const existing = await data.getById<any>(COLLECTIONS.users, studentId);
@@ -190,7 +193,7 @@ export const studentRoutes = {
 
   async update(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (actor.role !== "teacher") return json({ error: "Only teachers can edit student details." }, 403);
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
 
     const { studentId } = params;
     const body = await parseJson<{ fullName?: string; email?: string }>(request);

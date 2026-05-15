@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { Avatar } from "../components/ui/Avatar";
@@ -40,6 +41,7 @@ function RowMenu({
   }, [open]);
 
   const normalItems: Array<{ key: string; label: string }> = [
+    { key: "profile", label: "View performance" },
     { key: "open", label: "Open submission" },
     { key: "submit-for", label: "Submit for student" },
     { key: "edit", label: "Edit details" },
@@ -94,6 +96,7 @@ function RowMenu({
 }
 
 export default function StudentsPage() {
+  const navigate = useNavigate();
   const [students, setStudents] = useState<StudentWithPending[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -294,6 +297,9 @@ export default function StudentsPage() {
 
   function handleRowAction(action: string, student: StudentWithPending) {
     switch (action) {
+      case "profile":
+        navigate(`/teacher/students/${student.id}`);
+        break;
       case "open":
         setOpenSubFor(student);
         setOpenSubAssignmentId(assignments[0]?.id || "");
@@ -379,11 +385,14 @@ export default function StudentsPage() {
               {sortedStudents.map((student) => (
                 <TR key={student.id}>
                   <TD label="Student">
-                    <div className="flex items-center gap-3">
+                    <div
+                      className="flex cursor-pointer items-center gap-3 group"
+                      onClick={() => navigate(`/teacher/students/${student.id}`)}
+                    >
                       <Avatar name={student.fullName} size="sm" />
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="truncate font-medium">{student.fullName}</span>
+                          <span className="truncate font-medium group-hover:text-[var(--accent)] transition-colors">{student.fullName}</span>
                           {student.pending && <Badge tone="warn">Invite pending</Badge>}
                         </div>
                       </div>

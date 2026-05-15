@@ -56,7 +56,7 @@ export const staffRoutes = {
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
     });
 
-    try { await sendInvite(email, fullName, token); } catch (err) {
+    try { await sendInvite(email, fullName, token, role); } catch (err) {
       console.error("Failed to send invite email:", err);
     }
 
@@ -107,7 +107,7 @@ export const staffRoutes = {
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
     });
 
-    try { await sendInvite(target.email, target.fullName, token); } catch (err) {
+    try { await sendInvite(target.email, target.fullName, token, target.role); } catch (err) {
       console.error("Failed to resend invite email:", err);
     }
 

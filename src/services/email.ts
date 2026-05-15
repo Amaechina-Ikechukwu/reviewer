@@ -20,15 +20,31 @@ function send(to: string, subject: string, html: string) {
   return transport.sendMail({ from: FROM, to, subject, html });
 }
 
-export async function sendInvite(email: string, fullName: string, token: string) {
+export async function sendInvite(email: string, fullName: string, token: string, role?: string) {
   const link = `${APP_URL}/setup/${token}`;
   const first = fullName.split(" ")[0];
-  await send(email, "You've been added to Reviewer", `
+  const isStaffInvite = role && role !== "student";
+
+  const greeting = isStaffInvite
+    ? `You've been added to the <strong>Reviewer</strong> staff team.`
+    : `Your teacher has added you to <strong>Reviewer</strong>. Set up your account to see your assignments and submissions.`;
+
+  await send(email, isStaffInvite
+    ? "You're now on the Reviewer staff team"
+    : "You've been added to Reviewer", `
     <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:32px 24px;color:#15233b">
-      <h2 style="margin:0 0 8px">Hi ${first},</h2>
-      <p style="margin:0 0 24px;color:#64748b">Your teacher has added you to <strong>Reviewer</strong>. Set up your account to see your assignments and submissions.</p>
-      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">Set up my account</a>
-      <p style="margin:24px 0 0;font-size:0.85rem;color:#94a3b8">Link expires in 48 hours. If you weren't expecting this, ignore it.</p>
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#0d56d8,#1a73e8)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+      </div>
+      <h2 style="margin:0 0 8px;text-align:center">Hi ${first},</h2>
+      <p style="margin:0 0 24px;color:#64748b;text-align:center;line-height:1.6">${greeting}</p>
+      <div style="text-align:center;margin-bottom:24px">
+        <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">Set up my account</a>
+      </div>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 16px"/>
+      <p style="margin:0;font-size:0.8rem;color:#94a3b8;text-align:center">This link expires in 48 hours. If you weren't expecting this, you can safely ignore it.</p>
     </div>
   `);
 }
@@ -112,6 +128,77 @@ export async function sendSubmissionNotification(
       <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">Review submission</a>
     </div>
   `);
+}
+
+export async function sendGroupAssignmentNotification(
+  members: Array<{ email: string; fullName: string }>,
+  assignment: { title: string; id: string },
+  groupName: string,
+  teammates: string[],
+) {
+  const link = `${APP_URL}/student/submit/${assignment.id}`;
+  const teammateLine = teammates.length > 0
+    ? `<p style="margin:0 0 16px;color:#64748b">Teammates: <strong>${teammates.join(", ")}</strong></p>`
+    : "";
+  await Promise.allSettled(members.map(({ email, fullName }) =>
+    send(email, `You've been assigned to ${groupName} for "${assignment.title}"`, `
+      <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:32px 24px;color:#15233b">
+        <h2 style="margin:0 0 8px">Hi ${fullName.split(" ")[0]},</h2>
+        <p style="margin:0 0 4px;color:#64748b">You've been assigned to <strong>${groupName}</strong> for the group project <strong>${assignment.title}</strong>.</p>
+        ${teammateLine}
+        <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">Open assignment</a>
+      </div>
+    `),
+  ));
+}
+
+export async function sendFormNotification(
+  recipients: Array<{ email: string; fullName: string }>,
+  form: { id: string; title: string; description?: string; publishedLink?: string | null; closesAt?: Date | string | null },
+) {
+  const link = form.publishedLink || `${APP_URL}/student/forms/${form.id}`;
+  const deadline = form.closesAt
+    ? new Date(form.closesAt).toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" })
+    : null;
+  await Promise.allSettled(recipients.map(({ email, fullName }) =>
+    send(email, `New form: ${form.title}`, `
+      <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:32px 24px;color:#15233b">
+        <h2 style="margin:0 0 8px">Hi ${fullName.split(" ")[0]},</h2>
+        <p style="margin:0 0 4px;color:#64748b">A new form is available: <strong>${form.title}</strong>.</p>
+        ${form.description ? `<p style="margin:0 0 16px;color:#64748b">${form.description}</p>` : ""}
+        ${deadline ? `<p style="margin:0 0 16px;color:#64748b">Closes: <strong>${deadline}</strong></p>` : ""}
+        <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">Open form</a>
+      </div>
+    `),
+  ));
+}
+
+export async function sendCustomNotification(
+  recipients: Array<{ email: string; fullName: string }>,
+  subject: string,
+  message: string,
+): Promise<{ sent: number; failed: number }> {
+  const escaped = message
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+  const results = await Promise.allSettled(
+    recipients.map(({ email, fullName }) =>
+      send(email, subject, `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:auto;background:#fff;border-radius:12px;padding:40px 32px;border:1px solid #e2e8f0">
+          <p style="margin:0 0 20px;font-size:16px;font-weight:500;color:#0f172a">Hi ${fullName},</p>
+          <div style="font-size:15px;color:#334155;line-height:1.75">${escaped}</div>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0 20px"/>
+          <p style="margin:0;font-size:12px;color:#94a3b8">Sent via Scholar AI platform</p>
+        </div>
+      `),
+    ),
+  );
+  return {
+    sent: results.filter((r) => r.status === "fulfilled").length,
+    failed: results.filter((r) => r.status === "rejected").length,
+  };
 }
 
 export async function sendDeadlineReminder(

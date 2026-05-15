@@ -1,6 +1,4 @@
 import { mkdirSync } from "node:fs";
-import { ensureSchema } from "./db/ensure-schema";
-import { startReminderJob } from "./jobs/reminders";
 import { startReminderJobV2 } from "./v2/jobs/reminders";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -9,15 +7,6 @@ import { normalize, resolve } from "node:path";
 import type { AuthenticatedRequest } from "./middleware/auth";
 import { verifyAuth } from "./middleware/auth";
 import { audit } from "./services/audit";
-import { assignmentRoutes } from "./routes/assignments";
-import { classNoteRoutes } from "./routes/classNotes";
-import { auditLogRoutes } from "./routes/auditLogs";
-import { authRoutes } from "./routes/auth";
-import { gradebookRoutes } from "./routes/gradebook";
-import { reviewRoutes } from "./routes/reviews";
-import { studentRoutes } from "./routes/students";
-import { submissionRoutes } from "./routes/submissions";
-import { teacherRoutes } from "./routes/teachers";
 import { v2Routes } from "./v2";
 
 type RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
@@ -91,52 +80,6 @@ async function serveStatic(pathname: string) {
   });
 }
 
-addRoute("POST", "/api/auth/register", authRoutes.register, false);
-addRoute("POST", "/api/auth/login", authRoutes.login, false);
-addRoute("GET", "/api/auth/me", authRoutes.me);
-addRoute("GET", "/api/auth/token/:token", authRoutes.validateToken, false);
-addRoute("POST", "/api/auth/invite/:token", authRoutes.acceptInvite, false);
-addRoute("POST", "/api/auth/reset/:token", authRoutes.resetPassword, false);
-
-addRoute("POST", "/api/assignments", assignmentRoutes.create);
-addRoute("GET", "/api/assignments", assignmentRoutes.list);
-addRoute("GET", "/api/assignments/:id", assignmentRoutes.get);
-addRoute("PATCH", "/api/assignments/:id", assignmentRoutes.update);
-addRoute("DELETE", "/api/assignments/:id", assignmentRoutes.remove);
-
-addRoute("POST", "/api/submissions", submissionRoutes.create);
-addRoute("POST", "/api/submissions/import", submissionRoutes.import);
-addRoute("GET", "/api/submissions", submissionRoutes.list);
-addRoute("GET", "/api/submissions/:id", submissionRoutes.get);
-addRoute("GET", "/api/submissions/:id/files", submissionRoutes.getFiles);
-
-addRoute("POST", "/api/submissions/submit-for-student", submissionRoutes.submitForStudent);
-addRoute("GET", "/api/students", studentRoutes.list);
-addRoute("GET", "/api/students/my-overrides", studentRoutes.myOverrides);
-addRoute("POST", "/api/students", studentRoutes.create);
-addRoute("POST", "/api/students/merge", studentRoutes.merge);
-addRoute("POST", "/api/students/reset-password", studentRoutes.resetPassword);
-addRoute("PATCH", "/api/students/:studentId", studentRoutes.update);
-addRoute("DELETE", "/api/students/:studentId", studentRoutes.delete);
-addRoute("POST", "/api/students/:studentId/open-submission", studentRoutes.openSubmission);
-
-addRoute("GET", "/api/audit-logs", auditLogRoutes.list);
-addRoute("GET", "/api/gradebook", gradebookRoutes.get);
-
-addRoute("GET", "/api/teachers/join-link", teacherRoutes.getJoinLink);
-addRoute("GET", "/api/teachers/join/:code", teacherRoutes.getTeacherByCode, false);
-addRoute("POST", "/api/teachers/join/:code", teacherRoutes.joinViaLink, false);
-
-addRoute("POST", "/api/class-notes", classNoteRoutes.upload);
-addRoute("GET", "/api/class-notes", classNoteRoutes.list);
-addRoute("GET", "/api/class-notes/:id", classNoteRoutes.get);
-addRoute("DELETE", "/api/class-notes/:id", classNoteRoutes.remove);
-
-addRoute("POST", "/api/reviews/:submissionId/run", reviewRoutes.run);
-addRoute("GET", "/api/reviews/:submissionId", reviewRoutes.get);
-addRoute("PATCH", "/api/reviews/:submissionId/override", reviewRoutes.override);
-
-// /v2 — Firestore-backed mirror of the same routes
 for (const r of v2Routes) {
   addRoute(r.method, r.path, r.handler, r.requiresAuth);
 }
@@ -168,7 +111,6 @@ Bun.serve({
       try {
         const response = await route.handler(routeRequest, params);
 
-        // Audit every API response
         const user = (routeRequest as AuthenticatedRequest).user;
         const status = response.status;
         if (status >= 400) {
@@ -191,47 +133,20 @@ Bun.serve({
 
         return response;
       } catch (error) {
-        // Sanitize DB errors — never expose SQL to users
         const rawMessage = error instanceof Error ? error.message : "Unexpected server error";
-        const isDbError = rawMessage.includes("Failed query")
-          || rawMessage.includes("violates unique constraint")
-          || rawMessage.includes("violates foreign key")
-          || rawMessage.includes("relation ")
-          || rawMessage.includes("column ");
-
-        let userMessage = rawMessage;
-        let status = 500;
-
-        if (rawMessage.includes("violates unique constraint") && rawMessage.includes("uniq_submissions_assignment_student")) {
-          userMessage = "You have already submitted for this assignment.";
-          status = 409;
-        } else if (rawMessage.includes("violates unique constraint")) {
-          userMessage = "A record with this information already exists.";
-          status = 409;
-        } else if (isDbError) {
-          userMessage = "Something went wrong. Please try again or contact your teacher.";
-        }
-
-        // Log the full error server-side with Postgres error details
-        const pgCode = (error as any)?.code;
-        const pgDetail = (error as any)?.detail;
-        const pgConstraint = (error as any)?.constraint;
-        const pgTable = (error as any)?.table;
-        console.error(`[${request.method} ${pathname}]`, rawMessage, { pgCode, pgDetail, pgConstraint, pgTable });
+        console.error(`[${request.method} ${pathname}]`, rawMessage);
         const user = (routeRequest as AuthenticatedRequest).user;
         audit({
           actorId: user?.userId ?? null,
           actorEmail: user?.email ?? null,
           action: `ERROR ${request.method} ${pathname}`,
           targetType: "server_error",
-          details: { error: rawMessage.slice(0, 500), pgCode, pgDetail, pgConstraint, pgTable, method: request.method, path: pathname },
+          details: { error: rawMessage.slice(0, 500), method: request.method, path: pathname },
         });
 
-        return new Response(JSON.stringify({ error: userMessage }), {
-          status,
-          headers: {
-            "Content-Type": "application/json",
-          },
+        return new Response(JSON.stringify({ error: "Something went wrong. Please try again." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
         });
       }
     }
@@ -246,9 +161,7 @@ Bun.serve({
     if (pathname.startsWith("/api/") || pathname.startsWith("/v2/api/")) {
       return new Response(JSON.stringify({ error: "Not found" }), {
         status: 404,
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -256,15 +169,8 @@ Bun.serve({
   },
 });
 
-// Ensure upload directory exists (important on Cloud Run where UPLOAD_DIR=/tmp/uploads)
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// Sync schema on startup (idempotent — safe to run every deploy)
-ensureSchema().then(() => {
-  startReminderJob();
-  if (process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    startReminderJobV2();
-  }
-  console.log(`Reviewer app listening on port ${port}`);
-});
+startReminderJobV2();
+console.log(`Reviewer app listening on port ${port}`);

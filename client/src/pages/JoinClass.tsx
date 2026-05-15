@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { AuthLayout } from "../components/AuthLayout";
+import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Input, Label } from "../components/ui/Input";
 import { useAuth } from "../context/AuthContext";
@@ -36,9 +37,12 @@ export default function JoinClass() {
         body: JSON.stringify({ fullName, email, password }),
       });
       login(token, user);
+      toast().success("Account created! Welcome.");
       navigate("/student");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create account");
+      const msg = err instanceof Error ? err.message : "Failed to create account";
+      setError(msg);
+      toast().error(msg);
     } finally {
       setSubmitting(false);
     }

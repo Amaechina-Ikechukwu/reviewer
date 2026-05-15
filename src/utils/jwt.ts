@@ -1,11 +1,18 @@
 import jwt from "jsonwebtoken";
 
+export type StaffRole = "teacher" | "owner" | "admin" | "manager" | "instructor";
+export type UserRole = "student" | StaffRole;
+
 export type AuthUser = {
   userId: string;
   email: string;
   fullName: string;
-  role: "student" | "teacher";
+  role: UserRole;
 };
+
+export function isStaff(role: string): boolean {
+  return ["teacher", "owner", "admin", "manager", "instructor"].includes(role);
+}
 
 const secret = process.env.JWT_SECRET;
 

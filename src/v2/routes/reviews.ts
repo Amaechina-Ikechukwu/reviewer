@@ -1,17 +1,19 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AuthenticatedRequest } from "../../middleware/auth";
+import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { getAvailableProviders, reviewCode, type ProviderName } from "../../services/ai/reviewer";
 import { readCodeFiles } from "../../services/code-reader";
+import { extractZipBuffer, savePdfBuffer } from "../../services/file-extractor";
 import { sendGradeRelease } from "../../services/email";
 import { cloneGithubRepo } from "../../services/github";
 import { json } from "../../utils/json";
 import { randomUUID } from "node:crypto";
 import { data } from "../data";
-import { COLLECTIONS } from "../firebase";
+import { COLLECTIONS, storageDownload } from "../firebase";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+const TMP_DIR = "/tmp/submissions";
 
 export const reviewRoutes = {
   async providers() {
@@ -20,7 +22,7 @@ export const reviewRoutes = {
 
   async run(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can trigger reviews." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const body = await request.json().catch(() => ({})) as { provider?: string };
 
@@ -32,11 +34,24 @@ export const reviewRoutes = {
 
     let filePath = submission.filePath;
     if (!filePath || !existsSync(filePath)) {
-      if (!submission.githubUrl) return json({ error: "Submission has no files and no GitHub URL to re-clone from." }, 400);
-      const dest = join(UPLOAD_DIR, submission.id);
-      await cloneGithubRepo(submission.githubUrl, dest);
-      filePath = dest;
-      await data.update(COLLECTIONS.submissions, submission.id, { filePath });
+      if (submission.storageKey) {
+        const dest = join(TMP_DIR, submission.id);
+        const rawBuffer = await storageDownload(submission.storageKey);
+        if (submission.storageKey.endsWith(".pdf")) {
+          await savePdfBuffer(rawBuffer, "submission.pdf", dest);
+        } else {
+          await extractZipBuffer(rawBuffer, dest);
+        }
+        filePath = dest;
+        await data.update(COLLECTIONS.submissions, submission.id, { filePath });
+      } else if (submission.githubUrl) {
+        const dest = join(TMP_DIR, submission.id);
+        await cloneGithubRepo(submission.githubUrl, dest);
+        filePath = dest;
+        await data.update(COLLECTIONS.submissions, submission.id, { filePath });
+      } else {
+        return json({ error: "Submission has no files and no GitHub URL to re-clone from." }, 400);
+      }
     }
 
     const codeFiles = await readCodeFiles(filePath);
@@ -115,7 +130,7 @@ export const reviewRoutes = {
 
   async override(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role !== "teacher") return json({ error: "Only teachers can override scores." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
     const body = await request.json().catch(() => ({})) as { score?: number; feedback?: string };
     const score = Number(body.score);

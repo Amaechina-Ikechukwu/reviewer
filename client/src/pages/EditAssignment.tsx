@@ -11,7 +11,7 @@ import { api } from "../api";
 import { cn } from "../lib/cn";
 import type { Assignment } from "../types";
 
-type SourceMode = "markdown" | "notion";
+type SourceMode = "markdown" | "notion" | "pdf";
 
 function toDatetimeLocal(iso: string) {
   const d = new Date(iso);
@@ -30,6 +30,9 @@ export default function EditAssignment() {
   const [sourceMode, setSourceMode] = useState<SourceMode>("markdown");
   const [sourceMarkdown, setSourceMarkdown] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourcePdfPath, setSourcePdfPath] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const [closesAt, setClosesAt] = useState("");
   const [allowGithub, setAllowGithub] = useState(true);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
@@ -42,9 +45,13 @@ export default function EditAssignment() {
     api<Assignment>(`/assignments/${id}`)
       .then((a) => {
         setTitle(a.title);
-        setSourceMode(a.sourceType === "notion" ? "notion" : "markdown");
+        setSourceMode(a.sourceType === "notion" ? "notion" : a.sourceType === "pdf" ? "pdf" : "markdown");
         setSourceMarkdown(a.sourceMarkdown ?? "");
         setSourceUrl(a.sourceUrl ?? "");
+        if (a.sourceType === "pdf" && a.sourcePdfPath) {
+          setSourcePdfPath(a.sourcePdfPath);
+          setPdfFileName("existing-brief.pdf");
+        }
         setClosesAt(toDatetimeLocal(a.closesAt));
         setAllowGithub(a.allowGithub);
         setAllowFileUpload(a.allowFileUpload);
@@ -70,6 +77,24 @@ export default function EditAssignment() {
     event.target.value = "";
   }
 
+  async function handlePdfBrief(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingPdf(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api<{ briefId: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+      setSourcePdfPath(res.briefId);
+      setPdfFileName(file.name);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "PDF upload failed.");
+    } finally {
+      setUploadingPdf(false);
+      event.target.value = "";
+    }
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -84,6 +109,7 @@ export default function EditAssignment() {
           sourceType: sourceMode,
           sourceMarkdown: sourceMode === "markdown" ? sourceMarkdown : null,
           sourceUrl: sourceMode === "notion" ? sourceUrl : null,
+          sourcePdfPath: sourceMode === "pdf" ? sourcePdfPath : null,
           closesAt: new Date(closesAt).toISOString(),
           allowGithub,
           allowFileUpload,
@@ -148,7 +174,7 @@ export default function EditAssignment() {
               <div className="flex flex-col gap-3">
                 <div className="text-sm font-medium">Assignment source</div>
                 <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
-                  {(["markdown", "notion"] as const).map((mode) => (
+                  {(["markdown", "notion", "pdf"] as const).map((mode) => (
                     <button
                       key={mode}
                       type="button"
@@ -160,7 +186,7 @@ export default function EditAssignment() {
                           : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                       )}
                     >
-                      {mode === "markdown" ? "Markdown file" : "Notion link"}
+                      {mode === "markdown" ? "Markdown file" : mode === "notion" ? "Notion link" : "PDF"}
                     </button>
                   ))}
                 </div>
@@ -189,6 +215,24 @@ export default function EditAssignment() {
                       onChange={(e) => setSourceUrl(e.target.value)}
                     />
                   </Label>
+                )}
+
+                {sourceMode === "pdf" && (
+                  <div className="flex flex-col gap-2">
+                    <Label>
+                      Upload PDF brief
+                      <Input accept=".pdf" type="file" disabled={uploadingPdf} onChange={handlePdfBrief} />
+                    </Label>
+                    {uploadingPdf && (
+                      <div className="text-xs text-[var(--fg-muted)]">Uploading…</div>
+                    )}
+                    {pdfFileName && !uploadingPdf && (
+                      <div className="inline-flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+                        <Icon.Check className="h-3 w-3 text-[var(--success)]" />
+                        {pdfFileName}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -237,7 +281,7 @@ export default function EditAssignment() {
                       className="h-4 w-4 accent-[var(--accent)]"
                     />
                     <Icon.Upload className="h-4 w-4" />
-                    ZIP upload
+                    ZIP / PDF upload
                   </label>
                 </div>
               </div>

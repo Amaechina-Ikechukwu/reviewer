@@ -8,16 +8,11 @@
     "start": "bun src/index.ts",
     "dev:client": "npm --prefix client run dev",
     "build:client": "npm --prefix client run build",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "bun src/db/migrate.ts",
-    "db:push": "drizzle-kit push"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
     "@google/genai": "^1.48.0",
-    "drizzle-kit": "^0.31.4",
-    "drizzle-orm": "^0.44.2",
     "ecdsa-sig-formatter": "^1.0.11",
     "extend": "^3.0.2",
     "extract-zip": "^2.0.1",
@@ -26,15 +21,13 @@
     "jsonwebtoken": "^9.0.3",
     "mime-types": "^2.1.35",
     "nodemailer": "^8.0.4",
-    "openai": "^6.34.0",
-    "postgres": "^3.4.7"
+    "openai": "^6.34.0"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
     "@types/mime-types": "^2.1.4",
     "@types/node": "^22.15.30",
     "@types/nodemailer": "^8.0.0",
-    "drizzle-kit": "^0.31.4",
     "typescript": "^5.8.3"
   }
 }

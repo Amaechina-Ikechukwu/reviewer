@@ -26,6 +26,9 @@ import StudentDashboard from "./pages/StudentDashboard";
 import StudentResults from "./pages/StudentResults";
 import StudentResultDetail from "./pages/StudentResultDetail";
 import StaffPage from "./pages/StaffPage";
+import ChangelogPage from "./pages/ChangelogPage";
+import NotificationsPage from "./pages/NotificationsPage";
+import SettingsPage from "./pages/SettingsPage";
 import StudentsPage from "./pages/StudentsPage";
 import StudentProfilePage from "./pages/StudentProfilePage";
 import SubmitAssignment from "./pages/SubmitAssignment";
@@ -227,6 +230,30 @@ export default function App() {
         element={(
           <ProtectedRoute role="teacher">
             <StaffPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/changelog"
+        element={(
+          <ProtectedRoute role="teacher">
+            <ChangelogPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/notifications"
+        element={(
+          <ProtectedRoute role="teacher">
+            <NotificationsPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/settings"
+        element={(
+          <ProtectedRoute role="teacher">
+            <SettingsPage />
           </ProtectedRoute>
         )}
       />
