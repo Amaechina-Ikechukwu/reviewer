@@ -10,7 +10,42 @@ import { audit } from "../services/audit";
 const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
 type StaffRole = typeof VALID_STAFF_ROLES[number];
 
-const generateToken = () => randomUUID().replace(/-/g, "");
+const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_NAME_LEN = 120;
+
+const generateToken = () => randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
+
+function isValidRole(role: unknown): role is StaffRole {
+  return typeof role === "string" && (VALID_STAFF_ROLES as readonly string[]).includes(role);
+}
+
+function buildInviteLink(token: string) {
+  const base = (process.env.APP_URL || "").replace(/\/$/, "");
+  return `${base}/setup/${token}`;
+}
+
+async function issueInvite(userId: string, email: string, fullName: string, role: StaffRole) {
+  await data.delMany(COLLECTIONS.authTokens, [["userId", "==", userId]]);
+  const token = generateToken();
+  await data.insert(COLLECTIONS.authTokens, token, {
+    userId, token, type: "invite",
+    expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+    usedAt: null,
+  });
+
+  let emailSent = true;
+  let emailError: string | null = null;
+  try {
+    await sendInvite(email, fullName, token, role);
+  } catch (err) {
+    emailSent = false;
+    emailError = err instanceof Error ? err.message : "Unknown error";
+    console.error("Failed to send invite email:", err);
+  }
+
+  return { token, inviteLink: buildInviteLink(token), emailSent, emailError };
+}
 
 export const staffRoutes = {
   async list(request: Request) {
@@ -34,34 +69,78 @@ export const staffRoutes = {
     if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<{ fullName?: string; email?: string; role?: string }>(request);
-    const email = body.email?.trim().toLowerCase();
-    const fullName = body.fullName?.trim();
-    const role: StaffRole = (VALID_STAFF_ROLES as readonly string[]).includes(body.role || "")
-      ? (body.role as StaffRole)
-      : "instructor";
+    const email = body.email?.trim().toLowerCase() ?? "";
+    const fullName = body.fullName?.trim() ?? "";
+    const rawRole = body.role?.trim();
 
-    if (!email || !fullName) return json({ error: "Full name and email are required." }, 400);
+    if (!fullName) return json({ error: "Full name is required." }, 400);
+    if (fullName.length > MAX_NAME_LEN) return json({ error: `Full name must be ${MAX_NAME_LEN} characters or fewer.` }, 400);
+    if (!email) return json({ error: "Email is required." }, 400);
+    if (!EMAIL_RE.test(email)) return json({ error: "Please enter a valid email address." }, 400);
+    if (!rawRole) return json({ error: "Role is required." }, 400);
+    if (!isValidRole(rawRole)) {
+      return json({ error: `Invalid role. Must be one of: ${VALID_STAFF_ROLES.join(", ")}.` }, 400);
+    }
+    const role: StaffRole = rawRole;
 
     const existing = await data.findOne<any>(COLLECTIONS.users, [["email", "==", email]]);
-    if (existing) return json({ error: "An account with that email already exists." }, 409);
+
+    if (existing) {
+      if (existing.passwordHash !== "INVITE_PENDING") {
+        return json({ error: "An active account with that email already exists." }, 409);
+      }
+      const updates: Record<string, unknown> = {};
+      if (existing.fullName !== fullName) updates.fullName = fullName;
+      if (existing.role !== role) updates.role = role;
+      if (Object.keys(updates).length) await data.update(COLLECTIONS.users, existing.id, updates);
+
+      const result = await issueInvite(existing.id, email, fullName, role);
+      audit({
+        actorId: actor.userId,
+        action: "staff.invite_resent",
+        targetType: "user",
+        targetId: existing.id,
+        details: { email, role, reason: "duplicate_invite", emailSent: result.emailSent },
+      });
+      return json({
+        id: existing.id, email, fullName, role, pending: true,
+        inviteLink: result.inviteLink,
+        emailSent: result.emailSent,
+        ...(result.emailError ? { emailError: result.emailError } : {}),
+        reinvited: true,
+      });
+    }
 
     const id = randomUUID();
     const staff = await data.insert<any>(COLLECTIONS.users, id, {
-      email, fullName, passwordHash: "INVITE_PENDING", role, joinCode: null, teacherId: null,
+      email, fullName, passwordHash: "INVITE_PENDING", role,
+      joinCode: null, teacherId: null,
     });
 
-    const token = generateToken();
-    await data.insert(COLLECTIONS.authTokens, token, {
-      userId: staff.id, token, type: "invite",
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
-    });
-
-    try { await sendInvite(email, fullName, token, role); } catch (err) {
-      console.error("Failed to send invite email:", err);
+    let result;
+    try {
+      result = await issueInvite(staff.id, email, fullName, role);
+    } catch (err) {
+      // Token insert failed — roll back the orphan user so the staff list stays clean.
+      await data.del(COLLECTIONS.users, staff.id).catch(() => {});
+      const msg = err instanceof Error ? err.message : "Failed to issue invite.";
+      console.error("Rolling back staff invite — token insert failed:", err);
+      return json({ error: msg }, 500);
     }
 
-    audit({ actorId: actor.userId, action: "staff.invited", targetType: "user", targetId: staff.id, details: { email, role } });
-    return json({ id: staff.id, email, fullName, role, pending: true }, 201);
+    audit({
+      actorId: actor.userId,
+      action: "staff.invited",
+      targetType: "user",
+      targetId: staff.id,
+      details: { email, role, emailSent: result.emailSent },
+    });
+    return json({
+      id: staff.id, email, fullName, role, pending: true,
+      inviteLink: result.inviteLink,
+      emailSent: result.emailSent,
+      ...(result.emailError ? { emailError: result.emailError } : {}),
+    }, 201);
   },
 
   async updateRole(request: Request, params: Record<string, string>) {
@@ -72,10 +151,10 @@ export const staffRoutes = {
     if (id === actor.userId) return json({ error: "You cannot change your own role." }, 400);
 
     const body = await parseJson<{ role?: string }>(request);
-    if (!body.role || !(VALID_STAFF_ROLES as readonly string[]).includes(body.role)) {
-      return json({ error: "Invalid role." }, 400);
+    if (!isValidRole(body.role)) {
+      return json({ error: `Invalid role. Must be one of: ${VALID_STAFF_ROLES.join(", ")}.` }, 400);
     }
-    const role = body.role as StaffRole;
+    const role: StaffRole = body.role;
 
     const target = await data.getById<any>(COLLECTIONS.users, id);
     if (!target || !(VALID_STAFF_ROLES as readonly string[]).includes(target.role)) {
@@ -100,19 +179,21 @@ export const staffRoutes = {
       return json({ error: "This staff member has already set up their account." }, 400);
     }
 
-    await data.delMany(COLLECTIONS.authTokens, [["userId", "==", id]]);
-    const token = generateToken();
-    await data.insert(COLLECTIONS.authTokens, token, {
-      userId: id, token, type: "invite",
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), usedAt: null,
+    const result = await issueInvite(target.id, target.email, target.fullName, target.role);
+
+    audit({
+      actorId: actor.userId,
+      action: "staff.invite_resent",
+      targetType: "user",
+      targetId: id,
+      details: { emailSent: result.emailSent },
     });
-
-    try { await sendInvite(target.email, target.fullName, token, target.role); } catch (err) {
-      console.error("Failed to resend invite email:", err);
-    }
-
-    audit({ actorId: actor.userId, action: "staff.invite_resent", targetType: "user", targetId: id });
-    return json({ sent: true });
+    return json({
+      sent: true,
+      inviteLink: result.inviteLink,
+      emailSent: result.emailSent,
+      ...(result.emailError ? { emailError: result.emailError } : {}),
+    });
   },
 
   async remove(request: Request, params: Record<string, string>) {

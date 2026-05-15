@@ -20,6 +20,20 @@ type StaffMember = {
   pending: boolean;
 };
 
+type InviteResponse = StaffMember & {
+  inviteLink?: string;
+  emailSent?: boolean;
+  emailError?: string;
+  reinvited?: boolean;
+};
+
+type ResendResponse = {
+  sent: boolean;
+  inviteLink?: string;
+  emailSent?: boolean;
+  emailError?: string;
+};
+
 const ROLE_OPTIONS: StaffRole[] = ["owner", "admin", "manager", "instructor"];
 
 function RoleDropdown({ member, onChanged }: { member: StaffMember; onChanged: (role: StaffRole) => void }) {
@@ -118,6 +132,11 @@ export default function StaffPage() {
   const [confirmRemove, setConfirmRemove] = useState<StaffMember | null>(null);
   const [removing, setRemoving] = useState(false);
 
+  const [inviteLinkInfo, setInviteLinkInfo] = useState<
+    { email: string; link: string; emailSent: boolean; emailError?: string } | null
+  >(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
   useEffect(() => {
     api<StaffMember[]>("/staff")
       .then(setStaff)
@@ -138,13 +157,32 @@ export default function StaffPage() {
     setInviteError("");
     setInviting(true);
     try {
-      const member = await api<StaffMember>("/staff", {
+      const res = await api<InviteResponse>("/staff", {
         method: "POST",
         body: JSON.stringify({ fullName: inviteName, email: inviteEmail, role: inviteRole }),
       });
-      setStaff((prev) => [...prev, member]);
+      const member: StaffMember = {
+        id: res.id, email: res.email, fullName: res.fullName, role: res.role, pending: res.pending,
+      };
+      setStaff((prev) => {
+        const existing = prev.find((s) => s.id === member.id);
+        return existing ? prev.map((s) => s.id === member.id ? member : s) : [...prev, member];
+      });
       setShowInvite(false);
-      toast().success(`Invite sent to ${inviteEmail}`);
+      if (res.emailSent) {
+        toast().success(res.reinvited ? `Invite re-sent to ${res.email}` : `Invite sent to ${res.email}`);
+      } else {
+        toast().error(`Couldn't email the invite — copy the link below to share it manually.`);
+      }
+      if (res.inviteLink) {
+        setLinkCopied(false);
+        setInviteLinkInfo({
+          email: res.email,
+          link: res.inviteLink,
+          emailSent: !!res.emailSent,
+          emailError: res.emailError,
+        });
+      }
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : "Failed to invite staff member");
     } finally {
@@ -154,10 +192,34 @@ export default function StaffPage() {
 
   async function handleResend(member: StaffMember) {
     try {
-      await api(`/staff/${member.id}/resend-invite`, { method: "POST" });
-      toast().success(`Invite resent to ${member.email}`);
+      const res = await api<ResendResponse>(`/staff/${member.id}/resend-invite`, { method: "POST" });
+      if (res.emailSent) {
+        toast().success(`Invite resent to ${member.email}`);
+      } else {
+        toast().error(`Couldn't email the invite — copy the link below to share it manually.`);
+      }
+      if (res.inviteLink) {
+        setLinkCopied(false);
+        setInviteLinkInfo({
+          email: member.email,
+          link: res.inviteLink,
+          emailSent: !!res.emailSent,
+          emailError: res.emailError,
+        });
+      }
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to resend invite");
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!inviteLinkInfo) return;
+    try {
+      await navigator.clipboard.writeText(inviteLinkInfo.link);
+      setLinkCopied(true);
+      toast().success("Invite link copied");
+    } catch {
+      toast().error("Couldn't copy — select and copy manually");
     }
   }
 
@@ -303,6 +365,40 @@ export default function StaffPage() {
               </Button>
             </div>
           </form>
+        </Modal>
+
+        {/* Invite link modal — shown after invite/resend so the inviter can copy & share */}
+        <Modal
+          open={!!inviteLinkInfo}
+          onClose={() => setInviteLinkInfo(null)}
+          title={inviteLinkInfo?.emailSent ? "Invite sent" : "Invite created — email failed"}
+        >
+          {inviteLinkInfo && (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-[var(--fg-muted)]">
+                {inviteLinkInfo.emailSent ? (
+                  <>An email was sent to <strong className="text-[var(--fg)]">{inviteLinkInfo.email}</strong>. You can also share this link directly:</>
+                ) : (
+                  <>We couldn't email <strong className="text-[var(--fg)]">{inviteLinkInfo.email}</strong>. Share this link with them so they can set up their account:</>
+                )}
+              </p>
+              <div className="flex items-stretch gap-2">
+                <Input readOnly value={inviteLinkInfo.link} onFocus={(e) => e.currentTarget.select()} />
+                <Button type="button" onClick={copyInviteLink}>
+                  {linkCopied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              {!inviteLinkInfo.emailSent && inviteLinkInfo.emailError && (
+                <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
+                  {inviteLinkInfo.emailError}
+                </div>
+              )}
+              <p className="text-xs text-[var(--fg-muted)]">Link expires in 48 hours.</p>
+              <div className="flex justify-end">
+                <Button type="button" variant="ghost" onClick={() => setInviteLinkInfo(null)}>Done</Button>
+              </div>
+            </div>
+          )}
         </Modal>
 
         {/* Remove confirm modal */}
