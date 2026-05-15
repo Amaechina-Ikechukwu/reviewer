@@ -7,6 +7,7 @@ import { normalize, resolve } from "node:path";
 import type { AuthenticatedRequest } from "./middleware/auth";
 import { verifyAuth } from "./middleware/auth";
 import { audit } from "./services/audit";
+import { logger } from "./utils/logger";
 import { v2Routes } from "./v2";
 
 type RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
@@ -134,7 +135,12 @@ Bun.serve({
         return response;
       } catch (error) {
         const rawMessage = error instanceof Error ? error.message : "Unexpected server error";
-        console.error(`[${request.method} ${pathname}]`, rawMessage);
+        logger.error("route handler threw", {
+          method: request.method,
+          path: pathname,
+          error: rawMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         const user = (routeRequest as AuthenticatedRequest).user;
         audit({
           actorId: user?.userId ?? null,

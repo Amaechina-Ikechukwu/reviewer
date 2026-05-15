@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { json, parseJson } from "../../utils/json";
+import { logger } from "../../utils/logger";
 import { sendInvite } from "../../services/email";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
@@ -26,6 +27,7 @@ function buildInviteLink(token: string) {
 }
 
 async function issueInvite(userId: string, email: string, fullName: string, role: StaffRole) {
+  logger.info("issueInvite: starting", { userId, email, role });
   await data.delMany(COLLECTIONS.authTokens, [["userId", "==", userId]]);
   const token = generateToken();
   await data.insert(COLLECTIONS.authTokens, token, {
@@ -33,15 +35,22 @@ async function issueInvite(userId: string, email: string, fullName: string, role
     expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     usedAt: null,
   });
+  logger.info("issueInvite: token persisted", { userId, tokenPrefix: token.slice(0, 8) });
 
   let emailSent = true;
   let emailError: string | null = null;
   try {
     await sendInvite(email, fullName, token, role);
+    logger.info("issueInvite: email sent", { userId, email });
   } catch (err) {
     emailSent = false;
     emailError = err instanceof Error ? err.message : "Unknown error";
-    console.error("Failed to send invite email:", err);
+    logger.error("issueInvite: email send failed", {
+      userId,
+      email,
+      error: emailError,
+      stack: err instanceof Error ? err.stack : undefined,
+    });
   }
 
   return { token, inviteLink: buildInviteLink(token), emailSent, emailError };
@@ -124,7 +133,12 @@ export const staffRoutes = {
       // Token insert failed — roll back the orphan user so the staff list stays clean.
       await data.del(COLLECTIONS.users, staff.id).catch(() => {});
       const msg = err instanceof Error ? err.message : "Failed to issue invite.";
-      console.error("Rolling back staff invite — token insert failed:", err);
+      logger.error("Rolling back staff invite — token insert failed", {
+        userId: staff.id,
+        email,
+        error: msg,
+        stack: err instanceof Error ? err.stack : undefined,
+      });
       return json({ error: msg }, 500);
     }
 

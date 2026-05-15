@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
 import { isStaff, signToken, type UserRole } from "../../utils/jwt";
+import { logger } from "../../utils/logger";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
@@ -13,15 +14,33 @@ function generateOtp(): string {
 }
 
 async function findAuthToken(token: string, type: string) {
-  if (!token) return null;
-  const row = await data.getById<any>(COLLECTIONS.authTokens, token);
-  if (row && row.type === type) return row;
-  // Backward compat: older tokens were stored with a random doc id and the token in a field.
-  const rows = await data.findMany<any>(COLLECTIONS.authTokens, {
-    where: [["token", "==", token]],
-    limit: 10,
-  });
-  return rows.find((r) => r.type === type) || null;
+  if (!token) {
+    logger.warn("findAuthToken: empty token");
+    return null;
+  }
+  try {
+    const row = await data.getById<any>(COLLECTIONS.authTokens, token);
+    if (row) {
+      logger.debug("findAuthToken: doc-id hit", { tokenPrefix: token.slice(0, 8), foundType: row.type, requestedType: type });
+      if (row.type === type) return row;
+    } else {
+      logger.debug("findAuthToken: doc-id miss, trying where-query fallback", { tokenPrefix: token.slice(0, 8), type });
+    }
+    const rows = await data.findMany<any>(COLLECTIONS.authTokens, {
+      where: [["token", "==", token]],
+      limit: 10,
+    });
+    logger.debug("findAuthToken: where-query result", { tokenPrefix: token.slice(0, 8), matchCount: rows.length, types: rows.map((r) => r.type) });
+    return rows.find((r) => r.type === type) || null;
+  } catch (err) {
+    logger.error("findAuthToken: lookup threw", {
+      tokenPrefix: token.slice(0, 8),
+      type,
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    throw err;
+  }
 }
 
 const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
@@ -146,7 +165,7 @@ export const authRoutes = {
     try {
       await sendPasswordReset(email, target.fullName, token);
     } catch (err) {
-      console.error("Failed to send reset email:", err);
+      logger.error("Failed to send reset email", { email, error: err instanceof Error ? err.message : String(err) });
     }
 
     return json({ sent: true, message: "Check your email for the reset link." });
@@ -245,17 +264,18 @@ export const authRoutes = {
 
     const row = await findAuthToken(token, type);
     if (!row) {
-      console.error(`[validateToken] Token not found: token=${token?.slice(0, 8)}..., type=${type}`);
+      logger.info("validateToken: token not found", { tokenPrefix: token?.slice(0, 8), type });
       return json({ valid: false }, 200);
     }
     if (row.usedAt) {
-      console.error(`[validateToken] Token already used: token=${token?.slice(0, 8)}..., usedAt=${row.usedAt}`);
+      logger.info("validateToken: token already used", { tokenPrefix: token?.slice(0, 8), usedAt: row.usedAt });
       return json({ valid: false }, 200);
     }
     if (row.expiresAt && new Date(row.expiresAt) < new Date()) {
-      console.error(`[validateToken] Token expired: token=${token?.slice(0, 8)}..., expiresAt=${row.expiresAt}`);
+      logger.info("validateToken: token expired", { tokenPrefix: token?.slice(0, 8), expiresAt: row.expiresAt });
       return json({ valid: false }, 200);
     }
+    logger.info("validateToken: token valid", { tokenPrefix: token?.slice(0, 8), type, userId: row.userId });
 
     const user = await data.getById<any>(COLLECTIONS.users, row.userId);
     return json({ valid: true, fullName: user?.fullName, email: user?.email });
