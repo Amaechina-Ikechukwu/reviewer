@@ -39,7 +39,7 @@ export default function SetupAccount() {
       });
       login(res.token, res.user);
       toast().success("Account activated!");
-      navigate("/student");
+      navigate(res.user.role === "student" ? "/student" : "/teacher");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to set up account.";
       setError(msg);
