@@ -22,6 +22,9 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "GET", path: "/v2/api/auth/me", handler: authRoutes.me, requiresAuth: true },
   { method: "GET", path: "/v2/api/auth/token/:token", handler: authRoutes.validateToken, requiresAuth: false },
   { method: "POST", path: "/v2/api/auth/invite/:token", handler: authRoutes.acceptInvite, requiresAuth: false },
+  { method: "POST", path: "/v2/api/auth/request-reset", handler: authRoutes.requestReset, requiresAuth: true },
+  { method: "POST", path: "/v2/api/auth/send-otp", handler: authRoutes.sendOtp, requiresAuth: false },
+  { method: "POST", path: "/v2/api/auth/reset-with-otp", handler: authRoutes.resetWithOtp, requiresAuth: false },
   { method: "POST", path: "/v2/api/auth/reset/:token", handler: authRoutes.resetPassword, requiresAuth: false },
 
   { method: "POST", path: "/v2/api/assignments", handler: assignmentRoutes.create, requiresAuth: true },

@@ -26,7 +26,25 @@ const TABS: { key: Tab; label: string; icon: ReactNode }[] = [
 ];
 
 function ProfileTab() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [resetting, setResetting] = useState(false);
+
+  async function handleResetPassword() {
+    setResetting(true);
+    try {
+      await api("/auth/request-reset", {
+        method: "POST",
+        body: JSON.stringify({ email: user?.email }),
+      });
+      toast().success("Reset link sent to your email.");
+      setTimeout(() => { logout(); navigate("/login"); }, 1500);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to send reset email.");
+      setResetting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <Card>
@@ -78,22 +96,14 @@ function ProfileTab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Label>
-              Current password
-              <Input type="password" placeholder="••••••••" />
-            </Label>
-            <Label>
-              New password
-              <Input type="password" placeholder="••••••••" />
-            </Label>
-            <Label>
-              Confirm new password
-              <Input type="password" placeholder="••••••••" />
-            </Label>
-          </div>
+          <p className="text-sm leading-relaxed text-[var(--fg-muted)]">
+            A reset link will be sent to your email. You will be logged out immediately and must verify with a one-time code to set a new password.
+          </p>
           <div>
-            <Button size="sm">Update password</Button>
+            <Button onClick={handleResetPassword} loading={resetting} disabled={resetting} variant="secondary" size="sm">
+              <Icon.Send className="h-3.5 w-3.5" />
+              {resetting ? "Sending…" : "Send reset link"}
+            </Button>
           </div>
         </CardContent>
       </Card>

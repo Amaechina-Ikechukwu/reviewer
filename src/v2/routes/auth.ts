@@ -1,11 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
 import { isStaff, signToken, type UserRole } from "../../utils/jwt";
 import { hashPassword, verifyPassword } from "../../utils/password";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
+import { sendPasswordReset } from "../../services/email";
 import { audit } from "../services/audit";
+
+function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
 
@@ -108,6 +113,105 @@ export const authRoutes = {
 
     audit({ actorId: user.id, actorEmail: user.email, action: "auth.invite_accepted", targetType: "user", targetId: user.id, details: { mergedHistorical: ghosts.length } });
     return json(userResponse(user));
+  },
+
+  async requestReset(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    const body = await parseJson<{ email?: string }>(request);
+    const email = body.email?.trim().toLowerCase() || user.email;
+    if (!email) return json({ error: "Email is required." }, 400);
+
+    const target = await data.findOne<any>(COLLECTIONS.users, [["email", "==", email]]);
+    if (!target) return json({ error: "No account found with that email." }, 404);
+
+    const token = randomBytes(32).toString("hex");
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await data.insert<any>(COLLECTIONS.authTokens, randomUUID(), {
+      userId: target.id, token, type: "reset",
+      otp, otpUsed: false,
+      expiresAt, usedAt: null,
+    });
+
+    try {
+      await sendPasswordReset(email, target.fullName, token);
+    } catch (err) {
+      console.error("Failed to send reset email:", err);
+    }
+
+    return json({ sent: true, message: "Check your email for the reset link." });
+  },
+
+  async sendOtp(request: Request) {
+    const { token } = await parseJson<{ token?: string }>(request);
+    if (!token) return json({ error: "Token is required." }, 400);
+
+    const row = await data.findOne<any>(COLLECTIONS.authTokens, [
+      ["token", "==", token],
+      ["type", "==", "reset"],
+    ]);
+    if (!row || row.usedAt || (row.expiresAt && new Date(row.expiresAt) < new Date())) {
+      return json({ error: "Reset link is invalid or has expired." }, 400);
+    }
+
+    const newOtp = generateOtp();
+    await data.update(COLLECTIONS.authTokens, row.id, { otp: newOtp, otpUsed: false });
+
+    const user = await data.getById<any>(COLLECTIONS.users, row.userId);
+    if (user?.email) {
+      const first = (user.fullName || "").split(" ")[0];
+      const nodemailer = await import("nodemailer");
+      const transport = nodemailer.default.createTransport({
+        host: process.env.SMTP_HOST || "smtp.gmail.com",
+        port: Number(process.env.SMTP_PORT || 587),
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      });
+      const from = process.env.FROM_EMAIL || process.env.SMTP_USER || "noreply@example.com";
+      await transport.sendMail({
+        from, to: user.email,
+        subject: "Your password reset OTP",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px 24px;text-align:center;color:#15233b">
+            <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#0d56d8,#1a73e8);margin-bottom:20px">
+              <span style="color:white;font-size:24px;font-weight:700">!</span>
+            </div>
+            <h2 style="margin:0 0 8px">Hi ${first},</h2>
+            <p style="color:#64748b;margin:0 0 24px;line-height:1.6">Use the OTP below to reset your password. It expires in 15 minutes.</p>
+            <div style="background:#f0f4ff;border-radius:12px;padding:20px;margin-bottom:24px;font-size:32px;font-weight:800;letter-spacing:8px;color:#0d56d8">${newOtp}</div>
+            <p style="font-size:0.85rem;color:#94a3b8;margin:0">If you didn't request this, you can ignore this email.</p>
+          </div>
+        `,
+      });
+    }
+
+    return json({ sent: true });
+  },
+
+  async resetWithOtp(request: Request) {
+    const { token, otp, password } = await parseJson<{ token?: string; otp?: string; password?: string }>(request);
+    if (!token) return json({ error: "Token is required." }, 400);
+    if (!otp || otp.length !== 6) return json({ error: "A valid 6-digit OTP is required." }, 400);
+    if (!password || password.length < 8) return json({ error: "Password must be at least 8 characters." }, 400);
+
+    const row = await data.findOne<any>(COLLECTIONS.authTokens, [
+      ["token", "==", token],
+      ["type", "==", "reset"],
+    ]);
+    if (!row) return json({ error: "Reset session not found." }, 400);
+    if (row.usedAt || (row.expiresAt && new Date(row.expiresAt) < new Date())) {
+      return json({ error: "Reset link has expired." }, 400);
+    }
+    if (row.otpUsed) return json({ error: "OTP has already been used." }, 400);
+    if (row.otp !== otp) return json({ error: "Invalid OTP." }, 400);
+
+    const user = await data.getById<any>(COLLECTIONS.users, row.userId);
+    if (!user) return json({ error: "Account not found." }, 404);
+
+    await data.update(COLLECTIONS.users, user.id, { passwordHash: await hashPassword(password) });
+    await data.update(COLLECTIONS.authTokens, row.id, { usedAt: new Date(), otpUsed: true });
+
+    return json({ success: true, message: "Password updated successfully." });
   },
 
   async resetPassword(request: Request, params: Record<string, string>) {

@@ -201,7 +201,6 @@ export function AppShell({ sections, portalLabel, activeKey, primaryAction, chil
           </Link>
         </div>
         <div className={cn("flex items-center gap-1 px-2 pb-2", collapsed && !isMobile ? "justify-center" : "")}>
-          <ThemeToggle />
           <button
             type="button"
             onClick={() => setLogoutOpen(true)}
