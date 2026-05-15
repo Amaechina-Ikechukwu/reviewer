@@ -12,6 +12,14 @@ function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+async function findAuthToken(token: string, type: string) {
+  const rows = await data.findMany<any>(COLLECTIONS.authTokens, {
+    where: [["token", "==", token]],
+    limit: 10,
+  });
+  return rows.find((r) => r.type === type) || null;
+}
+
 const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
 
 type RegisterBody = { email?: string; password?: string; fullName?: string; role?: UserRole };
@@ -81,10 +89,7 @@ export const authRoutes = {
     const { password } = await parseJson<{ password?: string }>(request);
     if (!password || password.length < 8) return json({ error: "Password must be at least 8 characters." }, 400);
 
-    const row = await data.findOne<any>(COLLECTIONS.authTokens, [
-      ["token", "==", token],
-      ["type", "==", "invite"],
-    ]);
+    const row = await findAuthToken(token, "invite");
     if (!row || row.usedAt || (row.expiresAt && new Date(row.expiresAt) < new Date())) {
       return json({ error: "Invite link is invalid or has expired." }, 400);
     }
@@ -194,10 +199,7 @@ export const authRoutes = {
     if (!otp || otp.length !== 6) return json({ error: "A valid 6-digit OTP is required." }, 400);
     if (!password || password.length < 8) return json({ error: "Password must be at least 8 characters." }, 400);
 
-    const row = await data.findOne<any>(COLLECTIONS.authTokens, [
-      ["token", "==", token],
-      ["type", "==", "reset"],
-    ]);
+    const row = await findAuthToken(token, "reset");
     if (!row) return json({ error: "Reset session not found." }, 400);
     if (row.usedAt || (row.expiresAt && new Date(row.expiresAt) < new Date())) {
       return json({ error: "Reset link has expired." }, 400);
@@ -219,10 +221,7 @@ export const authRoutes = {
     const { password } = await parseJson<{ password?: string }>(request);
     if (!password || password.length < 8) return json({ error: "Password must be at least 8 characters." }, 400);
 
-    const row = await data.findOne<any>(COLLECTIONS.authTokens, [
-      ["token", "==", token],
-      ["type", "==", "reset"],
-    ]);
+    const row = await findAuthToken(token, "reset");
     if (!row || row.usedAt || (row.expiresAt && new Date(row.expiresAt) < new Date())) {
       return json({ error: "Reset link is invalid or has expired." }, 400);
     }
@@ -240,10 +239,7 @@ export const authRoutes = {
     const url = new URL(request.url);
     const type = (url.searchParams.get("type") as "invite" | "reset" | null) || "invite";
 
-    const row = await data.findOne<any>(COLLECTIONS.authTokens, [
-      ["token", "==", token],
-      ["type", "==", type],
-    ]);
+    const row = await findAuthToken(token, type);
     if (!row) {
       console.error(`[validateToken] Token not found: token=${token?.slice(0, 8)}..., type=${type}`);
       return json({ valid: false }, 200);

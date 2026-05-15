@@ -33,5 +33,14 @@
       ]
     }
   ],
+    {
+      "collectionGroup": "auth_tokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "token", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }
