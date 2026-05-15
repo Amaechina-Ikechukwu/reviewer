@@ -115,6 +115,9 @@ export default function ManageGroups() {
           memberIds: g.memberIds,
           description: g.description ?? null,
           rubric: g.rubric ?? null,
+          sourceType: g.sourceType ?? null,
+          sourceUrl: g.sourceUrl ?? null,
+          sourcePdfPath: g.sourcePdfPath ?? null,
         })),
       };
       const res = await api<{ groups: AssignmentGroup[] }>(`/assignments/${id}/groups`, {
