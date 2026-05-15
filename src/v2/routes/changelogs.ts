@@ -79,7 +79,7 @@ export const changelogRoutes = {
     const entry = await data.getById<any>(COLLECTIONS.changelogs, params.id);
     if (!entry) return json({ error: "Entry not found." }, 404);
 
-    const body = await parseJson<{ target?: string; cohortId?: string; recipientIds?: string[]; dryRun?: boolean }>(request);
+    const body = await parseJson<{ target?: string; cohortId?: string; recipientIds?: string[]; dryRun?: boolean; heading?: string }>(request);
     if (body.dryRun) return json({ dryRun: true });
     const target = body.target || "all";
     const validTargets = ["all", "students", "staff", "cohort", "individual"];
@@ -110,9 +110,11 @@ export const changelogRoutes = {
       return json({ sent: 0, failed: 0, total: 0, message: "No eligible recipients found." });
     }
 
+    const emailHeading = body.heading?.trim() || "New Update";
     const { sent, failed } = await sendChangelogNotification(recipients, {
       version: entry.version,
       title: entry.title,
+      heading: emailHeading,
       summary: entry.summary,
       items: entry.items || [],
     });

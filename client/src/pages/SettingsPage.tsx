@@ -361,6 +361,7 @@ function ChangelogTab() {
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
 
+  const [emailHeading, setEmailHeading] = useState("New Update");
   const [target, setTarget] = useState<Target>("all");
   const [cohortId, setCohortId] = useState("");
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
@@ -448,6 +449,7 @@ function ChangelogTab() {
         {
           method: "POST",
           body: JSON.stringify({
+            heading: emailHeading.trim() || "New Update",
             target,
             cohortId: target === "cohort" ? cohortId : undefined,
             recipientIds: target === "individual" ? selectedPeople.map((p) => p.id) : undefined,
@@ -524,6 +526,15 @@ function ChangelogTab() {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          <Label required>
+            Email heading
+            <Input
+              placeholder="e.g. New Update, Improvements, Bug Fixes"
+              value={emailHeading}
+              onChange={(e) => setEmailHeading(e.target.value)}
+            />
+          </Label>
+
           <Label required>
             Changelog entry
             <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)}>
