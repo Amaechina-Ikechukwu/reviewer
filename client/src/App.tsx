@@ -111,6 +111,7 @@ export default function App() {
       <Route path="/join/:code" element={<JoinClass />} />
       <Route path="/setup/:token" element={<SetupAccount />} />
       <Route path="/reset/:token" element={<ResetPassword />} />
+      <Route path="/changelog" element={<ChangelogPage />} />
       <Route path="/" element={<HomeRedirect />} />
 
       <Route
@@ -250,7 +251,7 @@ export default function App() {
         )}
       />
       <Route
-        path="/teacher/settings"
+        path="/teacher/settings/:tab?"
         element={(
           <ProtectedRoute role="teacher">
             <SettingsPage />

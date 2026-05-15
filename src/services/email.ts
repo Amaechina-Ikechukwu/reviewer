@@ -201,6 +201,35 @@ export async function sendCustomNotification(
   };
 }
 
+export async function sendChangelogNotification(
+  recipients: Array<{ email: string; fullName: string }>,
+  entry: { version: string; title: string; summary: string; items: Array<{ heading: string }> },
+) {
+  const link = `${APP_URL}/changelog`;
+  const itemsHtml = entry.items.slice(0, 5).map((item) =>
+    `<tr><td style="padding:4px 0;color:#334155;font-size:14px">• ${item.heading}</td></tr>`
+  ).join("");
+  await Promise.allSettled(recipients.map(({ email, fullName }) =>
+    send(email, `New release: ${entry.version} — ${entry.title}`, `
+      <div style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:40px 32px;border:1px solid #e2e8f0">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#0d56d8,#1a73e8)">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          </div>
+        </div>
+        <h2 style="margin:0 0 4px;text-align:center;font-size:20px;color:#0f172a">${entry.version}: ${entry.title}</h2>
+        <p style="margin:0 0 20px;text-align:center;color:#64748b;font-size:14px;line-height:1.6">${entry.summary}</p>
+        <table style="width:100%;margin-bottom:24px">${itemsHtml}</table>
+        <div style="text-align:center">
+          <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">View full changelog</a>
+        </div>
+        <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0 16px"/>
+        <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">Sent from Scholar AI</p>
+      </div>
+    `),
+  ));
+}
+
 export async function sendDeadlineReminder(
   students: Array<{ email: string; fullName: string }>,
   assignment: { title: string; closesAt: Date; id: string },

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
@@ -531,8 +531,16 @@ function AccountTab() {
   );
 }
 
+const TAB_KEYS: Tab[] = ["profile", "notifications", "activity", "management", "forms", "changelog", "account"];
+
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>("profile");
+  const { tab: tabParam } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+  const tab = TAB_KEYS.includes(tabParam as Tab) ? (tabParam as Tab) : "profile";
+
+  function setTab(next: Tab) {
+    navigate(`/teacher/settings/${next}`, { replace: true });
+  }
 
   return (
     <TeacherShell section="settings">
@@ -548,10 +556,9 @@ export default function SettingsPage() {
           {/* Tab bar */}
           <div className="flex shrink-0 flex-col gap-1 lg:w-48">
             {TABS.map((t) => (
-              <button
+              <Link
                 key={t.key}
-                type="button"
-                onClick={() => setTab(t.key)}
+                to={`/teacher/settings/${t.key}`}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
                   tab === t.key
@@ -561,7 +568,7 @@ export default function SettingsPage() {
               >
                 <span className={cn("shrink-0", tab === t.key ? "text-[var(--accent)]" : "")}>{t.icon}</span>
                 {t.label}
-              </button>
+              </Link>
             ))}
           </div>
 

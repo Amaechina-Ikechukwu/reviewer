@@ -3,6 +3,7 @@ import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
+import { sendChangelogNotification } from "../../services/email";
 
 type ChangelogItem = {
   icon: string;
@@ -65,6 +66,19 @@ export const changelogRoutes = {
       deepDive: body.deepDive?.trim() || "",
       items,
     });
+
+    const allUsers = await data.findMany<any>(COLLECTIONS.users, {});
+    const recipients = allUsers
+      .filter((u: any) => u.email && !u.email.endsWith("@historical.reviewai.local") && u.passwordHash !== "INVITE_PENDING")
+      .map((u: any) => ({ email: u.email, fullName: u.fullName }));
+    if (recipients.length > 0) {
+      sendChangelogNotification(recipients, {
+        version: entry.version,
+        title: entry.title,
+        summary: entry.summary,
+        items: entry.items || [],
+      }).catch((err) => console.error("Failed to send changelog notification:", err));
+    }
 
     return json(entry, 201);
   },
