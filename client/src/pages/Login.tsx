@@ -7,7 +7,7 @@ import { Input, Label, Select } from "../components/ui/Input";
 import { toast } from "../components/Toast";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
-import type { Role, User } from "../types";
+import { isStaffRole, type Role, type User } from "../types";
 
 type AuthResponse = { token: string; user: User };
 
@@ -38,7 +38,7 @@ export default function Login() {
               body: JSON.stringify({ email, password, fullName, role }),
             });
       login(payload.token, payload.user);
-      navigate(payload.user.role === "teacher" ? "/teacher" : "/student");
+      navigate(isStaffRole(payload.user.role) ? "/teacher" : "/student");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Authentication failed";
       setError(msg);

@@ -6,7 +6,7 @@ import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Input, Label } from "../components/ui/Input";
 import { useAuth } from "../context/AuthContext";
-import type { User } from "../types";
+import { isStaffRole, type User } from "../types";
 
 type AuthResponse = { token: string; user: User };
 type TokenInfo = { valid: boolean; fullName?: string; email?: string };
@@ -39,7 +39,7 @@ export default function SetupAccount() {
       });
       login(res.token, res.user);
       toast().success("Account activated!");
-      navigate(res.user.role === "student" ? "/student" : "/teacher");
+      navigate(isStaffRole(res.user.role) ? "/teacher" : "/student");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to set up account.";
       setError(msg);
