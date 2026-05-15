@@ -204,12 +204,12 @@ export async function sendCustomNotification(
 export async function sendChangelogNotification(
   recipients: Array<{ email: string; fullName: string }>,
   entry: { version: string; title: string; summary: string; items: Array<{ heading: string }> },
-) {
+): Promise<{ sent: number; failed: number }> {
   const link = `${APP_URL}/changelog`;
   const itemsHtml = entry.items.slice(0, 5).map((item) =>
     `<tr><td style="padding:4px 0;color:#334155;font-size:14px">• ${item.heading}</td></tr>`
   ).join("");
-  await Promise.allSettled(recipients.map(({ email, fullName }) =>
+  const results = await Promise.allSettled(recipients.map(({ email, fullName }) =>
     send(email, `New release: ${entry.version} — ${entry.title}`, `
       <div style="font-family:system-ui,sans-serif;max-width:560px;margin:auto;background:#fff;border-radius:12px;padding:40px 32px;border:1px solid #e2e8f0">
         <div style="text-align:center;margin-bottom:24px">
@@ -228,6 +228,10 @@ export async function sendChangelogNotification(
       </div>
     `),
   ));
+  return {
+    sent: results.filter((r) => r.status === "fulfilled").length,
+    failed: results.filter((r) => r.status === "rejected").length,
+  };
 }
 
 export async function sendDeadlineReminder(

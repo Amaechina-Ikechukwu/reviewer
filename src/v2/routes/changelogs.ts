@@ -67,20 +67,56 @@ export const changelogRoutes = {
       items,
     });
 
-    const allUsers = await data.findMany<any>(COLLECTIONS.users, {});
-    const recipients = allUsers
-      .filter((u: any) => u.email && !u.email.endsWith("@historical.reviewai.local") && u.passwordHash !== "INVITE_PENDING")
-      .map((u: any) => ({ email: u.email, fullName: u.fullName }));
-    if (recipients.length > 0) {
-      sendChangelogNotification(recipients, {
-        version: entry.version,
-        title: entry.title,
-        summary: entry.summary,
-        items: entry.items || [],
-      }).catch((err) => console.error("Failed to send changelog notification:", err));
+    return json(entry, 201);
+  },
+
+  async notify(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (user.role !== "owner" && user.role !== "admin") {
+      return json({ error: "Only owners and admins can send changelog notifications." }, 403);
     }
 
-    return json(entry, 201);
+    const entry = await data.getById<any>(COLLECTIONS.changelogs, params.id);
+    if (!entry) return json({ error: "Entry not found." }, 404);
+
+    const body = await parseJson<{ target?: string; cohortId?: string; recipientIds?: string[] }>(request);
+    const target = body.target || "all";
+    const validTargets = ["all", "students", "staff", "cohort", "individual"];
+    if (!validTargets.includes(target)) return json({ error: "Invalid target audience." }, 400);
+
+    let users: any[] = [];
+    const allUsers = await data.findMany<any>(COLLECTIONS.users, {});
+
+    if (target === "all") {
+      users = allUsers;
+    } else if (target === "students") {
+      users = allUsers.filter((u: any) => u.role === "student");
+    } else if (target === "staff") {
+      users = allUsers.filter((u: any) => ["teacher", "owner", "admin", "manager", "instructor"].includes(u.role));
+    } else if (target === "cohort") {
+      if (!body.cohortId) return json({ error: "Cohort ID is required." }, 400);
+      users = allUsers.filter((u: any) => u.cohortId === body.cohortId);
+    } else if (target === "individual") {
+      if (!body.recipientIds || body.recipientIds.length === 0) return json({ error: "At least one recipient is required." }, 400);
+      users = allUsers.filter((u: any) => body.recipientIds!.includes(u.id));
+    }
+
+    const recipients = users
+      .filter((u: any) => u.email && !u.email.endsWith("@historical.reviewai.local") && u.passwordHash !== "INVITE_PENDING")
+      .map((u: any) => ({ email: u.email, fullName: u.fullName }));
+
+    if (recipients.length === 0) {
+      return json({ sent: 0, failed: 0, total: 0, message: "No eligible recipients found." });
+    }
+
+    const { sent, failed } = await sendChangelogNotification(recipients, {
+      version: entry.version,
+      title: entry.title,
+      summary: entry.summary,
+      items: entry.items || [],
+    });
+
+    return json({ sent, failed, total: recipients.length });
   },
 
   async update(request: Request, params: Record<string, string>) {

@@ -96,6 +96,7 @@ export const v2Routes: V2RouteSpec[] = [
 
   { method: "GET", path: "/v2/api/changelogs", handler: changelogRoutes.list, requiresAuth: false },
   { method: "POST", path: "/v2/api/changelogs", handler: changelogRoutes.create, requiresAuth: true },
+  { method: "POST", path: "/v2/api/changelogs/:id/notify", handler: changelogRoutes.notify, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/changelogs/:id", handler: changelogRoutes.update, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/changelogs/:id", handler: changelogRoutes.remove, requiresAuth: true },
 ];
