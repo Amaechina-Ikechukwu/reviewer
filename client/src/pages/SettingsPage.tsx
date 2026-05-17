@@ -589,12 +589,10 @@ function ChangelogTab() {
           {target === "cohort" && (
             <Label>
               Cohort
-              <select value={cohortId} onChange={(e) => setCohortId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
-              >
+              <Select value={cohortId} onChange={(e) => setCohortId(e.target.value)}>
                 <option value="">Select a cohort…</option>
                 {cohorts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </Select>
             </Label>
           )}
 

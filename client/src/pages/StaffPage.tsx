@@ -39,7 +39,7 @@ const ROLE_OPTIONS: StaffRole[] = ["owner", "admin", "manager", "instructor"];
 function RoleDropdown({ member, onChanged }: { member: StaffMember; onChanged: (role: StaffRole) => void }) {
   const [saving, setSaving] = useState(false);
 
-  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  async function handleChange(e: { target: { value: string } }) {
     const role = e.target.value as StaffRole;
     setSaving(true);
     try {
@@ -54,16 +54,16 @@ function RoleDropdown({ member, onChanged }: { member: StaffMember; onChanged: (
   }
 
   return (
-    <select
+    <Select
       value={member.role}
       onChange={handleChange}
       disabled={saving}
-      className="rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-xs text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] disabled:opacity-50"
+      className="h-7 text-xs"
     >
       {ROLE_OPTIONS.map((r) => (
         <option key={r} value={r}>{STAFF_ROLE_LABELS[r]}</option>
       ))}
-    </select>
+    </Select>
   );
 }
 

@@ -5,7 +5,7 @@ import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Icon } from "../components/ui/Icons";
-import { Input } from "../components/ui/Input";
+import { Input, Select } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
 import type { Cohort, Track } from "../types";
 import { TRACKS } from "../types";
@@ -192,15 +192,14 @@ export default function CohortsPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--fg)]">Track</label>
-            <select
+            <Select
               value={formTrack}
               onChange={(e) => setFormTrack(e.target.value as Track)}
-              className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
             >
               {TRACKS.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--fg)]">Description <span className="text-[var(--fg-subtle)]">(optional)</span></label>

@@ -5,7 +5,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
-import { Input, Label, Textarea } from "../components/ui/Input";
+import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { api, pollEmailJob } from "../api";
 import { cn } from "../lib/cn";
 import type { Cohort } from "../types";
@@ -369,16 +369,16 @@ export default function NotificationsPage() {
                   <div>
                     <Label>
                       Cohort
-                      <select
+                      <Select
                         value={cohortId}
                         onChange={(e) => setCohortId(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20"
+                        placeholder="Select a cohort…"
                       >
                         <option value="">Select a cohort…</option>
                         {cohorts.map((c) => (
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
-                      </select>
+                      </Select>
                     </Label>
                   </div>
                 )}

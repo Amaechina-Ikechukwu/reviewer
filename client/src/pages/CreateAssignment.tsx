@@ -6,7 +6,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
-import { Input, Label, Textarea } from "../components/ui/Input";
+import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { cn } from "../lib/cn";
@@ -292,7 +292,7 @@ export default function CreateAssignment() {
 
               <div className="flex flex-col gap-2">
                 <span className="text-sm font-medium">Track <span className="font-normal text-[var(--fg-muted)]">(optional)</span></span>
-                <select
+                <Select
                   value={track}
                   onChange={(e) => {
                     const v = e.target.value as Track | "";
@@ -300,13 +300,12 @@ export default function CreateAssignment() {
                     if (v && !CODE_TRACKS.includes(v as Track)) setAllowGithub(false);
                     else setAllowGithub(true);
                   }}
-                  className="w-full rounded border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 >
                   <option value="">No specific track</option>
                   {TRACKS.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
-                </select>
+                </Select>
                 {track && !CODE_TRACKS.includes(track as Track) && (
                   <p className="text-xs text-[var(--fg-muted)]">GitHub submissions are not available for this track.</p>
                 )}
