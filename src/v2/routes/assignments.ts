@@ -46,24 +46,59 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-async function autoCreateGroups(assignmentId: string, groupCount: number) {
-  const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
-  const real = allStudents.filter((s) => s.passwordHash !== "INVITE_PENDING");
-  const shuffled = shuffle(real);
+type GroupDraft = {
+  name?: string;
+  memberIds?: string[];
+  description?: string | null;
+  rubric?: string | null;
+  sourceType?: "markdown" | "link" | "pdf" | null;
+  sourceUrl?: string | null;
+  sourcePdfPath?: string | null;
+};
+
+async function autoCreateGroups(assignmentId: string, groupCount: number, drafts?: GroupDraft[]) {
   const groups: { id: string; name: string; memberIds: string[] }[] = [];
-  for (let i = 0; i < groupCount; i++) {
-    groups.push({ id: randomUUID(), name: `Group ${i + 1}`, memberIds: [] });
+
+  const draftedMemberIds = new Set<string>();
+  if (drafts && drafts.length > 0) {
+    for (const d of drafts) {
+      for (const m of d.memberIds || []) draftedMemberIds.add(m);
+    }
   }
-  shuffled.forEach((student, idx) => {
-    groups[idx % groupCount].memberIds.push(student.id);
-  });
-  for (const g of groups) {
-    await data.insert(COLLECTIONS.assignmentGroups, g.id, {
+
+  // If drafts contain explicit member assignments, trust them; otherwise round-robin all students.
+  const useDraftMembers = draftedMemberIds.size > 0;
+
+  let distributed: string[][] = Array.from({ length: groupCount }, () => []);
+  if (useDraftMembers) {
+    for (let i = 0; i < groupCount; i++) {
+      distributed[i] = (drafts?.[i]?.memberIds || []).filter(Boolean);
+    }
+  } else {
+    const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+    const real = allStudents.filter((s) => s.passwordHash !== "INVITE_PENDING");
+    const shuffled = shuffle(real);
+    shuffled.forEach((student, idx) => {
+      distributed[idx % groupCount].push(student.id);
+    });
+  }
+
+  for (let i = 0; i < groupCount; i++) {
+    const d = drafts?.[i];
+    groups.push({
+      id: randomUUID(),
+      name: d?.name?.trim() || `Group ${i + 1}`,
+      memberIds: distributed[i],
+    });
+    await data.insert(COLLECTIONS.assignmentGroups, groups[i].id, {
       assignmentId,
-      name: g.name,
-      memberIds: g.memberIds,
-      description: null,
-      rubric: null,
+      name: groups[i].name,
+      memberIds: groups[i].memberIds,
+      description: d?.description ?? null,
+      rubric: d?.rubric ?? null,
+      sourceType: d?.sourceType ?? null,
+      sourceUrl: d?.sourceUrl ?? null,
+      sourcePdfPath: d?.sourcePdfPath ?? null,
     });
   }
   return groups;
@@ -161,7 +196,8 @@ export const assignmentRoutes = {
     });
 
     if (isGroupAssignment) {
-      const createdGroups = await autoCreateGroups(id, groupCount);
+      const drafts = Array.isArray((body as any).groupDrafts) ? ((body as any).groupDrafts as GroupDraft[]) : undefined;
+      const createdGroups = await autoCreateGroups(id, groupCount, drafts);
       notifyGroupMembers({ id, title: assignment.title }, createdGroups).catch(console.error);
     }
 
@@ -379,13 +415,6 @@ export const assignmentRoutes = {
       return json({ error: "Provide at least one group." }, 400);
     }
 
-    const existingSubs = await data.findMany<any>(COLLECTIONS.submissions, {
-      where: [["assignmentId", "==", assignment.id]],
-    });
-    if (existingSubs.length > 0) {
-      return json({ error: "Groups are locked once any submission has been made." }, 409);
-    }
-
     const seen = new Set<string>();
     for (const g of incoming) {
       for (const m of g.memberIds || []) {
@@ -491,13 +520,6 @@ export const assignmentRoutes = {
 
     const body = await parseJson<{ groupCount?: number }>(request).catch(() => ({} as any));
     const groupCount = Math.max(1, Math.min(50, Math.round(body.groupCount ?? assignment.groupCount ?? 1)));
-
-    const existingSubs = await data.findMany<any>(COLLECTIONS.submissions, {
-      where: [["assignmentId", "==", assignment.id]],
-    });
-    if (existingSubs.length > 0) {
-      return json({ error: "Groups are locked once any submission has been made." }, 409);
-    }
 
     await data.delMany(COLLECTIONS.assignmentGroups, [["assignmentId", "==", assignment.id]]);
     const groups = await autoCreateGroups(assignment.id, groupCount);

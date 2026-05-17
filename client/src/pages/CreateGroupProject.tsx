@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
@@ -40,14 +40,35 @@ export default function CreateGroupProject() {
   const [groupCount, setGroupCount] = useState(3);
   const [teams, setTeams] = useState<TeamDraft[]>(() => [makeTeam(1), makeTeam(2), makeTeam(3)]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [studentsByTeam, setStudentsByTeam] = useState<string[][]>(() => [[], [], []]);
+  const [dragStudent, setDragStudent] = useState<{ studentId: string; fromTeam: number } | null>(null);
+  const [hoverTeam, setHoverTeam] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
+  const studentById = new Map(students.map((s) => [s.id, s] as const));
 
   useEffect(() => {
     api<StudentRecord[]>("/students").then(setStudents).catch(() => {});
   }, []);
+
+  // Re-distribute whenever the roster or team count changes, preserving existing manual placements.
+  useEffect(() => {
+    setStudentsByTeam((prev) => {
+      const buckets: string[][] = Array.from({ length: groupCount }, (_, i) => (prev[i] || []).slice());
+      const placed = new Set<string>(buckets.flat());
+      const roster = students.map((s) => s.id);
+      // Drop ids no longer in roster
+      for (let i = 0; i < buckets.length; i++) {
+        buckets[i] = buckets[i].filter((id) => roster.includes(id));
+      }
+      // Round-robin any new/unplaced students
+      const unplaced = roster.filter((id) => !placed.has(id));
+      unplaced.forEach((id, i) => buckets[i % groupCount].push(id));
+      return buckets;
+    });
+  }, [students, groupCount]);
 
   // Sync teams array length when groupCount changes
   function handleGroupCountChange(n: number) {
@@ -61,12 +82,30 @@ export default function CreateGroupProject() {
     });
   }
 
-  // Distribute students round-robin across teams for preview
-  const studentsByTeam = useMemo(() => {
-    const buckets: StudentRecord[][] = Array.from({ length: groupCount }, () => []);
-    students.forEach((s, i) => buckets[i % groupCount].push(s));
-    return buckets;
-  }, [students, groupCount]);
+  function onDragStart(studentId: string, fromTeam: number) {
+    setDragStudent({ studentId, fromTeam });
+  }
+
+  function onDragOver(e: DragEvent, teamIdx: number) {
+    e.preventDefault();
+    setHoverTeam(teamIdx);
+  }
+
+  function onDrop(e: DragEvent, toTeam: number) {
+    e.preventDefault();
+    setHoverTeam(null);
+    if (!dragStudent) return;
+    const { studentId, fromTeam } = dragStudent;
+    setDragStudent(null);
+    if (fromTeam === toTeam) return;
+    setStudentsByTeam((prev) =>
+      prev.map((bucket, i) => {
+        if (i === fromTeam) return bucket.filter((id) => id !== studentId);
+        if (i === toTeam) return bucket.includes(studentId) ? bucket : [...bucket, studentId];
+        return bucket;
+      }),
+    );
+  }
 
   function updateTeam(idx: number, patch: Partial<TeamDraft>) {
     setTeams((prev) => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)));
@@ -122,8 +161,9 @@ export default function CreateGroupProject() {
           groupCount,
           groupQuestionMode: "per_group",
           track: track || null,
-          groupDrafts: teams.map((t) => ({
+          groupDrafts: teams.map((t, i) => ({
             name: t.name,
+            memberIds: studentsByTeam[i] ?? [],
             sourceType: t.sourceType,
             description: t.sourceType === "markdown" ? t.content : null,
             sourceUrl: t.sourceType === "link" ? t.sourceUrl : null,
@@ -291,7 +331,13 @@ export default function CreateGroupProject() {
           {/* Per-team cards */}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {teams.map((team, idx) => (
-              <Card key={idx}>
+              <Card
+                key={idx}
+                onDragOver={(e) => onDragOver(e as unknown as DragEvent, idx)}
+                onDragLeave={() => setHoverTeam((h) => (h === idx ? null : h))}
+                onDrop={(e) => onDrop(e as unknown as DragEvent, idx)}
+                className={hoverTeam === idx ? "ring-2 ring-[var(--accent)]" : undefined}
+              >
                 <CardContent className="flex flex-col gap-3">
                   {/* Team name */}
                   <div className="flex items-center gap-2">
@@ -364,36 +410,42 @@ export default function CreateGroupProject() {
                     )}
                   </div>
 
-                  {/* Student preview */}
+                  {/* Students (drag between teams) */}
                   <div className="flex flex-col gap-1.5">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
-                      Students preview
+                      Students
                       <span className="ml-1 font-normal normal-case">
-                        ({studentsByTeam[idx]?.length ?? 0})
+                        ({studentsByTeam[idx]?.length ?? 0}) — drag to re-assign
                       </span>
                     </div>
-                    {studentsByTeam[idx]?.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-3 text-center text-xs text-[var(--fg-muted)]">
-                        No students yet
+                    {(studentsByTeam[idx]?.length ?? 0) === 0 ? (
+                      <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-4 text-center text-xs text-[var(--fg-muted)]">
+                        Drop students here
                       </div>
                     ) : (
                       <div className="flex flex-col gap-1">
-                        {studentsByTeam[idx].map((s) => (
-                          <div
-                            key={s.id}
-                            className="flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs"
-                          >
-                            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[10px] font-semibold text-[var(--fg-muted)]">
-                              {s.fullName.charAt(0).toUpperCase()}
+                        {(studentsByTeam[idx] ?? []).map((sid) => {
+                          const s = studentById.get(sid);
+                          if (!s) return null;
+                          return (
+                            <div
+                              key={sid}
+                              draggable
+                              onDragStart={() => onDragStart(sid, idx)}
+                              className="flex cursor-move items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs transition-colors hover:border-[var(--border-strong)]"
+                            >
+                              <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-muted)] text-[10px] font-semibold text-[var(--fg-muted)]">
+                                {s.fullName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium text-[var(--fg)]">{s.fullName}</div>
+                                {!s.email.endsWith("@historical.reviewai.local") && (
+                                  <div className="truncate text-[10px] text-[var(--fg-muted)]">{s.email}</div>
+                                )}
+                              </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate font-medium text-[var(--fg)]">{s.fullName}</div>
-                              {!s.email.endsWith("@historical.reviewai.local") && (
-                                <div className="truncate text-[10px] text-[var(--fg-muted)]">{s.email}</div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
