@@ -34,17 +34,33 @@ export function getFirebaseApp(): admin.app.App {
   return app;
 }
 
+// Firestore.settings() can only be called ONCE per instance. Memoize per database id
+// so we don't double-apply settings (which would throw) and so every caller shares
+// the same configured client.
+const firestoreCache = new Map<string, FirebaseFirestore.Firestore>();
+
 /**
  * Returns the Firestore instance for the configured database.
  * Set FIRESTORE_DATABASE_ID=dev-db in your environment to use the dev database.
  * Defaults to the project's default database when the variable is unset.
+ *
+ * `ignoreUndefinedProperties` is enabled so parser/serializer code paths that emit
+ * `undefined` (e.g. optional review feedback fields like `submissionStructure`)
+ * don't blow up the write — Firestore drops those keys instead of rejecting.
  */
 export function getFirestore() {
   const databaseId = process.env.FIRESTORE_DATABASE_ID;
-  if (databaseId && databaseId !== "(default)") {
-    return getFirestoreModular(getFirebaseApp(), databaseId);
-  }
-  return getFirebaseApp().firestore();
+  const key = databaseId && databaseId !== "(default)" ? databaseId : "__default__";
+  const cached = firestoreCache.get(key);
+  if (cached) return cached;
+
+  const instance =
+    databaseId && databaseId !== "(default)"
+      ? getFirestoreModular(getFirebaseApp(), databaseId)
+      : getFirebaseApp().firestore();
+  instance.settings({ ignoreUndefinedProperties: true });
+  firestoreCache.set(key, instance);
+  return instance;
 }
 
 function getStorageBucket() {
