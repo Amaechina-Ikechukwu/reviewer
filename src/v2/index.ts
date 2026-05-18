@@ -82,6 +82,7 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "GET", path: "/v2/api/class-notes/:id/download", handler: classNoteRoutes.download, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/class-notes/:id", handler: classNoteRoutes.remove, requiresAuth: true },
 
+  { method: "GET", path: "/v2/api/reviews/providers", handler: reviewRoutes.providers, requiresAuth: true },
   { method: "POST", path: "/v2/api/reviews/:submissionId/run", handler: reviewRoutes.run, requiresAuth: true },
   { method: "GET", path: "/v2/api/reviews/:submissionId", handler: reviewRoutes.get, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/reviews/:submissionId/override", handler: reviewRoutes.override, requiresAuth: true },
