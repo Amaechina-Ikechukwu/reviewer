@@ -6,6 +6,7 @@ import { enqueueEmailJob } from "../services/emailJobs";
 
 const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 const STAFF_ROLES = new Set(["teacher", "owner", "admin", "manager", "instructor"]);
+const TEACHER_ALLOWED_TARGETS = new Set<Target>(["students", "cohort", "individual"]);
 
 type Target = "all" | "students" | "staff" | "cohort" | "individual";
 
@@ -22,9 +23,10 @@ const VALID_TARGETS = new Set<Target>(["all", "students", "staff", "cohort", "in
 export const notificationRoutes = {
   async send(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!MANAGER_ROLES.has(user.role)) {
-      return json({ error: "Only owners, admins, and managers can send notifications." }, 403);
+    if (!STAFF_ROLES.has(user.role)) {
+      return json({ error: "Only staff can send notifications." }, 403);
     }
+    const isManager = MANAGER_ROLES.has(user.role);
 
     const body = await parseJson<NotificationBody>(request);
     if (!body.subject?.trim()) return json({ error: "Subject is required." }, 400);
@@ -32,13 +34,23 @@ export const notificationRoutes = {
     if (!body.target || !VALID_TARGETS.has(body.target)) {
       return json({ error: "Invalid target audience." }, 400);
     }
+    if (!isManager && !TEACHER_ALLOWED_TARGETS.has(body.target)) {
+      return json({ error: "Teachers can only email their own students." }, 403);
+    }
 
     let users: any[] = [];
 
     if (body.target === "all") {
       users = await data.findMany<any>(COLLECTIONS.users, {});
     } else if (body.target === "students") {
-      users = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+      if (isManager) {
+        users = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+      } else {
+        // Teachers/instructors can only email their own students.
+        users = await data.findMany<any>(COLLECTIONS.users, {
+          where: [["role", "==", "student"], ["teacherId", "==", user.userId]],
+        });
+      }
     } else if (body.target === "staff") {
       const all = await data.findMany<any>(COLLECTIONS.users, {});
       users = all.filter((u: any) => STAFF_ROLES.has(u.role));
@@ -47,12 +59,18 @@ export const notificationRoutes = {
       users = await data.findMany<any>(COLLECTIONS.users, {
         where: [["cohortId", "==", body.cohortId]],
       });
+      if (!isManager) {
+        users = users.filter((u: any) => u.teacherId === user.userId);
+      }
     } else if (body.target === "individual") {
       if (!body.recipientIds || !Array.isArray(body.recipientIds) || body.recipientIds.length === 0) {
         return json({ error: "At least one recipient is required." }, 400);
       }
       const all = await data.findMany<any>(COLLECTIONS.users, {});
       users = all.filter((u: any) => body.recipientIds!.includes(u.id));
+      if (!isManager) {
+        users = users.filter((u: any) => u.teacherId === user.userId);
+      }
     }
 
     const recipients = users

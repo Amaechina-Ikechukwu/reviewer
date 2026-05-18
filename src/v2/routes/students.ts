@@ -19,6 +19,7 @@ export const studentRoutes = {
     return json(rows.map(({ passwordHash, ...r }) => ({
       id: r.id, email: r.email, fullName: r.fullName, role: r.role,
       cohortId: r.cohortId ?? null,
+      teacherId: r.teacherId ?? null,
       createdAt: r.createdAt,
       pending: passwordHash === "INVITE_PENDING",
     })));

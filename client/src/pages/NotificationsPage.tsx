@@ -7,8 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card"
 import { Icon } from "../components/ui/Icons";
 import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { api, pollEmailJob } from "../api";
+import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
 import type { Cohort } from "../types";
+
+const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 
 type Target = "all" | "students" | "staff" | "cohort" | "individual";
 
@@ -161,6 +164,14 @@ function RecipientSelect({
 }
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
+  const isManager = !!user && MANAGER_ROLES.has(user.role);
+
+  const availableTargets = useMemo(
+    () => (isManager ? TARGETS : TARGETS.filter((t) => t.value !== "all" && t.value !== "staff")),
+    [isManager],
+  );
+
   const [target, setTarget] = useState<Target>("students");
   const [cohortId, setCohortId] = useState("");
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
@@ -181,18 +192,23 @@ export default function NotificationsPage() {
     setPeopleLoading(true);
     Promise.all([
       api<any[]>("/students").catch(() => []),
-      api<any[]>("/staff").catch(() => []),
+      // Teachers cannot email staff — skip the /staff fetch.
+      isManager ? api<any[]>("/staff").catch(() => []) : Promise.resolve([] as any[]),
     ])
       .then(([students, staff]) => {
+        // Teachers see only their own students in the picker.
+        const visibleStudents = isManager
+          ? students
+          : students.filter((s: any) => s.teacherId === user?.id);
         const all: Person[] = [
-          ...students.map((s: any) => ({ id: s.id, email: s.email, fullName: s.fullName, role: s.role })),
+          ...visibleStudents.map((s: any) => ({ id: s.id, email: s.email, fullName: s.fullName, role: s.role })),
           ...staff.map((s: any) => ({ id: s.id, email: s.email, fullName: s.fullName, role: s.role })),
         ];
         all.sort((a, b) => a.fullName.localeCompare(b.fullName));
         setPeople(all);
       })
       .finally(() => setPeopleLoading(false));
-  }, [target]);
+  }, [target, isManager, user?.id]);
 
   async function handleSend() {
     if (!subject.trim()) { toast().error("Subject is required."); return; }
@@ -339,8 +355,8 @@ export default function NotificationsPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                  {TARGETS.map((t) => (
+                <div className={cn("grid grid-cols-2 gap-2", availableTargets.length >= 5 ? "sm:grid-cols-5" : "sm:grid-cols-3")}>
+                  {availableTargets.map((t) => (
                     <button
                       key={t.value}
                       type="button"
