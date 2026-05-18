@@ -25,7 +25,7 @@ export const reviewRoutes = {
     const user = (request as AuthenticatedRequest).user;
     if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
 
-    const body = await request.json().catch(() => ({})) as { provider?: string };
+    const body = await request.json().catch(() => ({})) as { provider?: string; model?: string };
 
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
     if (!submission) return json({ error: "Submission not found." }, 404);
@@ -128,9 +128,19 @@ export const reviewRoutes = {
       // unless the caller explicitly overrides via body.provider. Gemini Flash is materially faster
       // than the nvidia Gemma fallback for this workload and is the only provider that can read PDFs.
       const requestedProvider = body.provider || assignment.defaultProvider;
-      const providerName: ProviderName = requestedProvider === "nvidia" ? "nvidia" : "gemini";
-      // Only Gemini can read attached PDFs; the nvidia provider ignores attachments.
-      const result = await reviewCode(reviewInput, providerName, providerName === "gemini" ? attachments : []);
+      const providerName: ProviderName =
+        requestedProvider === "nvidia"
+          ? "nvidia"
+          : requestedProvider === "openrouter"
+            ? "openrouter"
+            : "gemini";
+      // Only Gemini can read attached PDFs; the nvidia/openrouter providers ignore attachments.
+      const result = await reviewCode(
+        reviewInput,
+        providerName,
+        providerName === "gemini" ? attachments : [],
+        body.model,
+      );
 
       await data.update(COLLECTIONS.reviews, review.id, {
         status: "completed",

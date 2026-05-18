@@ -300,7 +300,14 @@ export default function ReviewSubmission() {
   const [reviewing, setReviewing] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<"nvidia" | "gemini">("nvidia");
+  type ProviderKey = "gemini" | "nvidia" | `openrouter:${string}`;
+  const [selectedProvider, setSelectedProvider] = useState<ProviderKey>("gemini");
+  const [availableProviders, setAvailableProviders] = useState<
+    Array<{ name: string; configured: boolean; model: string; models?: Array<{ id: string; label: string; note?: string }> }>
+  >([]);
+  useEffect(() => {
+    api<typeof availableProviders>("/reviews/providers").then(setAvailableProviders).catch(() => {});
+  }, []);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [overrideScore, setOverrideScore] = useState("");
   const [finalFeedback, setFinalFeedback] = useState("");
@@ -376,16 +383,19 @@ export default function ReviewSubmission() {
     if (nextIndex >= 0) setSelectedFileIndex(nextIndex);
   }
 
-  async function runReview(provider: "nvidia" | "gemini" = "nvidia") {
+  async function runReview(providerKey: ProviderKey = "gemini") {
     if (!submissionId) return;
     setShowProviderModal(false);
     setReviewing(true);
     setMessage("");
 
+    const [provider, ...modelParts] = providerKey.split(":");
+    const model = modelParts.join(":") || undefined;
+
     try {
       const nextReview = await api<Review>(`/reviews/${submissionId}/run`, {
         method: "POST",
-        body: JSON.stringify({ provider }),
+        body: JSON.stringify({ provider, model }),
       });
       setReview(nextReview);
       const score = nextReview.teacherOverrideScore ?? nextReview.aiScore;
@@ -806,43 +816,72 @@ export default function ReviewSubmission() {
           </>
         }
       >
-        <div className="flex flex-col gap-2">
-          {(["nvidia", "gemini"] as const).map((p) => {
-            const label = p === "nvidia" ? "Gemma 4 31B" : "Gemini 2.5 Flash";
-            const sub = p === "nvidia" ? "NVIDIA Build · Free tier available" : "Google · Pay per token";
-            const isSelected = selectedProvider === p;
-            return (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setSelectedProvider(p)}
-                className={cn(
-                  "flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
-                  isSelected
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                    : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]/60",
-                )}
-              >
-                <div className={cn(
-                  "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center",
-                  isSelected ? "border-[var(--accent)]" : "border-[var(--fg-muted)]",
-                )}>
-                  {isSelected && <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-[var(--fg)]">{label}</span>
-                    {p === "nvidia" && (
-                      <span className="rounded-full bg-[var(--success-soft)] px-1.5 py-px text-[10px] font-semibold text-[var(--success)]">
-                        Default
-                      </span>
-                    )}
+        <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
+          {(() => {
+            type Option = { key: ProviderKey; label: string; sub: string; isDefault?: boolean; configured: boolean };
+            const opts: Option[] = [];
+            for (const p of availableProviders) {
+              if (p.name === "gemini") {
+                opts.push({ key: "gemini", label: "Gemini 2.5 Flash", sub: "Google · Reads PDF rubrics natively", isDefault: true, configured: p.configured });
+              } else if (p.name === "nvidia") {
+                opts.push({ key: "nvidia", label: "Gemma 4 31B", sub: "NVIDIA Build · Free tier", configured: p.configured });
+              } else if (p.name === "openrouter") {
+                for (const m of p.models || []) {
+                  opts.push({
+                    key: `openrouter:${m.id}` as ProviderKey,
+                    label: `${m.label} (OpenRouter)`,
+                    sub: m.note || "OpenRouter · Free",
+                    configured: p.configured,
+                  });
+                }
+              }
+            }
+            return opts.map((opt) => {
+              const isSelected = selectedProvider === opt.key;
+              const disabled = !opt.configured;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setSelectedProvider(opt.key)}
+                  className={cn(
+                    "flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-colors",
+                    disabled && "cursor-not-allowed opacity-50",
+                    !disabled && isSelected
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                      : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]/60",
+                  )}
+                >
+                  <div className={cn(
+                    "mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center",
+                    isSelected ? "border-[var(--accent)]" : "border-[var(--fg-muted)]",
+                  )}>
+                    {isSelected && <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />}
                   </div>
-                  <span className="text-[11px] text-[var(--fg-muted)]">{sub}</span>
-                </div>
-              </button>
-            );
-          })}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-[var(--fg)]">{opt.label}</span>
+                      {opt.isDefault && (
+                        <span className="rounded-full bg-[var(--success-soft)] px-1.5 py-px text-[10px] font-semibold text-[var(--success)]">
+                          Default
+                        </span>
+                      )}
+                      {disabled && (
+                        <span className="rounded-full bg-[var(--surface-muted)] px-1.5 py-px text-[10px] font-semibold text-[var(--fg-muted)]">
+                          Not configured
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-[var(--fg-muted)]">{opt.sub}</span>
+                  </div>
+                </button>
+              );
+            });
+          })()}
+          {availableProviders.length === 0 && (
+            <div className="text-xs text-[var(--fg-muted)]">Loading providers…</div>
+          )}
         </div>
       </Modal>
     </TeacherShell>
