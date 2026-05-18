@@ -5,19 +5,18 @@ import type { AIProvider, ReviewAttachment } from "./provider";
  * Curated set of free-tier OpenRouter models. Operators can add more by passing
  * an explicit model id in the request body; the frontend picker uses this list.
  */
-// Default ordering prioritizes instruction-tuned models that reliably honor
-// JSON output mode. Reasoning models (DeepSeek V4 Flash, Nemotron Reasoning,
-// Trinity Thinking) are listed but not the default — they tend to emit
-// <think> blocks that complicate strict JSON parsing.
+// DeepSeek V4 Flash is the default — the review parser strips <think> blocks
+// emitted by reasoning models before JSON parsing, so its reasoning output
+// is handled safely.
 export const FREE_OPENROUTER_MODELS: Array<{ id: string; label: string; note?: string }> = [
-  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B", note: "Google · Free · 262k ctx · Recommended" },
+  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", note: "DeepSeek · Free · 1M ctx · Reasoning · Recommended" },
+  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B", note: "Google · Free · 262k ctx" },
   { id: "google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B A4B", note: "Google · Free · MoE" },
+  { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni 30B", note: "NVIDIA · Free · Reasoning" },
+  { id: "arcee-ai/trinity-large-thinking:free", label: "Arcee Trinity Large Thinking", note: "Arcee · Free · Reasoning" },
   { id: "poolside/laguna-m.1:free", label: "Laguna M.1", note: "Poolside · Free · Code-focused" },
   { id: "poolside/laguna-xs.2:free", label: "Laguna XS.2", note: "Poolside · Free · Fast" },
   { id: "baidu/cobuddy:free", label: "CoBuddy", note: "Baidu · Free" },
-  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", note: "DeepSeek · Free · 1M ctx · Reasoning" },
-  { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni 30B", note: "NVIDIA · Free · Reasoning" },
-  { id: "arcee-ai/trinity-large-thinking:free", label: "Arcee Trinity Large Thinking", note: "Arcee · Free · Reasoning" },
 ];
 
 export const DEFAULT_OPENROUTER_MODEL =
