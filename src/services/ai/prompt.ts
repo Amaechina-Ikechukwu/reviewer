@@ -8,6 +8,16 @@ export interface PromptInput {
   assignmentSourceType?: string;
   assignmentSourceMarkdown?: string | null;
   assignmentSourceUrl?: string | null;
+  /** Set when this submission belongs to a per-group project — the group's own brief takes precedence. */
+  groupContext?: {
+    name: string;
+    description?: string | null;
+    rubric?: string | null;
+    sourceType?: string | null;
+    sourceUrl?: string | null;
+  } | null;
+  /** True when a PDF brief has been attached as a multimodal part. The model is told to read it directly. */
+  hasPdfBrief?: boolean;
   codeFiles: CodeFile[];
 }
 
@@ -67,22 +77,39 @@ export function buildUserPrompt(input: PromptInput) {
   const fileList = input.codeFiles.map((file) => file.filename).join(", ");
   const codeSection = truncateCodeSection(input.codeFiles);
 
-  return `Assignment Title: ${input.assignmentTitle}
+  const group = input.groupContext;
+  const effectiveDescription = (group?.description?.trim() || input.assignmentDescription || "").trim();
+  const effectiveRubric = (group?.rubric?.trim() || input.rubric || "").trim();
+  const effectiveSourceType = group?.sourceType || input.assignmentSourceType || "manual";
+  const effectiveSourceUrl = group?.sourceUrl || input.assignmentSourceUrl || null;
+  const effectiveMarkdown = (group?.description?.trim() || input.assignmentSourceMarkdown || "").trim();
 
-Assignment Description:
-${input.assignmentDescription}
+  const briefHeader = input.hasPdfBrief
+    ? "A PDF BRIEF IS ATTACHED to this request. Read it carefully — it is the authoritative source of the assignment requirements and rubric. The text below is supplementary."
+    : "The text below is the authoritative source of the assignment requirements and rubric.";
+
+  const groupBlock = group
+    ? `\nGroup: ${group.name}\nThis submission is from a group project. The brief and rubric for THIS group (above) override the assignment-level defaults — grade against the group's own requirements.\n`
+    : "";
+
+  return `${briefHeader}
+${groupBlock}
+Assignment Title: ${input.assignmentTitle}
+
+Assignment Description / Brief:
+${effectiveDescription || "None provided"}
 
 Rubric (Total ${input.maxScore} points):
-${input.rubric}
+${effectiveRubric || "No explicit rubric — infer reasonable criteria from the brief."}
 
-Original Assignment Source Type:
-${input.assignmentSourceType || "manual"}
+Brief Source Type:
+${effectiveSourceType}
 
-Original Assignment Markdown / Notes:
-${input.assignmentSourceMarkdown || "None provided"}
+Brief Markdown / Notes:
+${effectiveMarkdown || "None provided"}
 
-Original Assignment Link:
-${input.assignmentSourceUrl || "None provided"}
+Brief Link:
+${effectiveSourceUrl || "None provided"}
 
 Submission File Inventory:
 ${fileList || "No files found"}

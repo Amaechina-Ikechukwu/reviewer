@@ -1,7 +1,7 @@
 import { GeminiProvider } from "./gemini-provider";
 import { NvidiaProvider } from "./nvidia-provider";
 import { buildSystemPrompt, buildUserPrompt, type PromptInput } from "./prompt";
-import type { ReviewResult } from "./provider";
+import type { ReviewAttachment, ReviewResult } from "./provider";
 import { parseReviewResponse } from "./provider";
 
 export type ProviderName = "gemini" | "nvidia";
@@ -27,13 +27,17 @@ export function getAvailableProviders(): ProviderDescriptor[] {
   ];
 }
 
-export async function reviewCode(input: PromptInput, providerName: ProviderName = "nvidia"): Promise<ReviewResult> {
+export async function reviewCode(
+  input: PromptInput,
+  providerName: ProviderName = "nvidia",
+  attachments?: ReviewAttachment[],
+): Promise<ReviewResult> {
   const provider = providerName === "gemini" ? new GeminiProvider() : new NvidiaProvider();
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(input);
   const startedAt = Date.now();
 
-  const { text, model } = await provider.review(systemPrompt, userPrompt);
+  const { text, model } = await provider.review(systemPrompt, userPrompt, attachments);
 
   return parseReviewResponse(text, provider.name, model, Date.now() - startedAt, input.maxScore);
 }

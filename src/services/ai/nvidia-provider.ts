@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { AIProvider } from "./provider";
+import type { AIProvider, ReviewAttachment } from "./provider";
 
 export class NvidiaProvider implements AIProvider {
   name = "nvidia";
@@ -18,7 +18,7 @@ export class NvidiaProvider implements AIProvider {
     this.model = process.env.NVIDIA_MODEL || "google/gemma-4-31b-it";
   }
 
-  async review(systemPrompt: string, userPrompt: string) {
+  async review(systemPrompt: string, userPrompt: string, _attachments?: ReviewAttachment[]) {
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: [

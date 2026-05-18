@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { AIProvider } from "./provider";
+import type { AIProvider, ReviewAttachment } from "./provider";
 
 export class GeminiProvider implements AIProvider {
   name = "gemini";
@@ -17,10 +17,16 @@ export class GeminiProvider implements AIProvider {
     this.model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   }
 
-  async review(systemPrompt: string, userPrompt: string) {
+  async review(systemPrompt: string, userPrompt: string, attachments?: ReviewAttachment[]) {
+    const parts: any[] = [];
+    for (const att of attachments || []) {
+      parts.push({ inlineData: { mimeType: att.mimeType, data: att.data } });
+    }
+    parts.push({ text: userPrompt });
+
     const response = await this.client.models.generateContent({
       model: this.model,
-      contents: userPrompt,
+      contents: [{ role: "user", parts }],
       config: {
         systemInstruction: systemPrompt,
         responseMimeType: "application/json",

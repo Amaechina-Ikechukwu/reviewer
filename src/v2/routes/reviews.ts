@@ -4,6 +4,7 @@ import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { getAvailableProviders, reviewCode, type ProviderName } from "../../services/ai/reviewer";
+import type { ReviewAttachment } from "../../services/ai/provider";
 import { readCodeFiles } from "../../services/code-reader";
 import { extractZipBuffer, savePdfBuffer } from "../../services/file-extractor";
 import { sendGradeRelease } from "../../services/email";
@@ -75,6 +76,32 @@ export const reviewRoutes = {
       await data.update(COLLECTIONS.reviews, review.id, { status: "reviewing", rawAiResponse: null });
     }
 
+    // Resolve the effective brief: for group submissions, the group's own brief overrides the assignment-level one.
+    let group: any = null;
+    if (submission.groupId) {
+      group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+    }
+    const briefPdfId: string | null =
+      (group?.sourceType === "pdf" && group?.sourcePdfPath) ||
+      (assignment.sourceType === "pdf" && assignment.sourcePdfPath) ||
+      assignment.sourcePdfPath ||
+      null;
+
+    const attachments: ReviewAttachment[] = [];
+    if (briefPdfId) {
+      const buf = await storageDownload(`briefs/${briefPdfId}.pdf`).catch((err) => {
+        console.error(`[v2.review.run] failed to download brief PDF ${briefPdfId}:`, err);
+        return null;
+      });
+      if (buf) {
+        attachments.push({
+          filename: "assignment-brief.pdf",
+          mimeType: "application/pdf",
+          data: buf.toString("base64"),
+        });
+      }
+    }
+
     const reviewInput = {
       assignmentTitle: assignment.title,
       assignmentDescription: assignment.description,
@@ -83,12 +110,27 @@ export const reviewRoutes = {
       assignmentSourceType: assignment.sourceType,
       assignmentSourceMarkdown: assignment.sourceMarkdown,
       assignmentSourceUrl: assignment.sourceUrl,
+      groupContext: group
+        ? {
+            name: group.name,
+            description: group.description ?? null,
+            rubric: group.rubric ?? null,
+            sourceType: group.sourceType ?? null,
+            sourceUrl: group.sourceUrl ?? null,
+          }
+        : null,
+      hasPdfBrief: attachments.length > 0,
       codeFiles,
     };
 
     try {
-      const providerName = (body.provider === "gemini" ? "gemini" : "nvidia") as ProviderName;
-      const result = await reviewCode(reviewInput, providerName);
+      // Prefer the assignment's configured default provider (set at creation, almost always "gemini")
+      // unless the caller explicitly overrides via body.provider. Gemini Flash is materially faster
+      // than the nvidia Gemma fallback for this workload and is the only provider that can read PDFs.
+      const requestedProvider = body.provider || assignment.defaultProvider;
+      const providerName: ProviderName = requestedProvider === "nvidia" ? "nvidia" : "gemini";
+      // Only Gemini can read attached PDFs; the nvidia provider ignores attachments.
+      const result = await reviewCode(reviewInput, providerName, providerName === "gemini" ? attachments : []);
 
       await data.update(COLLECTIONS.reviews, review.id, {
         status: "completed",

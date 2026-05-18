@@ -36,9 +36,16 @@ export interface ReviewResult {
   durationMs: number;
 }
 
+export interface ReviewAttachment {
+  filename: string;
+  mimeType: string;
+  /** base64-encoded content */
+  data: string;
+}
+
 export interface AIProvider {
   name: string;
-  review(systemPrompt: string, userPrompt: string): Promise<{
+  review(systemPrompt: string, userPrompt: string, attachments?: ReviewAttachment[]): Promise<{
     text: string;
     model: string;
   }>;
