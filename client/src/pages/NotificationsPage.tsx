@@ -238,7 +238,6 @@ export default function NotificationsPage() {
         toast().info(res.message || "No eligible recipients found.");
         return;
       }
-      toast().success(`Queued for ${res.total} recipient${res.total !== 1 ? "s" : ""} — sending in the background.`);
       setResult({ sent: 0, failed: 0, total: res.total, status: res.status });
       const final = await pollEmailJob(res.jobId);
       setResult({ sent: final.sent, failed: final.failed, total: final.total, status: final.status });
