@@ -38,7 +38,8 @@
       "Bash(node -e \"const p=require\\('./node_modules/firebase-admin/package.json'\\); console.log\\(p.version\\)\")",
       "mcp__5a07035d-cd1c-4d01-966d-0b08632df7a8__list_teams",
       "mcp__5a07035d-cd1c-4d01-966d-0b08632df7a8__save_project",
-      "mcp__5a07035d-cd1c-4d01-966d-0b08632df7a8__save_issue"
+      "mcp__5a07035d-cd1c-4d01-966d-0b08632df7a8__save_issue",
+      "mcp__5a07035d-cd1c-4d01-966d-0b08632df7a8__list_projects"
     ]
   }
 }

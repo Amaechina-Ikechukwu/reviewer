@@ -6,12 +6,14 @@ import type { AIProvider, ReviewAttachment } from "./provider";
  * an explicit model id in the request body; the frontend picker uses this list.
  */
 export const FREE_OPENROUTER_MODELS: Array<{ id: string; label: string; note?: string }> = [
-  { id: "google/gemma-2-9b-it:free", label: "Gemma 2 9B", note: "Google · Free" },
-  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B", note: "Meta · Free" },
-  { id: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3", note: "DeepSeek · Free" },
-  { id: "qwen/qwen-2.5-coder-32b-instruct:free", label: "Qwen 2.5 Coder 32B", note: "Qwen · Free · Code-focused" },
-  { id: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1 24B", note: "Mistral · Free" },
-  { id: "nvidia/llama-3.1-nemotron-70b-instruct:free", label: "Nemotron 70B", note: "NVIDIA · Free" },
+  { id: "deepseek/deepseek-v4-flash:free", label: "DeepSeek V4 Flash", note: "DeepSeek · Free · 1M ctx" },
+  { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B", note: "Google · Free · 262k ctx" },
+  { id: "google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B A4B", note: "Google · Free · MoE" },
+  { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", label: "Nemotron 3 Nano Omni 30B", note: "NVIDIA · Free · Reasoning" },
+  { id: "arcee-ai/trinity-large-thinking:free", label: "Arcee Trinity Large Thinking", note: "Arcee · Free · Reasoning" },
+  { id: "poolside/laguna-m.1:free", label: "Laguna M.1", note: "Poolside · Free · Code-focused" },
+  { id: "poolside/laguna-xs.2:free", label: "Laguna XS.2", note: "Poolside · Free · Fast" },
+  { id: "baidu/cobuddy:free", label: "CoBuddy", note: "Baidu · Free" },
 ];
 
 export const DEFAULT_OPENROUTER_MODEL =
