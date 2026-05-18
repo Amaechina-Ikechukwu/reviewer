@@ -30,7 +30,8 @@ export class GeminiProvider implements AIProvider {
       config: {
         systemInstruction: systemPrompt,
         responseMimeType: "application/json",
-        temperature: 0.2,
+        temperature: 0,
+        topP: 0.1,
         maxOutputTokens: 4096,
       },
     });

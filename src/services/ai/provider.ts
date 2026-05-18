@@ -98,8 +98,12 @@ export function parseReviewResponse(
       }, 0) / fileScores.length
     : null;
   const providedTotal = Number(parsed.totalScore);
-  const inferredTotal = computedTotal > 0 ? computedTotal : averageFileScore ?? 0;
-  const totalScore = clamp(Number.isFinite(providedTotal) ? providedTotal : inferredTotal, 0, maxScore);
+  // If criteria are present, the sum is authoritative — never let totalScore exceed it.
+  // This prevents models from inflating totalScore beyond what the per-criterion breakdown justifies.
+  const inferredTotal = criteria.length > 0
+    ? computedTotal
+    : (averageFileScore ?? (Number.isFinite(providedTotal) ? providedTotal : 0));
+  const totalScore = clamp(inferredTotal, 0, maxScore);
 
   return {
     totalScore,

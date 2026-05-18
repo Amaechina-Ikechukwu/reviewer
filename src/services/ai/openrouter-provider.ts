@@ -49,8 +49,9 @@ export class OpenRouterProvider implements AIProvider {
         { role: "user", content: userPrompt },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.2,
-      max_tokens: 2048,
+      temperature: 0,
+      top_p: 0.1,
+      max_tokens: 4096,
     });
 
     return {

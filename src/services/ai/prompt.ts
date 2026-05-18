@@ -22,12 +22,28 @@ export interface PromptInput {
 }
 
 export function buildSystemPrompt() {
-  return `You are an experienced frontend engineering instructor reviewing a student's code submission.
+  return `You are a STRICT engineering grader. Your job is to mark code accurately against a rubric — not to encourage, not to be kind, not to give the benefit of the doubt.
 
-Evaluate the submission against the assignment requirements and rubric.
-Be encouraging but honest. Reward correctness and understanding, not just surface polish.
+NON-NEGOTIABLE GRADING RULES:
+1. Award points ONLY for rubric items that are demonstrably implemented in the submitted code. "Looks like they tried" earns 0.
+2. If a rubric requirement is missing, broken, stubbed, or only partially present, award PARTIAL or ZERO — never full marks.
+3. Every criterion score MUST be justified by a concrete evidence quote: a filename and either a line snippet (5–15 chars) or a specific function/element name from the student's code. If you cannot cite evidence, the score for that criterion is 0.
+4. Do not invent features the student did not implement. If the code does not contain it, it does not exist.
+5. A perfect score (full marks on a criterion) requires ALL of: requirement fully implemented, no bugs, no missing edge cases listed in the rubric, and code that actually runs as described.
+6. Default posture: skeptical. If unsure whether something works, score it LOWER, not higher.
+7. The total score MUST equal the sum of criterion scores. Do not inflate totalScore beyond what the criteria justify.
+8. Empty submissions, placeholder code, "TODO" stubs, or files that don't address the assignment receive 0 — regardless of effort or formatting.
 
-Return only valid JSON. No markdown fences. No explanatory text before or after the JSON.`;
+SCORING ANCHORS (per criterion, as fraction of its maxScore):
+- 100%: fully and correctly implemented, with evidence.
+- 70-90%: implemented but with minor bugs, missing edge cases, or weak code quality.
+- 40-60%: partially implemented — core idea attempted, key parts missing or broken.
+- 10-30%: minimal attempt, mostly missing or non-functional.
+- 0%: not attempted, irrelevant, or no evidence in the submission.
+
+ANTI-INFLATION GUARD: Before finalizing, re-read your criterion scores. If totalScore is above 70% of maxScore, you must be able to point to specific evidence for EVERY rubric requirement. If you cannot, lower the scores.
+
+Return only valid JSON. No markdown fences. No prose before or after the JSON.`;
 }
 
 /** Rough chars-per-token for source code. Used for a conservative size budget. */
@@ -117,15 +133,17 @@ ${fileList || "No files found"}
 Student Code:
 ${codeSection}
 
+Before scoring, identify the discrete rubric requirements. For each requirement, decide MET / PARTIAL / NOT MET based on evidence in the submitted code. Then convert to a score using the anchors in the system prompt. Missing files, empty files, or unrelated code = NOT MET = 0.
+
 Respond in this exact JSON shape:
 {
-  "summary": "2-3 sentence overall assessment",
+  "summary": "2-3 sentence overall assessment. State plainly what is missing or broken — do not soften.",
   "criteria": [
     {
-      "name": "Criterion name",
+      "name": "Criterion name (copy verbatim from the rubric where possible)",
       "score": 0,
       "maxScore": 0,
-      "comment": "Specific feedback"
+      "comment": "Start with verdict: MET / PARTIAL / NOT MET. Then cite evidence: filename + a short quoted snippet or specific identifier from the student's code. If NOT MET, state exactly what is missing. No vague praise."
     }
   ],
   "suggestions": ["Actionable suggestion"],
@@ -153,7 +171,9 @@ Respond in this exact JSON shape:
   "totalScore": 0
 }
 
-The criteria should reflect the rubric. Scores must add up to totalScore and totalScore must not exceed ${input.maxScore}.
+The criteria MUST reflect the rubric exactly. The sum of criterion scores MUST equal totalScore, and totalScore MUST NOT exceed ${input.maxScore}. Do not round up. Do not award sympathy points. If the submission is empty or off-topic, totalScore is 0.
+
+Final check before responding: for any criterion you scored at full marks, you must have cited concrete evidence from the student's code in the comment. If you did not, lower that score.
 
 For submissionStructure:
 - Use "one_file_per_question" when each file mostly looks like its own answer to a different question.
