@@ -55,6 +55,34 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function extractJsonObject(text: string): string | null {
+  // Find the first '{' and walk forward, tracking depth, until the matching '}'.
+  // This is more robust than a greedy regex when the model appends trailing prose
+  // (e.g. reasoning models that emit JSON, then a stray sentence).
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 export function parseReviewResponse(
   rawText: string,
   provider: string,
@@ -62,16 +90,27 @@ export function parseReviewResponse(
   durationMs: number,
   maxScore: number,
 ): ReviewResult {
-  const cleaned = rawText.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
-  const match = cleaned.match(/\{[\s\S]*\}/);
-  const payload = match ? match[0] : cleaned;
+  // Strip reasoning/thinking blocks emitted by reasoning models (DeepSeek V4 Flash,
+  // Nemotron Reasoning, Trinity Thinking, etc.) before they reach JSON parsing.
+  const withoutThinking = rawText
+    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "")
+    .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "")
+    .replace(/<analysis>[\s\S]*?<\/analysis>/gi, "");
+  const cleaned = withoutThinking.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
+  const payload = extractJsonObject(cleaned) ?? cleaned;
 
   let parsed: any;
 
   try {
     parsed = JSON.parse(payload);
-  } catch {
-    throw new Error(`${provider} returned invalid JSON.`);
+  } catch (err) {
+    // Surface a snippet of what the model actually returned so failures are
+    // diagnosable from logs without re-running the request.
+    const snippet = rawText.slice(0, 400).replace(/\s+/g, " ").trim();
+    throw new Error(
+      `${provider} (${model}) returned invalid JSON: ${(err as Error).message}. ` +
+      `Raw start: "${snippet}${rawText.length > 400 ? "…" : ""}"`,
+    );
   }
 
   const criteria = Array.isArray(parsed.criteria)
