@@ -22,6 +22,7 @@ export default function SubmitAssignment() {
   const { user: currentUser } = useAuth();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
+  const [briefError, setBriefError] = useState<string | null>(null);
   const [hasOverride, setHasOverride] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string; submittedByStudentId?: string; submittedByName?: string } | null>(null);
   const [myGroup, setMyGroup] = useState<AssignmentGroup | null>(null);
@@ -39,14 +40,24 @@ export default function SubmitAssignment() {
       .then((data) => {
         setAssignment(data);
         if (!data.allowGithub && data.allowFileUpload) setSubmissionType("file_upload");
-        if (data.sourceType === "pdf" && data.sourcePdfPath) {
-          const token = localStorage.getItem("token");
-          fetch(`/v2/api/assignments/${data.id}/brief`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          })
-            .then((r) => r.blob())
-            .then((blob) => setPdfBriefUrl(URL.createObjectURL(blob)))
-            .catch(() => {});
+        if (data.sourceType === "pdf") {
+          if (!data.sourcePdfPath) {
+            setBriefError("The teacher hasn't attached a PDF brief to this assignment yet. Please contact your teacher.");
+          } else {
+            const token = localStorage.getItem("token");
+            fetch(`/v2/api/assignments/${data.id}/brief`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            })
+              .then(async (r) => {
+                if (!r.ok) throw new Error(`Brief unavailable (${r.status})`);
+                const blob = await r.blob();
+                if (blob.type !== "application/pdf") throw new Error("Brief unavailable");
+                setPdfBriefUrl(URL.createObjectURL(blob));
+              })
+              .catch((err) => {
+                setBriefError(err instanceof Error ? err.message : "Failed to load assignment brief.");
+              });
+          }
         }
         if (data.isGroupAssignment) {
           api<{ groups: AssignmentGroup[]; members: Record<string, GroupMember>; myGroupId: string | null }>(`/assignments/${data.id}/groups`)
@@ -329,6 +340,12 @@ export default function SubmitAssignment() {
             </div>
             {pdfBriefUrl ? (
               <iframe src={pdfBriefUrl} className="flex-1 rounded-lg border border-[var(--border)]" title="Assignment brief" />
+            ) : briefError ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-4 py-8 text-center">
+                <Icon.AlertTriangle className="h-5 w-5 text-[var(--danger)]" />
+                <p className="text-sm font-medium text-[var(--danger)]">Assignment brief unavailable</p>
+                <p className="text-xs text-[var(--fg-muted)]">{briefError}</p>
+              </div>
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-[var(--fg-muted)]">
                 Loading brief…

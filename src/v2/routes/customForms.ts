@@ -35,8 +35,9 @@ type ResponseBody = {
 };
 
 type DecisionBody = {
+  fieldId?: string;
   decision?: "approved" | "rejected" | "pending";
-  reviewNotes?: string;
+  notes?: string;
 };
 
 function normalizeField(raw: any, index: number): FormField | null {
@@ -382,7 +383,9 @@ export const customFormRoutes = {
     ]);
 
     if (previous) {
-      if (previous.decision === "approved" || previous.decision === "rejected") {
+      const fieldDecisions = (previous.fieldDecisions ?? {}) as Record<string, string>;
+      const anyDecided = Object.values(fieldDecisions).some((d) => d === "approved" || d === "rejected");
+      if (anyDecided) {
         return json({ error: "Your response has already been reviewed and cannot be changed." }, 409);
       }
       if ((previous.updateCount ?? 0) >= 1) {
@@ -402,8 +405,8 @@ export const customFormRoutes = {
       formId: form.id,
       studentId: user.userId,
       answers,
-      decision: "pending",
-      reviewNotes: null,
+      fieldDecisions: {},
+      fieldNotes: {},
       reviewedBy: null,
       reviewedAt: null,
       submittedAt: new Date(),
@@ -454,18 +457,39 @@ export const customFormRoutes = {
     if (!form || form.createdBy !== user.userId) return json({ error: "Response not found." }, 404);
 
     const body = await parseJson<DecisionBody>(request);
+    const fieldId = body.fieldId?.trim();
     const decision = body.decision;
+    if (!fieldId) {
+      return json({ error: "fieldId is required." }, 400);
+    }
     if (!decision || !["approved", "rejected", "pending"].includes(decision)) {
       return json({ error: "Provide a decision of approved, rejected, or pending." }, 400);
     }
+    const fieldExists = Array.isArray(form.fields) && form.fields.some((f: any) => f.id === fieldId);
+    if (!fieldExists) {
+      return json({ error: "Unknown field." }, 400);
+    }
+
+    const fieldDecisions: Record<string, string> = { ...(response.fieldDecisions ?? {}) };
+    const fieldNotes: Record<string, string> = { ...(response.fieldNotes ?? {}) };
+    fieldDecisions[fieldId] = decision;
+    const noteText = body.notes?.trim() || "";
+    if (noteText) fieldNotes[fieldId] = noteText;
+    else delete fieldNotes[fieldId];
 
     const updated = await data.update<any>(COLLECTIONS.customFormResponses, response.id, {
-      decision,
-      reviewNotes: body.reviewNotes?.trim() || null,
+      fieldDecisions,
+      fieldNotes,
       reviewedBy: user.userId,
       reviewedAt: new Date(),
     });
-    audit({ actorId: user.userId, action: `form.response.${decision}`, targetType: "custom_form_response", targetId: response.id, details: { formId: response.formId } });
+    audit({
+      actorId: user.userId,
+      action: `form.field.${decision}`,
+      targetType: "custom_form_response",
+      targetId: response.id,
+      details: { formId: response.formId, fieldId },
+    });
     return json(updated);
   },
 

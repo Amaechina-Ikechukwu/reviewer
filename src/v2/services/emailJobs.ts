@@ -9,6 +9,7 @@ import {
   sendDeadlineReminder,
   sendFormNotification,
   sendGroupAssignmentNotification,
+  sendQuizResultsRelease,
   type BulkResult,
 } from "../../services/email";
 
@@ -18,7 +19,8 @@ export type EmailJobKind =
   | "form"
   | "assignment"
   | "group_assignment"
-  | "deadline_reminder";
+  | "deadline_reminder"
+  | "quiz_results";
 
 export type EmailJobStatus = "pending" | "running" | "completed" | "failed";
 
@@ -119,6 +121,8 @@ async function runOne(job: EmailJob): Promise<BulkResult> {
         { ...job.payload.assignment, closesAt: new Date(job.payload.assignment.closesAt) },
         job.payload.hoursLeft,
       );
+    case "quiz_results":
+      return sendQuizResultsRelease(job.recipients, job.payload);
     default:
       throw new Error(`Unknown email job kind: ${(job as any).kind}`);
   }

@@ -10,17 +10,12 @@ import { Input, Label, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { formatRelative } from "../lib/format";
-import type { CustomForm, CustomFormDecision, CustomFormField, CustomFormResponse } from "../types";
+import { decisionTone, overallDecision } from "../lib/customForm";
+import type { CustomForm, CustomFormField, CustomFormResponse } from "../types";
 
 type FormWithMine = CustomForm & { myResponse: CustomFormResponse | null };
 
 type AnswerValue = string | number | string[];
-
-function decisionTone(d: CustomFormDecision) {
-  if (d === "approved") return "success" as const;
-  if (d === "rejected") return "danger" as const;
-  return "warn" as const;
-}
 
 function initialAnswers(form: CustomForm, existing: CustomFormResponse | null): Record<string, AnswerValue> {
   const out: Record<string, AnswerValue> = {};
@@ -54,14 +49,20 @@ export default function FillCustomForm() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  const anyFieldDecided = useMemo(() => {
+    const fd = form?.myResponse?.fieldDecisions;
+    if (!fd) return false;
+    return Object.values(fd).some((d) => d === "approved" || d === "rejected");
+  }, [form]);
+
   const locked = useMemo(() => {
     if (!form) return false;
-    if (form.myResponse?.decision === "approved" || form.myResponse?.decision === "rejected") return true;
+    if (anyFieldDecided) return true;
     if ((form.myResponse?.updateCount ?? 0) >= 1) return true;
     if (form.status !== "open") return true;
     if (form.closesAt && new Date(form.closesAt) < new Date()) return true;
     return false;
-  }, [form]);
+  }, [form, anyFieldDecided]);
 
   function setAnswer(fieldId: string, value: AnswerValue) {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }));
@@ -130,29 +131,25 @@ export default function FillCustomForm() {
             All forms
           </Link>
           <PageHeader title={form.title} description={form.description || undefined} />
-          {form.myResponse && (
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <Badge tone={decisionTone(form.myResponse.decision)} dot>
-                {form.myResponse.decision}
-              </Badge>
-              <span className="text-[var(--fg-muted)]">
-                Submitted {formatRelative(form.myResponse.submittedAt)}
-              </span>
-              {form.myResponse.reviewNotes && (
-                <span className="rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[var(--fg-muted)]">
-                  Teacher note: {form.myResponse.reviewNotes}
+          {form.myResponse && (() => {
+            const overall = overallDecision(form.myResponse, form.fields);
+            return (
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Badge tone={decisionTone(overall)} dot>
+                  {overall}
+                </Badge>
+                <span className="text-[var(--fg-muted)]">
+                  Submitted {formatRelative(form.myResponse.submittedAt)}
                 </span>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </div>
 
         {locked && (
           <div className="rounded-lg border border-[var(--warn)]/30 bg-[var(--warn-soft)] px-3 py-2 text-xs text-[var(--warn)]">
-            {form.myResponse?.decision === "approved"
-              ? "Your response has been approved and is locked."
-              : form.myResponse?.decision === "rejected"
-              ? "Your response was rejected. Contact your teacher for next steps."
+            {anyFieldDecided
+              ? "Your teacher has reviewed your answers. Responses are locked."
               : (form.myResponse?.updateCount ?? 0) >= 1
               ? "You have already updated your response once. No further changes are allowed."
               : "This form is not accepting responses."}
@@ -164,16 +161,35 @@ export default function FillCustomForm() {
             <CardTitle>Your answers</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {form.fields.map((field) => (
-              <FieldInput
-                key={field.id}
-                field={field}
-                value={answers[field.id]}
-                disabled={locked}
-                onChange={(v) => setAnswer(field.id, v)}
-                onToggleMulti={(opt) => toggleMulti(field.id, opt)}
-              />
-            ))}
+            {form.fields.map((field) => {
+              const fd = form.myResponse?.fieldDecisions?.[field.id];
+              const fnote = form.myResponse?.fieldNotes?.[field.id];
+              return (
+                <div key={field.id} className="flex flex-col gap-2">
+                  <FieldInput
+                    field={field}
+                    value={answers[field.id]}
+                    disabled={locked}
+                    onChange={(v) => setAnswer(field.id, v)}
+                    onToggleMulti={(opt) => toggleMulti(field.id, opt)}
+                  />
+                  {(fd && fd !== "pending") || fnote ? (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {fd && fd !== "pending" && (
+                        <Badge tone={decisionTone(fd)} dot>
+                          {fd}
+                        </Badge>
+                      )}
+                      {fnote && (
+                        <span className="rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[var(--fg-muted)]">
+                          Teacher note: {fnote}
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
 

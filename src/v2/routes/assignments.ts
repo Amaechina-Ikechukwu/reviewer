@@ -37,6 +37,13 @@ type AssignmentBody = {
   cohortId?: string | null;
 };
 
+function validateAssignmentSource(sourceType: string | undefined, sourceMarkdown: string | null | undefined, sourceUrl: string | null | undefined, sourcePdfPath: string | null | undefined): string | null {
+  if (sourceType === "pdf" && !sourcePdfPath) return "Please upload a PDF brief before creating the assignment.";
+  if (sourceType === "markdown" && !(sourceMarkdown && sourceMarkdown.trim())) return "Please provide markdown content for the assignment brief.";
+  if (sourceType === "notion" && !(sourceUrl && sourceUrl.trim())) return "Please provide a Notion URL for the assignment brief.";
+  return null;
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -144,6 +151,9 @@ export const assignmentRoutes = {
 
     const body = await parseJson<AssignmentBody>(request);
     if (!body.title || !body.closesAt) return json({ error: "Missing required assignment fields." }, 400);
+
+    const sourceErr = validateAssignmentSource(body.sourceType, body.sourceMarkdown, body.sourceUrl, body.sourcePdfPath);
+    if (sourceErr) return json({ error: sourceErr }, 400);
 
     const opensAt = body.opensAt ? new Date(body.opensAt) : new Date();
     const closesAt = new Date(body.closesAt);
@@ -258,6 +268,13 @@ export const assignmentRoutes = {
     if (!newAllowGithub && !newAllowFileUpload) {
       return json({ error: "At least one submission method must be enabled." }, 400);
     }
+
+    const nextSourceType = body.sourceType !== undefined ? body.sourceType : existing.sourceType;
+    const nextSourceMarkdown = body.sourceMarkdown !== undefined ? (body.sourceMarkdown?.trim() || null) : existing.sourceMarkdown;
+    const nextSourceUrl = body.sourceUrl !== undefined ? (body.sourceUrl?.trim() || null) : existing.sourceUrl;
+    const nextSourcePdfPath = body.sourcePdfPath !== undefined ? (body.sourcePdfPath || null) : existing.sourcePdfPath;
+    const sourceErr = validateAssignmentSource(nextSourceType, nextSourceMarkdown, nextSourceUrl, nextSourcePdfPath);
+    if (sourceErr) return json({ error: sourceErr }, 400);
 
     const update: Record<string, unknown> = {};
     if (body.title !== undefined) update.title = body.title.trim();

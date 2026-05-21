@@ -13,6 +13,7 @@ import { staffRoutes } from "./routes/staff";
 import { teacherRoutes } from "./routes/teachers";
 import { changelogRoutes } from "./routes/changelogs";
 import { emailJobRoutes } from "./routes/emailJobs";
+import { quizRoutes } from "./routes/quizzes";
 
 export type V2RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 export type V2RouteSpec = { method: string; path: string; handler: V2RouteHandler; requiresAuth: boolean };
@@ -100,6 +101,19 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/notifications/send", handler: notificationRoutes.send, requiresAuth: true },
 
   { method: "GET", path: "/v2/api/email-jobs/:id", handler: emailJobRoutes.get, requiresAuth: true },
+
+  { method: "POST", path: "/v2/api/quizzes", handler: quizRoutes.create, requiresAuth: true },
+  { method: "GET", path: "/v2/api/quizzes", handler: quizRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/quizzes/:id", handler: quizRoutes.get, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/quizzes/:id", handler: quizRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/quizzes/:id", handler: quizRoutes.remove, requiresAuth: true },
+  { method: "POST", path: "/v2/api/quizzes/:id/attempts/start", handler: quizRoutes.startAttempt, requiresAuth: true },
+  { method: "POST", path: "/v2/api/quizzes/:id/attempts/:attemptId/leave", handler: quizRoutes.registerLeave, requiresAuth: true },
+  { method: "POST", path: "/v2/api/quizzes/:id/attempts/:attemptId/submit", handler: quizRoutes.submitAttempt, requiresAuth: true },
+  { method: "GET", path: "/v2/api/quizzes/:id/my-attempt", handler: quizRoutes.myAttempt, requiresAuth: true },
+  { method: "GET", path: "/v2/api/quizzes/:id/attempts", handler: quizRoutes.listAttempts, requiresAuth: true },
+  { method: "POST", path: "/v2/api/quizzes/:id/release", handler: quizRoutes.releaseResults, requiresAuth: true },
+  { method: "POST", path: "/v2/api/quizzes/:id/attempts/:attemptId/release", handler: quizRoutes.releaseAttempt, requiresAuth: true },
 
   { method: "GET", path: "/v2/api/changelogs", handler: changelogRoutes.list, requiresAuth: false },
   { method: "POST", path: "/v2/api/changelogs", handler: changelogRoutes.create, requiresAuth: true },

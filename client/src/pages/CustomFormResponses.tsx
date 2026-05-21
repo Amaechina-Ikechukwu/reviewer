@@ -9,6 +9,7 @@ import { Icon } from "../components/ui/Icons";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { formatRelative } from "../lib/format";
+import { decisionTone, overallDecision } from "../lib/customForm";
 import type { CustomForm, CustomFormDecision, CustomFormResponse } from "../types";
 
 type Row = {
@@ -18,12 +19,6 @@ type Row = {
 };
 
 type Payload = { form: CustomForm; responses: Row[] };
-
-function decisionTone(d: CustomFormDecision) {
-  if (d === "approved") return "success" as const;
-  if (d === "rejected") return "danger" as const;
-  return "warn" as const;
-}
 
 export default function CustomFormResponses() {
   const { id } = useParams();
@@ -42,14 +37,14 @@ export default function CustomFormResponses() {
   const visible = useMemo(() => {
     if (!data) return [];
     if (filter === "all") return data.responses;
-    return data.responses.filter((r) => r.response.decision === filter);
+    return data.responses.filter((r) => overallDecision(r.response, data.form.fields) === filter);
   }, [data, filter]);
 
   const counts = useMemo(() => {
     const c = { all: 0, pending: 0, approved: 0, rejected: 0 };
     for (const r of data?.responses || []) {
       c.all++;
-      c[r.response.decision]++;
+      c[overallDecision(r.response, data!.form.fields)]++;
     }
     return c;
   }, [data]);
@@ -123,6 +118,7 @@ export default function CustomFormResponses() {
             {visible.map(({ response, studentName, studentEmail }) => {
               const displayEmail =
                 studentEmail && !studentEmail.endsWith("@historical.reviewai.local") ? studentEmail : null;
+              const overall = overallDecision(response, data.form.fields);
               return (
                 <Link
                   key={response.id}
@@ -138,8 +134,8 @@ export default function CustomFormResponses() {
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
-                    <Badge tone={decisionTone(response.decision)} dot>
-                      {response.decision}
+                    <Badge tone={decisionTone(overall)} dot>
+                      {overall}
                     </Badge>
                     <span className="hidden text-xs text-[var(--fg-muted)] sm:inline">
                       {formatRelative(response.submittedAt)}

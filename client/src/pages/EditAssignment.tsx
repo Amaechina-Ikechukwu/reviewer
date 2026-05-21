@@ -98,6 +98,26 @@ export default function EditAssignment() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError("");
+
+    if (sourceMode === "pdf" && !sourcePdfPath) {
+      const msg = "Please upload a PDF brief before saving.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+    if (sourceMode === "markdown" && !sourceMarkdown.trim()) {
+      const msg = "Please upload or paste the assignment markdown.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+    if (sourceMode === "notion" && !sourceUrl.trim()) {
+      const msg = "Please paste the Notion page URL.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+
     setSubmitting(true);
 
     try {

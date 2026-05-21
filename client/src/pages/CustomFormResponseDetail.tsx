@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
@@ -10,16 +10,11 @@ import { Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { formatRelative } from "../lib/format";
+import { decisionTone, overallDecision } from "../lib/customForm";
 import type { CustomForm, CustomFormDecision, CustomFormResponse } from "../types";
 
 type Row = { response: CustomFormResponse; studentName: string | null; studentEmail: string | null };
 type Payload = { form: CustomForm; responses: Row[] };
-
-function decisionTone(d: CustomFormDecision) {
-  if (d === "approved") return "success" as const;
-  if (d === "rejected") return "danger" as const;
-  return "warn" as const;
-}
 
 function renderAnswer(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -31,8 +26,8 @@ export default function CustomFormResponseDetail() {
   const { id, responseId } = useParams();
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
+  const [busyField, setBusyField] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -40,19 +35,19 @@ export default function CustomFormResponseDetail() {
       .then((d) => {
         setData(d);
         const row = d.responses.find((r) => r.response.id === responseId);
-        if (row) setNotes(row.response.reviewNotes || "");
+        if (row) setNotesDraft({ ...(row.response.fieldNotes ?? {}) });
       })
       .catch((err) => toast().error(err instanceof Error ? err.message : "Failed to load."))
       .finally(() => setLoading(false));
   }, [id, responseId]);
 
-  async function decide(decision: CustomFormDecision) {
+  async function decide(fieldId: string, decision: CustomFormDecision) {
     if (!id || !responseId) return;
-    setBusy(true);
+    setBusyField(fieldId);
     try {
       const updated = await api<CustomFormResponse>(`/forms/${id}/responses/${responseId}`, {
         method: "PATCH",
-        body: JSON.stringify({ decision, reviewNotes: notes }),
+        body: JSON.stringify({ fieldId, decision, notes: notesDraft[fieldId] || "" }),
       });
       setData((prev) =>
         prev
@@ -68,9 +63,14 @@ export default function CustomFormResponseDetail() {
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to update.");
     } finally {
-      setBusy(false);
+      setBusyField(null);
     }
   }
+
+  const row = useMemo(
+    () => data?.responses.find((r) => r.response.id === responseId),
+    [data, responseId],
+  );
 
   if (loading) {
     return (
@@ -79,8 +79,6 @@ export default function CustomFormResponseDetail() {
       </TeacherShell>
     );
   }
-
-  const row = data?.responses.find((r) => r.response.id === responseId);
 
   if (!data || !row) {
     return (
@@ -93,6 +91,7 @@ export default function CustomFormResponseDetail() {
   const { response, studentName, studentEmail } = row;
   const displayEmail =
     studentEmail && !studentEmail.endsWith("@historical.reviewai.local") ? studentEmail : null;
+  const overall = overallDecision(response, data.form.fields);
 
   return (
     <TeacherShell section="forms">
@@ -111,8 +110,8 @@ export default function CustomFormResponseDetail() {
               description={displayEmail || undefined}
             />
             <div className="flex items-center gap-2">
-              <Badge tone={decisionTone(response.decision)} dot>
-                {response.decision}
+              <Badge tone={decisionTone(overall)} dot>
+                {overall}
               </Badge>
               <span className="text-xs text-[var(--fg-muted)]">{formatRelative(response.submittedAt)}</span>
             </div>
@@ -123,64 +122,65 @@ export default function CustomFormResponseDetail() {
           <CardHeader>
             <CardTitle>Answers</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {data.form.fields.map((field) => (
-              <div key={field.id} className="flex flex-col gap-1">
-                <div className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
-                  {field.label}
+          <CardContent className="flex flex-col gap-5">
+            {data.form.fields.map((field, index) => {
+              const fieldDecision = (response.fieldDecisions?.[field.id] ?? "pending") as CustomFormDecision;
+              const isBusy = busyField === field.id;
+              return (
+                <div
+                  key={field.id}
+                  className="flex flex-col gap-2 border-b border-[var(--border)] pb-5 last:border-b-0 last:pb-0"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                      {field.label} {data.form.fields.length > 1 ? `(${index + 1})` : ""}
+                    </div>
+                    <Badge tone={decisionTone(fieldDecision)} dot>
+                      {fieldDecision}
+                    </Badge>
+                  </div>
+                  <div className="whitespace-pre-wrap text-sm text-[var(--fg)]">
+                    {renderAnswer(response.answers?.[field.id])}
+                  </div>
+                  <Textarea
+                    rows={2}
+                    value={notesDraft[field.id] ?? ""}
+                    onChange={(e) => setNotesDraft((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                    placeholder="Note for this answer (optional, shown to student)"
+                  />
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      loading={isBusy}
+                      onClick={() => decide(field.id, "pending")}
+                      disabled={fieldDecision === "pending"}
+                    >
+                      Reset
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={isBusy}
+                      onClick={() => decide(field.id, "rejected")}
+                      disabled={fieldDecision === "rejected"}
+                    >
+                      <Icon.X className="h-3.5 w-3.5" />
+                      Reject
+                    </Button>
+                    <Button
+                      size="sm"
+                      loading={isBusy}
+                      onClick={() => decide(field.id, "approved")}
+                      disabled={fieldDecision === "approved"}
+                    >
+                      <Icon.Check className="h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                  </div>
                 </div>
-                <div className="whitespace-pre-wrap text-sm text-[var(--fg)]">
-                  {renderAnswer(response.answers?.[field.id])}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Review</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-[var(--fg-muted)]">Notes (optional)</label>
-              <Textarea
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Visible to the student in their submission view."
-              />
-            </div>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={busy}
-                onClick={() => decide("pending")}
-                disabled={response.decision === "pending"}
-              >
-                Reset
-              </Button>
-              <Button
-                variant="danger"
-                size="sm"
-                loading={busy}
-                onClick={() => decide("rejected")}
-                disabled={response.decision === "rejected"}
-              >
-                <Icon.X className="h-3.5 w-3.5" />
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                loading={busy}
-                onClick={() => decide("approved")}
-                disabled={response.decision === "approved"}
-              >
-                <Icon.Check className="h-3.5 w-3.5" />
-                Approve
-              </Button>
-            </div>
+              );
+            })}
           </CardContent>
         </Card>
       </div>

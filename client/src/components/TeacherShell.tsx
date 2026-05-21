@@ -5,7 +5,7 @@ import { Icon } from "./ui/Icons";
 export type TeacherSection =
   | "dashboard" | "assignments" | "submissions" | "students" | "cohorts"
   | "gradebook" | "notes" | "groupProjects" | "notifications"
-  | "settings" | "forms" | "staff" | "logs" | "changelog";
+  | "settings" | "forms" | "quizzes" | "staff" | "logs" | "changelog";
 
 const SECTIONS: NavSection[] = [
   {
@@ -17,6 +17,7 @@ const SECTIONS: NavSection[] = [
       { key: "submissions", label: "Submissions", to: "/teacher/submissions", icon: <Icon.Inbox className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/submissions") || p.startsWith("/teacher/review") || p.startsWith("/teacher/import") },
       { key: "gradebook", label: "Gradebook", to: "/teacher/gradebook", icon: <Icon.Book className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/gradebook") },
       { key: "notes", label: "Class Notes", to: "/teacher/notes", icon: <Icon.FileText className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/notes") },
+      { key: "quizzes", label: "Quizzes", to: "/teacher/quizzes", icon: <Icon.Clock className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/quizzes") },
     ],
   },
   {

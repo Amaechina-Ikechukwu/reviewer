@@ -214,6 +214,51 @@ export type CustomForm = {
   publishedLink?: string | null;
 };
 
+export type QuizStatus = "draft" | "open" | "closed";
+
+export type QuizAttemptStatus = "in_progress" | "submitted" | "auto_submitted";
+
+export type QuizQuestion = {
+  id: string;
+  prompt: string;
+  options: string[];
+  correctIndex?: number;
+};
+
+export type Quiz = {
+  id: string;
+  title: string;
+  description?: string;
+  cohortId: string;
+  secondsPerQuestion: number;
+  leaveThreshold: number;
+  penaltyPerLeave: number;
+  status: QuizStatus;
+  questionCount: number;
+  questions?: QuizQuestion[];
+  resultsReleased?: boolean;
+  resultsReleasedAt?: string | null;
+  createdBy: string;
+  createdAt: string;
+};
+
+export type QuizAttempt = {
+  id: string;
+  quizId: string;
+  studentId: string;
+  startedAt: string;
+  submittedAt: string | null;
+  answers: Record<string, number>;
+  leaveCount: number;
+  rawScore: number;
+  penalty: number;
+  finalScore: number;
+  totalQuestions: number;
+  status: QuizAttemptStatus;
+  released?: boolean;
+  releasedAt?: string | null;
+};
+
 export type CustomFormDecision = "pending" | "approved" | "rejected";
 
 export type CustomFormResponse = {
@@ -221,11 +266,15 @@ export type CustomFormResponse = {
   formId: string;
   studentId: string;
   answers: Record<string, string | number | string[]>;
-  decision: CustomFormDecision;
-  reviewNotes: string | null;
+  fieldDecisions?: Record<string, CustomFormDecision>;
+  fieldNotes?: Record<string, string>;
   reviewedBy: string | null;
   reviewedAt: string | null;
   submittedAt: string;
   updatedAt?: string;
   updateCount?: number;
+  /** @deprecated Use fieldDecisions instead. Retained for legacy records. */
+  decision?: CustomFormDecision;
+  /** @deprecated Use fieldNotes instead. Retained for legacy records. */
+  reviewNotes?: string | null;
 };

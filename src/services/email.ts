@@ -350,6 +350,24 @@ export async function sendChangelogNotification(
   `, { label: `changelog:${entry.version}` });
 }
 
+export async function sendQuizResultsRelease(
+  students: Array<{ email: string; fullName: string }>,
+  quiz: { id: string; title: string },
+): Promise<BulkResult> {
+  const link = `${APP_URL}/student/quizzes/${encodeURIComponent(quiz.id)}`;
+  const title = escapeHtml(quiz.title);
+  const subject = `Your results are ready: ${quiz.title}`;
+
+  return sendBulk(students, subject, ({ fullName }) => `
+    ${shellOpen()}
+      <h2 style="margin:0 0 8px">Hi ${escapeHtml(fullName.split(" ")[0])},</h2>
+      <p style="margin:0 0 4px;color:#64748b">Your teacher has released the results for <strong>${title}</strong>.</p>
+      <p style="margin:0 0 24px;color:#64748b">Click below to see your score and review the correct answers.</p>
+      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">View my results</a>
+    ${shellClose()}
+  `, { label: `quiz_results:${quiz.id}` });
+}
+
 export async function sendDeadlineReminder(
   students: Array<{ email: string; fullName: string }>,
   assignment: { title: string; closesAt: Date; id: string },

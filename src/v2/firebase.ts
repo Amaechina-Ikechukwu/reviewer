@@ -96,4 +96,6 @@ export const COLLECTIONS = {
   cohorts: "cohorts",
   changelogs: "changelogs",
   emailJobs: "email_jobs",
+  quizzes: "quizzes",
+  quizAttempts: "quiz_attempts",
 } as const;

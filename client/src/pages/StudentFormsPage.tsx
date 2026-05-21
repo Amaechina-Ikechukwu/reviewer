@@ -8,15 +8,10 @@ import { Icon } from "../components/ui/Icons";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { formatRelative } from "../lib/format";
-import type { CustomForm, CustomFormDecision, CustomFormResponse } from "../types";
+import { decisionTone, overallDecision } from "../lib/customForm";
+import type { CustomForm, CustomFormResponse } from "../types";
 
 type FormWithMine = CustomForm & { myResponse: CustomFormResponse | null };
-
-function decisionTone(d: CustomFormDecision) {
-  if (d === "approved") return "success" as const;
-  if (d === "rejected") return "danger" as const;
-  return "warn" as const;
-}
 
 export default function StudentFormsPage() {
   const [forms, setForms] = useState<FormWithMine[]>([]);
@@ -59,11 +54,14 @@ export default function StudentFormsPage() {
                       <Icon.FileText className="h-4 w-4 text-[var(--fg-muted)]" />
                       {form.title}
                     </CardTitle>
-                    {form.myResponse ? (
-                      <Badge tone={decisionTone(form.myResponse.decision)} dot>
-                        {form.myResponse.decision}
-                      </Badge>
-                    ) : overdue ? (
+                    {form.myResponse ? (() => {
+                      const overall = overallDecision(form.myResponse, form.fields);
+                      return (
+                        <Badge tone={decisionTone(overall)} dot>
+                          {overall}
+                        </Badge>
+                      );
+                    })() : overdue ? (
                       <Badge tone="danger" dot>Closed</Badge>
                     ) : (
                       <Badge tone="accent">Not submitted</Badge>

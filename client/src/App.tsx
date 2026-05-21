@@ -9,6 +9,11 @@ import CustomFormResponses from "./pages/CustomFormResponses";
 import CustomFormResponseDetail from "./pages/CustomFormResponseDetail";
 import StudentFormsPage from "./pages/StudentFormsPage";
 import FillCustomForm from "./pages/FillCustomForm";
+import QuizzesPage from "./pages/QuizzesPage";
+import QuizBuilder from "./pages/QuizBuilder";
+import QuizResults from "./pages/QuizResults";
+import StudentQuizzesPage from "./pages/StudentQuizzesPage";
+import TakeQuiz from "./pages/TakeQuiz";
 import StudentNotesPage from "./pages/StudentNotesPage";
 import GradebookPage from "./pages/GradebookPage";
 import CreateAssignment from "./pages/CreateAssignment";
@@ -314,6 +319,38 @@ export default function App() {
           </ProtectedRoute>
         )}
       />
+      <Route
+        path="/teacher/quizzes"
+        element={(
+          <ProtectedRoute role="teacher">
+            <QuizzesPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/quizzes/new"
+        element={(
+          <ProtectedRoute role="teacher">
+            <QuizBuilder />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/quizzes/:id/edit"
+        element={(
+          <ProtectedRoute role="teacher">
+            <QuizBuilder />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/quizzes/:id/results"
+        element={(
+          <ProtectedRoute role="teacher">
+            <QuizResults />
+          </ProtectedRoute>
+        )}
+      />
 
       <Route
         path="/student"
@@ -368,6 +405,22 @@ export default function App() {
         element={(
           <ProtectedRoute role="student">
             <FillCustomForm />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/student/quizzes"
+        element={(
+          <ProtectedRoute role="student">
+            <StudentQuizzesPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/student/quizzes/:id"
+        element={(
+          <ProtectedRoute role="student">
+            <TakeQuiz />
           </ProtectedRoute>
         )}
       />
