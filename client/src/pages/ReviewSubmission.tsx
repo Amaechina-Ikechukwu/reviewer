@@ -159,7 +159,7 @@ function buildReactPreviewDocument(files: CodeFile[]): string | null {
       // Rewrite bare package imports (except react* and local src/ aliases) to esm.sh — do this BEFORE blob substitution
       code = code.replace(/(\\bfrom\\s+|\\bimport\\s*\\(\\s*)(["\\'])(@?[a-zA-Z][\\w\\-.]*(?:\\/[\\w\\-.@]+)*)\\2/g, (m, prefix, q, spec) => {
         if (spec === 'react' || spec === 'react-dom' || spec.startsWith('react/') || spec.startsWith('react-dom/')) return m;
-        // CRA / Vite path aliases like `src/layouts/RootLayout` — keep as-is for local resolution
+        // CRA / Vite path aliases — keep as-is for local resolution
         if (spec.startsWith('src/')) return m;
         return prefix + q + 'https://esm.sh/' + spec + q;
       });
