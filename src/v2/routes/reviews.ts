@@ -124,17 +124,14 @@ export const reviewRoutes = {
     };
 
     try {
-      // Prefer the assignment's configured default provider (set at creation, almost always "gemini")
-      // unless the caller explicitly overrides via body.provider. Gemini Flash is materially faster
-      // than the nvidia Gemma fallback for this workload and is the only provider that can read PDFs.
       const requestedProvider = body.provider || assignment.defaultProvider;
       const providerName: ProviderName =
         requestedProvider === "nvidia"
           ? "nvidia"
-          : requestedProvider === "openrouter"
-            ? "openrouter"
-            : "gemini";
-      // Only Gemini can read attached PDFs; the nvidia/openrouter providers ignore attachments.
+          : requestedProvider === "gemini"
+            ? "gemini"
+            : "openrouter";
+      // Only Gemini can read attached PDFs; nvidia/openrouter ignore attachments.
       const result = await reviewCode(
         reviewInput,
         providerName,

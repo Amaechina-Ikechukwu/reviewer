@@ -226,10 +226,20 @@ export const submissionRoutes = {
       if (!studentGroup) return json({ error: `${student.fullName} is not in a group for this assignment.` }, 400);
       groupId = studentGroup.id;
       const existingGroup = await data.findOne(COLLECTIONS.submissions, [["assignmentId", "==", assignmentId], ["groupId", "==", groupId]]);
-      if (existingGroup) return json({ error: `${studentGroup.name} has already submitted for this assignment.` }, 409);
+      if (existingGroup) {
+        await removeFiles(existingGroup.filePath);
+        if (existingGroup.storageKey) await storageDelete(existingGroup.storageKey).catch(() => {});
+        await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", existingGroup.id]]);
+        await data.del(COLLECTIONS.submissions, existingGroup.id);
+      }
     } else {
       const existing = await data.findOne(COLLECTIONS.submissions, [["assignmentId", "==", assignmentId], ["studentId", "==", studentId]]);
-      if (existing) return json({ error: `${student.fullName} has already submitted for this assignment.` }, 409);
+      if (existing) {
+        await removeFiles(existing.filePath);
+        if (existing.storageKey) await storageDelete(existing.storageKey).catch(() => {});
+        await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", existing.id]]);
+        await data.del(COLLECTIONS.submissions, existing.id);
+      }
     }
 
     const submissionId = randomUUID();

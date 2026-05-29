@@ -28,7 +28,7 @@ type AssignmentBody = {
   closesAt?: string;
   allowGithub?: boolean;
   allowFileUpload?: boolean;
-  defaultProvider?: "gemini";
+  defaultProvider?: "openrouter";
   classNotes?: string;
   isGroupAssignment?: boolean;
   groupCount?: number;
@@ -196,7 +196,7 @@ export const assignmentRoutes = {
       maxScore: body.maxScore && body.maxScore > 0 ? Math.round(body.maxScore) : 100,
       allowGithub: effectiveAllowGithub,
       allowFileUpload: body.allowFileUpload ?? true,
-      defaultProvider: "gemini",
+      defaultProvider: "openrouter",
       classNotes: body.classNotes?.trim() || null,
       isGroupAssignment,
       groupCount,

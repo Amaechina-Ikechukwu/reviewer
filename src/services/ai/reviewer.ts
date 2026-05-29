@@ -37,7 +37,7 @@ export function getAvailableProviders(): ProviderDescriptor[] {
 
 export async function reviewCode(
   input: PromptInput,
-  providerName: ProviderName = "gemini",
+  providerName: ProviderName = "openrouter",
   attachments?: ReviewAttachment[],
   model?: string,
 ): Promise<ReviewResult> {
