@@ -156,9 +156,11 @@ function buildReactPreviewDocument(files: CodeFile[]): string | null {
         return '';
       });
 
-      // Rewrite bare package imports (except react*) to esm.sh — do this BEFORE blob substitution
+      // Rewrite bare package imports (except react* and local src/ aliases) to esm.sh — do this BEFORE blob substitution
       code = code.replace(/(\\bfrom\\s+|\\bimport\\s*\\(\\s*)(["\\'])(@?[a-zA-Z][\\w\\-.]*(?:\\/[\\w\\-.@]+)*)\\2/g, (m, prefix, q, spec) => {
         if (spec === 'react' || spec === 'react-dom' || spec.startsWith('react/') || spec.startsWith('react-dom/')) return m;
+        // CRA / Vite path aliases like `src/layouts/RootLayout` — keep as-is for local resolution
+        if (spec.startsWith('src/')) return m;
         return prefix + q + 'https://esm.sh/' + spec + q;
       });
 
@@ -171,6 +173,16 @@ function buildReactPreviewDocument(files: CodeFile[]): string | null {
       for (const spec of specs) {
         const resolvedPath = resolveRel(found, spec);
         const blobUrl = await loadModule(resolvedPath);
+        const escaped = spec.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
+        code = code.replace(new RegExp('(\\\\bfrom\\\\s+|\\\\bimport\\\\s*\\\\(\\\\s*)(["\\'])' + escaped + '\\\\2', 'g'), (_, prefix, q) => prefix + q + blobUrl + q);
+      }
+
+      // Resolve CRA/Vite src/ path aliases (project-root-relative, no resolveRel needed)
+      const srcSpecs = new Set();
+      code.replace(/\\bfrom\\s+['"](src\\/[^'"]+)['"]/g, (_, s) => { srcSpecs.add(s); return ''; });
+      code.replace(/\\bimport\\s*\\(\\s*['"](src\\/[^'"]+)['"]\\s*\\)/g, (_, s) => { srcSpecs.add(s); return ''; });
+      for (const spec of srcSpecs) {
+        const blobUrl = await loadModule(spec);
         const escaped = spec.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
         code = code.replace(new RegExp('(\\\\bfrom\\\\s+|\\\\bimport\\\\s*\\\\(\\\\s*)(["\\'])' + escaped + '\\\\2', 'g'), (_, prefix, q) => prefix + q + blobUrl + q);
       }
