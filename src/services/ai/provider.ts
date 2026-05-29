@@ -101,8 +101,12 @@ export function parseReviewResponse(
 
   let parsed: any;
 
+  // Sanitize invalid escape sequences (e.g. \` or \x) that some models emit.
+  // Valid JSON escapes: \" \\ \/ \b \f \n \r \t \uXXXX
+  const sanitized = payload.replace(/\\([^"\\/bfnrtu])/g, "$1");
+
   try {
-    parsed = JSON.parse(payload);
+    parsed = JSON.parse(sanitized);
   } catch (err) {
     // Surface a snippet of what the model actually returned so failures are
     // diagnosable from logs without re-running the request.
