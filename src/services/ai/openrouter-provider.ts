@@ -20,7 +20,7 @@ export const FREE_OPENROUTER_MODELS: Array<{ id: string; label: string; note?: s
 ];
 
 export const DEFAULT_OPENROUTER_MODEL =
-  process.env.OPENROUTER_MODEL || FREE_OPENROUTER_MODELS[0].id;
+  process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash";
 
 export class OpenRouterProvider implements AIProvider {
   name = "openrouter";
