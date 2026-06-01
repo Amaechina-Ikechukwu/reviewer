@@ -39,6 +39,12 @@ import StudentProfilePage from "./pages/StudentProfilePage";
 import SubmitAssignment from "./pages/SubmitAssignment";
 import SubmissionsList from "./pages/SubmissionsList";
 import TeacherDashboard from "./pages/TeacherDashboard";
+import TeacherProjectsPage from "./pages/TeacherProjectsPage";
+import TeacherStudentProjectsPage from "./pages/TeacherStudentProjectsPage";
+import CreateProjectPage from "./pages/CreateProjectPage";
+import ProjectDetailPage from "./pages/ProjectDetailPage";
+import StudentProjectsPage from "./pages/StudentProjectsPage";
+import StudentProjectDetailPage from "./pages/StudentProjectDetailPage";
 import type { Role } from "./types";
 import { isStaffRole } from "./types";
 import CohortsPage from "./pages/CohortsPage";
@@ -351,6 +357,38 @@ export default function App() {
           </ProtectedRoute>
         )}
       />
+      <Route
+        path="/teacher/projects"
+        element={(
+          <ProtectedRoute role="teacher">
+            <TeacherProjectsPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/projects/new"
+        element={(
+          <ProtectedRoute role="teacher">
+            <CreateProjectPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/projects/student/:studentId"
+        element={(
+          <ProtectedRoute role="teacher">
+            <TeacherStudentProjectsPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/projects/:id"
+        element={(
+          <ProtectedRoute role="teacher">
+            <ProjectDetailPage />
+          </ProtectedRoute>
+        )}
+      />
 
       <Route
         path="/student"
@@ -421,6 +459,22 @@ export default function App() {
         element={(
           <ProtectedRoute role="student">
             <TakeQuiz />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/student/projects"
+        element={(
+          <ProtectedRoute role="student">
+            <StudentProjectsPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/student/projects/:id"
+        element={(
+          <ProtectedRoute role="student">
+            <StudentProjectDetailPage />
           </ProtectedRoute>
         )}
       />

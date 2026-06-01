@@ -9,6 +9,9 @@ import {
   sendDeadlineReminder,
   sendFormNotification,
   sendGroupAssignmentNotification,
+  sendProjectAssignmentNotification,
+  sendProjectSubmissionNotification,
+  sendProjectReviewNotification,
   sendQuizResultsRelease,
   type BulkResult,
 } from "../../services/email";
@@ -20,7 +23,10 @@ export type EmailJobKind =
   | "assignment"
   | "group_assignment"
   | "deadline_reminder"
-  | "quiz_results";
+  | "quiz_results"
+  | "project_assignment"
+  | "project_submission"
+  | "project_review";
 
 export type EmailJobStatus = "pending" | "running" | "completed" | "failed";
 
@@ -121,6 +127,12 @@ async function runOne(job: EmailJob): Promise<BulkResult> {
         { ...job.payload.assignment, closesAt: new Date(job.payload.assignment.closesAt) },
         job.payload.hoursLeft,
       );
+    case "project_assignment":
+      return sendProjectAssignmentNotification(job.recipients, job.payload.project, job.payload.assignedBy);
+    case "project_submission":
+      return sendProjectSubmissionNotification(job.recipients, job.payload.project, job.payload.studentName);
+    case "project_review":
+      return sendProjectReviewNotification(job.recipients, job.payload.project, job.payload.action, job.payload.reviewedBy, job.payload.comment);
     case "quiz_results":
       return sendQuizResultsRelease(job.recipients, job.payload);
     default:

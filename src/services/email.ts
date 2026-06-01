@@ -368,6 +368,72 @@ export async function sendQuizResultsRelease(
   `, { label: `quiz_results:${quiz.id}` });
 }
 
+export async function sendProjectAssignmentNotification(
+  students: Array<{ email: string; fullName: string }>,
+  project: { id: string; title: string; description?: string | null; deadline?: string | null },
+  assignedBy: string,
+): Promise<BulkResult> {
+  const link = `${APP_URL}/student/projects`;
+  const title = escapeHtml(project.title);
+  const subject = `You've been assigned to a project: ${project.title}`;
+  const deadline = project.deadline
+    ? `<p style="margin:0 0 16px;color:#64748b">Deadline: <strong>${escapeHtml(new Date(project.deadline).toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" }))}</strong></p>`
+    : "";
+
+  return sendBulk(students, subject, ({ fullName }) => `
+    ${shellOpen()}
+      <h2 style="margin:0 0 8px">Hi ${escapeHtml(fullName.split(" ")[0])},</h2>
+      <p style="margin:0 0 4px;color:#64748b">You've been assigned to a new project: <strong>${title}</strong>.</p>
+      ${project.description ? `<p style="margin:0 0 16px;color:#64748b">${escapeHtml(project.description)}</p>` : ""}
+      ${deadline}
+      <p style="margin:0 0 20px;color:#64748b">Assigned by: <strong>${escapeHtml(assignedBy)}</strong></p>
+      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">View project</a>
+    ${shellClose()}
+  `, { label: `project:${project.id}` });
+}
+
+export async function sendProjectSubmissionNotification(
+  staff: Array<{ email: string; fullName: string }>,
+  project: { id: string; title: string; deployedUrl: string },
+  studentName: string,
+): Promise<BulkResult> {
+  const link = `${APP_URL}/teacher/projects/${project.id}`;
+  const title = escapeHtml(project.title);
+  const url = escapeHtml(project.deployedUrl);
+  const subject = `${studentName} submitted "${project.title}"`;
+
+  return sendBulk(staff, subject, ({ fullName }) => `
+    ${shellOpen()}
+      <h2 style="margin:0 0 8px">Hi ${escapeHtml(fullName.split(" ")[0])},</h2>
+      <p style="margin:0 0 4px;color:#64748b"><strong>${escapeHtml(studentName)}</strong> has submitted their project: <strong>${title}</strong>.</p>
+      <p style="margin:0 0 20px;color:#64748b">Deployed URL: <a href="${url}" style="color:#0d56d8">${url}</a></p>
+      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">View project</a>
+    ${shellClose()}
+  `, { label: `project-submit:${project.id}` });
+}
+
+export async function sendProjectReviewNotification(
+  members: Array<{ email: string; fullName: string }>,
+  project: { id: string; title: string },
+  action: "accepted" | "declined",
+  reviewedBy: string,
+  comment: string | null,
+): Promise<BulkResult> {
+  const link = `${APP_URL}/student/projects/${project.id}`;
+  const title = escapeHtml(project.title);
+  const verb = action === "accepted" ? "accepted" : "declined";
+  const subject = `Project "${project.title}" was ${verb}`;
+
+  return sendBulk(members, subject, ({ fullName }) => `
+    ${shellOpen()}
+      <h2 style="margin:0 0 8px">Hi ${escapeHtml(fullName.split(" ")[0])},</h2>
+      <p style="margin:0 0 4px;color:#64748b">Your project <strong>${title}</strong> was <strong>${verb}</strong> by ${escapeHtml(reviewedBy)}.</p>
+      ${comment ? `<p style="margin:0 0 16px;color:#64748b">Comment: ${escapeHtml(comment)}</p>` : ""}
+      <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">View project</a>
+    ${shellClose()}
+  `, { label: `project-review:${project.id}` });
+}
+
 export async function sendDeadlineReminder(
   students: Array<{ email: string; fullName: string }>,
   assignment: { title: string; closesAt: Date; id: string },

@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { cn } from "../lib/cn";
 import { getTheme, toggleTheme } from "../lib/theme";
 import { Avatar } from "./ui/Avatar";
+import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import { Icon } from "./ui/Icons";
 import { Modal } from "./ui/Modal";
 import { Toaster } from "./Toast";
+import { listInAppNotifications, markNotificationRead, markAllNotificationsRead, unreadNotificationCount } from "../api";
+import type { InAppNotification } from "../types";
 
 export type NavItem = {
   key: string;
@@ -91,6 +94,100 @@ function SectionHeader({ title, collapsed }: { title: string; collapsed: boolean
   );
 }
 
+function NotificationPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const navigate = useNavigate();
+  const [notifications, setNotifications] = useState<InAppNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetch = useCallback(async () => {
+    try {
+      const [n] = await Promise.all([listInAppNotifications()]);
+      setNotifications(n);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) fetch();
+  }, [open, fetch]);
+
+  async function handleClick(n: InAppNotification) {
+    if (!n.read) {
+      await markNotificationRead(n.id);
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+    }
+    onClose();
+    if (n.link) navigate(n.link);
+  }
+
+  async function handleMarkAllRead() {
+    await markAllNotificationsRead();
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  }
+
+  return (
+    <>
+      {open && <div className="fixed inset-0 z-40" onClick={onClose} />}
+      <div
+        className={cn(
+          "fixed right-0 top-0 z-50 flex h-full w-80 flex-col border-l border-[var(--border)] bg-[var(--surface)] shadow-xl transition-transform duration-300",
+          open ? "translate-x-0" : "translate-x-full",
+        )}
+      >
+        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+          <h2 className="text-sm font-semibold text-[var(--fg)]">Notifications</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs text-[var(--accent)] hover:underline"
+            >
+              Mark all read
+            </button>
+            <button onClick={onClose} className="text-[var(--fg-muted)] hover:text-[var(--fg)]">
+              <Icon.X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="px-4 py-8 text-center text-sm text-[var(--fg-muted)]">Loading...</div>
+          ) : notifications.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-[var(--fg-muted)]">No notifications yet.</div>
+          ) : (
+            <div className="divide-y divide-[var(--border)]">
+              {notifications.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => handleClick(n)}
+                  className={cn(
+                    "flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-muted)]",
+                    n.read ? "opacity-60" : "bg-[var(--accent-soft)]/30",
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[var(--fg)]">{n.title}</p>
+                    <p className="mt-0.5 text-xs text-[var(--fg-muted)]">{n.body}</p>
+                    {n.createdAt && (
+                      <p className="mt-1 text-[11px] text-[var(--fg-subtle)]">
+                        {new Date(n.createdAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  {!n.read && (
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[var(--accent)]" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function AppShell({ sections, portalLabel, activeKey, primaryAction, children }: Props) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -98,6 +195,8 @@ export function AppShell({ sections, portalLabel, activeKey, primaryAction, chil
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarHovered, setSidebarHovered] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const collapsed = !sidebarHovered;
@@ -107,6 +206,18 @@ export function AppShell({ sections, portalLabel, activeKey, primaryAction, chil
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const { count } = await unreadNotificationCount();
+        setUnreadCount(count);
+      } catch {}
+    }
+    fetchCount();
+    const interval = setInterval(fetchCount, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   function handleLogout() {
     logout();
@@ -273,6 +384,21 @@ export function AppShell({ sections, portalLabel, activeKey, primaryAction, chil
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => { setNotifPanelOpen(true); setUnreadCount(0); }}
+              aria-label="Notifications"
+              className="relative flex h-9 w-9 items-center justify-center border border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)] transition-colors"
+            >
+              <Icon.Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <>
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--danger)] px-1 text-[10px] font-bold text-white animate-pulse">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                </>
+              )}
+            </button>
             <ThemeToggle />
           </div>
         </header>
@@ -281,6 +407,8 @@ export function AppShell({ sections, portalLabel, activeKey, primaryAction, chil
           <div className="mx-auto w-full max-w-7xl">{children}</div>
         </main>
       </div>
+
+      <NotificationPanel open={notifPanelOpen} onClose={() => setNotifPanelOpen(false)} />
 
       <Toaster />
 

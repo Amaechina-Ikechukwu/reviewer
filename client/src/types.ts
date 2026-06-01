@@ -259,6 +259,36 @@ export type QuizAttempt = {
   releasedAt?: string | null;
 };
 
+export type ProjectStatus = "active" | "completed" | "archived";
+
+export type Project = {
+  id: string;
+  title: string;
+  description: string | null;
+  studentIds: string[];
+  students?: { id: string; email: string; fullName: string }[];
+  status: ProjectStatus;
+  deadline: string | null;
+  deployedUrl?: string | null;
+  submittedAt?: string | null;
+  reviewStatus?: "accepted" | "declined" | null;
+  reviewComment?: string | null;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+};
+
+export type InAppNotification = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  link?: string;
+  read: boolean;
+  forRole?: string;
+  createdAt: string;
+};
+
 export type CustomFormDecision = "pending" | "approved" | "rejected";
 
 export type CustomFormResponse = {

@@ -4,7 +4,7 @@ import { Icon } from "./ui/Icons";
 
 export type TeacherSection =
   | "dashboard" | "assignments" | "submissions" | "students" | "cohorts"
-  | "gradebook" | "notes" | "groupProjects" | "notifications"
+  | "gradebook" | "notes" | "groupProjects" | "projects" | "notifications"
   | "settings" | "forms" | "quizzes" | "staff" | "logs" | "changelog";
 
 const SECTIONS: NavSection[] = [
@@ -14,6 +14,7 @@ const SECTIONS: NavSection[] = [
       { key: "dashboard", label: "Dashboard", to: "/teacher", icon: <Icon.Dashboard className="h-4 w-4" />, matches: (p) => p === "/teacher" },
       { key: "assignments", label: "Assignments", to: "/teacher/assignments/new", icon: <Icon.FilePlus className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/assignments") && !p.includes("/groups") },
       { key: "groupProjects", label: "Group Projects", to: "/teacher/group-projects", icon: <Icon.Users className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/group-projects") || p.includes("/groups") },
+      { key: "projects", label: "Projects", to: "/teacher/projects", icon: <Icon.Folder className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/projects") },
       { key: "submissions", label: "Submissions", to: "/teacher/submissions", icon: <Icon.Inbox className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/submissions") || p.startsWith("/teacher/review") || p.startsWith("/teacher/import") },
       { key: "gradebook", label: "Gradebook", to: "/teacher/gradebook", icon: <Icon.Book className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/gradebook") },
       { key: "notes", label: "Class Notes", to: "/teacher/notes", icon: <Icon.FileText className="h-4 w-4" />, matches: (p) => p.startsWith("/teacher/notes") },

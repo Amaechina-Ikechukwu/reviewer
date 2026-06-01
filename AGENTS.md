@@ -4,28 +4,32 @@
 
 ```bash
 # Install all dependencies (root + client)
-bun install && cd client && bun install && cd ..
+npm install && cd client && npm install && cd ..
 
 # Run development servers (two terminals)
-bun run dev        # Backend: http://localhost:3000
-bun run dev:client # Frontend: http://localhost:5173
-
-# Database
-bun run db:push      # Push schema changes (use for dev)
-bun run db:generate  # Generate migration files
+npm run dev        # Backend: http://localhost:3000 (tsx watch)
+npm run dev:client # Frontend: http://localhost:5173
 
 # Build & production
-bun run build:client  # Build frontend
-bun run start         # Run production server
-bun run typecheck     # TypeScript check (root only)
+npm run build:client  # Build frontend
+npm run start         # Run production server
+npm run typecheck     # TypeScript check (root only)
 ```
 
 ## Architecture
 
-- **Backend**: Custom HTTP router in `src/index.ts`, routes in `src/routes/`
+- **Backend**: Custom HTTP router in `src/index.ts`, routes in `src/v2/routes/`
 - **Frontend**: React 18 + Vite + React Router in `client/`
-- **Database**: Drizzle ORM with PostgreSQL in `src/db/`
+- **Database**: Firestore (via `firebase-admin`) in `src/v2/firebase.ts`
 - **AI**: Google Gemini via `@google/genai` in `src/services/ai/`
+- **Email**: Nodemailer queue-based system in `src/v2/services/emailJobs.ts`
+
+## Projects Feature
+
+- **Collection**: `projects` in Firestore
+- **Permissions**: Both students and staff can create projects. Students are auto-added as members. Staff can assign other students.
+- **Notifications**: Students receive email when staff assigns them to a project.
+- **Student-owned**: Students can edit/delete projects they created.
 
 ## Important Quirks
 

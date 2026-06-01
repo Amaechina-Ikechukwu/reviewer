@@ -14,6 +14,8 @@ import { teacherRoutes } from "./routes/teachers";
 import { changelogRoutes } from "./routes/changelogs";
 import { emailJobRoutes } from "./routes/emailJobs";
 import { quizRoutes } from "./routes/quizzes";
+import { projectRoutes } from "./routes/projects";
+import { inAppNotificationRoutes } from "./routes/inAppNotifications";
 
 export type V2RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 export type V2RouteSpec = { method: string; path: string; handler: V2RouteHandler; requiresAuth: boolean };
@@ -114,6 +116,22 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "GET", path: "/v2/api/quizzes/:id/attempts", handler: quizRoutes.listAttempts, requiresAuth: true },
   { method: "POST", path: "/v2/api/quizzes/:id/release", handler: quizRoutes.releaseResults, requiresAuth: true },
   { method: "POST", path: "/v2/api/quizzes/:id/attempts/:attemptId/release", handler: quizRoutes.releaseAttempt, requiresAuth: true },
+
+  { method: "POST", path: "/v2/api/projects", handler: projectRoutes.create, requiresAuth: true },
+  { method: "GET", path: "/v2/api/projects", handler: projectRoutes.list, requiresAuth: true },
+  { method: "GET", path: "/v2/api/projects/:id", handler: projectRoutes.get, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/projects/:id", handler: projectRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/projects/:id", handler: projectRoutes.remove, requiresAuth: true },
+  { method: "POST", path: "/v2/api/projects/:id/students", handler: projectRoutes.assignStudents, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/projects/:id/students/:studentId", handler: projectRoutes.removeStudent, requiresAuth: true },
+  { method: "POST", path: "/v2/api/projects/:id/submit", handler: projectRoutes.submit, requiresAuth: true },
+  { method: "POST", path: "/v2/api/projects/:id/review", handler: projectRoutes.review, requiresAuth: true },
+
+  // In-app notifications
+  { method: "GET", path: "/v2/api/notifications/in-app", handler: inAppNotificationRoutes.list, requiresAuth: true },
+  { method: "PATCH", path: "/v2/api/notifications/in-app/:id/read", handler: inAppNotificationRoutes.markRead, requiresAuth: true },
+  { method: "POST", path: "/v2/api/notifications/in-app/read-all", handler: inAppNotificationRoutes.markAllRead, requiresAuth: true },
+  { method: "GET", path: "/v2/api/notifications/in-app/unread-count", handler: inAppNotificationRoutes.unreadCount, requiresAuth: true },
 
   { method: "GET", path: "/v2/api/changelogs", handler: changelogRoutes.list, requiresAuth: false },
   { method: "POST", path: "/v2/api/changelogs", handler: changelogRoutes.create, requiresAuth: true },

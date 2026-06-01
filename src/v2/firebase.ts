@@ -98,4 +98,6 @@ export const COLLECTIONS = {
   emailJobs: "email_jobs",
   quizzes: "quizzes",
   quizAttempts: "quiz_attempts",
+  projects: "projects",
+  inAppNotifications: "in_app_notifications",
 } as const;

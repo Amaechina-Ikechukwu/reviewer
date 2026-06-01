@@ -1,4 +1,4 @@
-import type { Cohort, Track } from "./types";
+import type { Cohort, Project, StudentRecord, Track } from "./types";
 
 function getApiBase() {
   return "/v2/api";
@@ -71,6 +71,66 @@ export function addStudentsToCohort(cohortId: string, studentIds: string[]) {
 
 export function removeStudentFromCohort(cohortId: string, studentId: string) {
   return api<{ removed: boolean }>(`/cohorts/${cohortId}/students/${studentId}`, { method: "DELETE" });
+}
+
+// Student API
+export function listStudents() {
+  return api<StudentRecord[]>("/students");
+}
+
+// Project API
+export function listProjects(studentId?: string) {
+  const query = studentId ? `?studentId=${encodeURIComponent(studentId)}` : "";
+  return api<Project[]>(`/projects${query}`);
+}
+
+export function getProject(id: string) {
+  return api<Project>(`/projects/${id}`);
+}
+
+export function createProject(body: { title: string; description?: string | null; studentIds?: string[]; deadline?: string | null }) {
+  return api<Project>("/projects", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateProject(id: string, body: { title?: string; description?: string | null; studentIds?: string[]; status?: string; deadline?: string | null }) {
+  return api<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export function deleteProject(id: string) {
+  return api<{ deleted: boolean }>(`/projects/${id}`, { method: "DELETE" });
+}
+
+export function assignStudentsToProject(projectId: string, studentIds: string[]) {
+  return api<Project>(`/projects/${projectId}/students`, { method: "POST", body: JSON.stringify({ studentIds }) });
+}
+
+export function removeStudentFromProject(projectId: string, studentId: string) {
+  return api<Project>(`/projects/${projectId}/students/${studentId}`, { method: "DELETE" });
+}
+
+export function submitProject(projectId: string, deployedUrl: string) {
+  return api<Project>(`/projects/${projectId}/submit`, { method: "POST", body: JSON.stringify({ deployedUrl }) });
+}
+
+export function reviewProject(projectId: string, action: "accepted" | "declined", comment?: string) {
+  return api<Project>(`/projects/${projectId}/review`, { method: "POST", body: JSON.stringify({ action, comment }) });
+}
+
+// In-app notifications
+export function listInAppNotifications() {
+  return api<import("../types").InAppNotification[]>("/notifications/in-app");
+}
+
+export function markNotificationRead(id: string) {
+  return api<import("../types").InAppNotification>(`/notifications/in-app/${id}/read`, { method: "PATCH" });
+}
+
+export function markAllNotificationsRead() {
+  return api<{ updated: number }>("/notifications/in-app/read-all", { method: "POST" });
+}
+
+export function unreadNotificationCount() {
+  return api<{ count: number }>("/notifications/in-app/unread-count");
 }
 
 // Email-job polling — used after async bulk-send endpoints return 202 { jobId }.

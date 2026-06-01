@@ -130,4 +130,7 @@ export const Icon = {
   Send: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><path d="M22 2 11 13M22 2 15 22l-4-9-9-4 20-7Z" /></svg>
   ),
+  Folder: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z" /></svg>
+  ),
 };
