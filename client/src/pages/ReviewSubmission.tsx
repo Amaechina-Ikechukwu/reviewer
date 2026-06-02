@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { marked } from "marked";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
@@ -30,6 +31,8 @@ type SubmissionResponse = {
     sourceType: string;
     sourceMarkdown: string | null;
     sourceUrl: string | null;
+    sourcePdfPath: string | null;
+    questions?: string | null;
     defaultProvider: string;
   };
   studentName: string | null;
@@ -325,12 +328,24 @@ export default function ReviewSubmission() {
   const [finalFeedback, setFinalFeedback] = useState("");
   const [message, setMessage] = useState("");
   const [releaseCount, setReleaseCount] = useState(0);
+  const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!submissionId) return;
 
     api<SubmissionResponse>(`/submissions/${submissionId}`)
-      .then(setSubmission)
+      .then((s) => {
+        setSubmission(s);
+        if (s.assignment.sourceType === "pdf" && s.assignment.sourcePdfPath) {
+          const token = localStorage.getItem("token");
+          fetch(`/v2/api/assignments/${s.assignment.id}/brief`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+            .then((r) => r.blob())
+            .then((blob) => setPdfBriefUrl(URL.createObjectURL(blob)))
+            .catch(() => {});
+        }
+      })
       .catch((err) => setMessage(err instanceof Error ? err.message : "Failed to load submission"));
 
     api<{ files: CodeFile[] }>(`/submissions/${submissionId}/files`)
@@ -515,6 +530,58 @@ export default function ReviewSubmission() {
           <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
             {message}
           </div>
+        )}
+
+        {/* Assignment brief — collapsible reference for reviewer */}
+        <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]">
+            <Icon.FileText className="h-4 w-4" />
+            Assignment brief
+            <Icon.ChevronRight className="ml-auto h-4 w-4 transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="border-t border-[var(--border)] px-4 py-3">
+            {submission.assignment.sourceType === "pdf" ? (
+              pdfBriefUrl ? (
+                <iframe src={pdfBriefUrl} className="h-[500px] w-full rounded-lg border-0" title="Assignment brief" />
+              ) : (
+                <div className="flex h-24 items-center justify-center text-sm text-[var(--fg-muted)]">Loading brief…</div>
+              )
+            ) : submission.assignment.sourceMarkdown ? (
+              <div
+                className="mdcontent text-sm leading-relaxed text-[var(--fg)]"
+                dangerouslySetInnerHTML={{ __html: marked(submission.assignment.sourceMarkdown) as string }}
+              />
+            ) : submission.assignment.sourceUrl ? (
+              <a
+                href={submission.assignment.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/60 px-3 py-2 text-sm font-medium text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+              >
+                <Icon.External className="h-3.5 w-3.5" />
+                Open assignment brief
+              </a>
+            ) : (
+              <p className="text-sm text-[var(--fg-muted)]">No brief attached to this assignment.</p>
+            )}
+          </div>
+        </details>
+
+        {/* Assignment questions — collapsible */}
+        {submission.assignment.questions && (
+          <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+            <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-medium text-[var(--fg-muted)] hover:text-[var(--fg)]">
+              <Icon.FileCode className="h-4 w-4" />
+              Questions
+              <Icon.ChevronRight className="ml-auto h-4 w-4 transition-transform group-open:rotate-90" />
+            </summary>
+            <div className="border-t border-[var(--border)] px-4 py-3">
+              <div
+                className="mdcontent text-sm leading-relaxed text-[var(--fg)]"
+                dangerouslySetInnerHTML={{ __html: marked(submission.assignment.questions) as string }}
+              />
+            </div>
+          </details>
         )}
 
         {/* Code + preview */}

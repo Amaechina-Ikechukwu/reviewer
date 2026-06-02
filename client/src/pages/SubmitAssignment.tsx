@@ -179,6 +179,20 @@ export default function SubmitAssignment() {
         </Card>
       )}
 
+      {assignment.questions && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Assignment Questions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="mdcontent text-sm text-[var(--fg)]"
+              dangerouslySetInnerHTML={{ __html: marked(assignment.questions) as string }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {assignment.classNotes && (
         <Card>
           <CardHeader>

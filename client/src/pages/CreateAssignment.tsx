@@ -31,6 +31,7 @@ export default function CreateAssignment() {
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
   const [maxScore, setMaxScore] = useState(100);
   const [classNotes, setClassNotes] = useState("");
+  const [questions, setQuestions] = useState("");
   const [isGroupAssignment, setIsGroupAssignment] = useState(false);
   const [groupCount, setGroupCount] = useState(3);
   const [groupQuestionMode, setGroupQuestionMode] = useState<"same" | "per_group">("same");
@@ -113,6 +114,7 @@ export default function CreateAssignment() {
           allowFileUpload,
           defaultProvider: "gemini",
           classNotes: classNotes || null,
+          questions: questions || null,
           isGroupAssignment,
           groupCount: isGroupAssignment ? groupCount : 0,
           groupQuestionMode: isGroupAssignment ? groupQuestionMode : "same",
@@ -459,6 +461,27 @@ export default function CreateAssignment() {
                 />
                 {classNotes && (
                   <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Questions <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
+                  </span>
+                  <label className="cursor-pointer text-xs text-[var(--accent)] hover:underline">
+                    Upload .md file
+                    <input accept=".md,.markdown,.txt" type="file" className="sr-only" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setQuestions(await f.text()); }} />
+                  </label>
+                </div>
+                <Textarea
+                  placeholder="Paste the assignment questions here..."
+                  rows={5}
+                  value={questions}
+                  onChange={(e) => setQuestions(e.target.value)}
+                />
+                {questions && (
+                  <div className="text-xs text-[var(--fg-muted)]">{questions.split("\n").length} lines · renders as markdown for students</div>
                 )}
               </div>
 

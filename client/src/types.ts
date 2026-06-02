@@ -64,6 +64,7 @@ export type Assignment = {
   groupQuestionMode?: "same" | "per_group";
   track?: Track | null;
   cohortId?: string | null;
+  questions?: string | null;
   createdAt: string;
 };
 

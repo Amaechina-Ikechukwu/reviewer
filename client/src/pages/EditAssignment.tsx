@@ -38,6 +38,7 @@ export default function EditAssignment() {
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [maxScore, setMaxScore] = useState(100);
   const [classNotes, setClassNotes] = useState("");
+  const [questions, setQuestions] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 

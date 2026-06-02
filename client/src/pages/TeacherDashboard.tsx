@@ -122,12 +122,17 @@ export default function TeacherDashboard() {
   }
 
   const recentSubmissions = useMemo(() => submissions.slice(0, 6), [submissions]);
+  const [now] = useState(() => new Date());
   const upcomingAssignments = useMemo(() => {
-    const now = new Date();
     return [...assignments]
       .filter((a) => new Date(a.closesAt) > now)
       .sort((a, b) => new Date(a.closesAt).getTime() - new Date(b.closesAt).getTime());
-  }, [assignments]);
+  }, [assignments, now]);
+  const pastAssignments = useMemo(() => {
+    return [...assignments]
+      .filter((a) => new Date(a.closesAt) <= now)
+      .sort((a, b) => new Date(b.closesAt).getTime() - new Date(a.closesAt).getTime());
+  }, [assignments, now]);
   const completedReviews = Object.values(reviews).filter((review) => review.status === "completed").length;
   const pendingReviews = submissions.length - completedReviews;
 
@@ -250,14 +255,17 @@ export default function TeacherDashboard() {
                   <p className="text-xs text-[var(--fg-muted)]">No active deadlines yet.</p>
                 )}
                 {upcomingAssignments.map((assignment) => (
-                  <div key={assignment.id} className="flex items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/50 p-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium text-[var(--fg)]">{assignment.title}</div>
+                  <div key={assignment.id} className="group flex items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/50 p-3 transition-colors hover:border-[var(--accent)]/40">
+                    <Link
+                      to={`/teacher/assignments/${assignment.id}`}
+                      className="min-w-0 flex-1"
+                    >
+                      <div className="truncate text-sm font-medium text-[var(--fg)] group-hover:text-[var(--accent)]">{assignment.title}</div>
                       <div className="mt-1 flex items-center gap-2 text-xs text-[var(--fg-muted)]">
                         <Icon.Clock className="h-3 w-3" />
                         {formatDateTime(assignment.closesAt)}
                       </div>
-                    </div>
+                    </Link>
                     <div className="flex shrink-0 items-center gap-1">
                       {assignment.isGroupAssignment && (
                         <Link
@@ -294,6 +302,54 @@ export default function TeacherDashboard() {
                 ))}
               </CardContent>
             </Card>
+
+            {pastAssignments.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Past assignments</CardTitle>
+                  <Badge tone="neutral">{pastAssignments.length}</Badge>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  {pastAssignments.map((assignment) => (
+                    <div key={assignment.id} className="group flex items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/50 p-3 transition-colors hover:border-[var(--accent)]/40">
+                      <Link
+                        to={`/teacher/assignments/${assignment.id}`}
+                        className="min-w-0 flex-1"
+                      >
+                        <div className="truncate text-sm font-medium text-[var(--fg)] group-hover:text-[var(--accent)]">{assignment.title}</div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-[var(--fg-muted)]">
+                          <Icon.Clock className="h-3 w-3" />
+                          Closed {formatDateTime(assignment.closesAt)}
+                        </div>
+                      </Link>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Link
+                          to={`/teacher/assignments/${assignment.id}/edit`}
+                          title="Edit assignment"
+                          className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                        >
+                          <Icon.Edit className="h-3.5 w-3.5" />
+                        </Link>
+                        <button
+                          type="button"
+                          title="Delete assignment"
+                          onClick={() => {
+                            setDeleteTarget(assignment);
+                            setDeleteAction("delete_all");
+                            setMoveTargetId("");
+                            setMoveNewTitle("");
+                            setDeleteError("");
+                          }}
+                          className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                        >
+                          <Icon.Trash className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

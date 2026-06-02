@@ -16,6 +16,8 @@ import StudentQuizzesPage from "./pages/StudentQuizzesPage";
 import TakeQuiz from "./pages/TakeQuiz";
 import StudentNotesPage from "./pages/StudentNotesPage";
 import GradebookPage from "./pages/GradebookPage";
+import AssignmentsPage from "./pages/AssignmentsPage";
+import AssignmentDetailPage from "./pages/AssignmentDetailPage";
 import CreateAssignment from "./pages/CreateAssignment";
 import EditAssignment from "./pages/EditAssignment";
 import ManageGroups from "./pages/ManageGroups";
@@ -54,6 +56,8 @@ import V2AuditLogsPage from "./v2/pages/AuditLogsPage";
 import V2ClassNotesPage from "./v2/pages/ClassNotesPage";
 import V2StudentNotesPage from "./v2/pages/StudentNotesPage";
 import V2GradebookPage from "./v2/pages/GradebookPage";
+import V2AssignmentsPage from "./v2/pages/AssignmentsPage";
+import V2AssignmentDetailPage from "./v2/pages/AssignmentDetailPage";
 import V2CreateAssignment from "./v2/pages/CreateAssignment";
 import V2EditAssignment from "./v2/pages/EditAssignment";
 import V2ManageGroups from "./v2/pages/ManageGroups";
@@ -134,10 +138,26 @@ export default function App() {
         )}
       />
       <Route
+        path="/teacher/assignments"
+        element={(
+          <ProtectedRoute role="teacher">
+            <AssignmentsPage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
         path="/teacher/assignments/new"
         element={(
           <ProtectedRoute role="teacher">
             <CreateAssignment />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/teacher/assignments/:id"
+        element={(
+          <ProtectedRoute role="teacher">
+            <AssignmentDetailPage />
           </ProtectedRoute>
         )}
       />
@@ -487,8 +507,10 @@ export default function App() {
       <Route path="/v2/reset/:token" element={<V2Wrapper><V2ResetPassword /></V2Wrapper>} />
 
       <Route path="/v2/teacher" element={<V2Wrapper><ProtectedRoute role="teacher"><V2TeacherDashboard /></ProtectedRoute></V2Wrapper>} />
+      <Route path="/v2/teacher/assignments" element={<V2Wrapper><ProtectedRoute role="teacher"><V2AssignmentsPage /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/assignments/new" element={<V2Wrapper><ProtectedRoute role="teacher"><V2CreateAssignment /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/assignments/:id/edit" element={<V2Wrapper><ProtectedRoute role="teacher"><V2EditAssignment /></ProtectedRoute></V2Wrapper>} />
+      <Route path="/v2/teacher/assignments/:id" element={<V2Wrapper><ProtectedRoute role="teacher"><V2AssignmentDetailPage /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/assignments/:id/groups" element={<V2Wrapper><ProtectedRoute role="teacher"><V2ManageGroups /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/submissions" element={<V2Wrapper><ProtectedRoute role="teacher"><V2SubmissionsList /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/teacher/review/:submissionId" element={<V2Wrapper><ProtectedRoute role="teacher"><V2ReviewSubmission /></ProtectedRoute></V2Wrapper>} />

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import StudentShell from "../components/StudentShell";
 import { toast } from "../components/Toast";
+import { Badge } from "../components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -110,8 +111,8 @@ function dueTone(closesAt: string): keyof typeof DUE_TONES {
   return "normal";
 }
 
-function AssignmentRow({ assignment }: { assignment: Assignment }) {
-  const tone = dueTone(assignment.closesAt);
+function AssignmentRow({ assignment, closed }: { assignment: Assignment; closed?: boolean }) {
+  const tone = closed ? "normal" : dueTone(assignment.closesAt);
   const iconBg =
     tone === "urgent"
       ? "bg-[var(--accent-soft)] text-[var(--accent)]"
@@ -132,9 +133,9 @@ function AssignmentRow({ assignment }: { assignment: Assignment }) {
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5">
         <span
-          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${DUE_TONES[tone]}`}
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${closed ? DUE_TONES.normal : DUE_TONES[tone]}`}
         >
-          {formatRelative(assignment.closesAt)}
+          {closed ? "Closed" : formatRelative(assignment.closesAt)}
         </span>
         <div className="flex items-center gap-1.5 text-[11px] text-[var(--fg-subtle)]">
           {assignment.allowGithub && <span>GitHub</span>}
@@ -214,15 +215,21 @@ export default function StudentDashboard() {
     });
   }, []);
 
+  const now = useMemo(() => new Date(), []);
   const openAssignments = useMemo(() => {
-    const now = new Date();
     return assignments
       .filter((a) => {
         const within = new Date(a.opensAt) <= now && new Date(a.closesAt) > now;
         return within || overrideIds.has(a.id);
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [assignments, overrideIds]);
+  }, [assignments, overrideIds, now]);
+
+  const closedAssignments = useMemo(() => {
+    return assignments
+      .filter((a) => new Date(a.opensAt) <= now && new Date(a.closesAt) <= now && !overrideIds.has(a.id))
+      .sort((a, b) => new Date(b.closesAt).getTime() - new Date(a.closesAt).getTime());
+  }, [assignments, overrideIds, now]);
 
   const milestone = openAssignments[0] ?? null;
   const recentSubmissions = useMemo(
@@ -282,6 +289,20 @@ export default function StudentDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {closedAssignments.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Past Assignments</CardTitle>
+              <Badge tone="neutral">{closedAssignments.length}</Badge>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {closedAssignments.map((assignment) => (
+                <AssignmentRow key={assignment.id} assignment={assignment} closed />
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </StudentShell>
   );

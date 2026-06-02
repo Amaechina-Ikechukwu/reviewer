@@ -12,25 +12,26 @@ import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
 import type { Review } from "../types";
 
-type SubmissionResponse = {
-  submission: {
-    id: string;
-    submittedAt: string;
-    submissionType: "github" | "file_upload";
-    githubUrl: string | null;
-    isLate: boolean;
+  type SubmissionResponse = {
+    submission: {
+      id: string;
+      submittedAt: string;
+      submissionType: "github" | "file_upload";
+      githubUrl: string | null;
+      isLate: boolean;
+    };
+    assignment: {
+      id: string;
+      title: string;
+      description: string;
+      maxScore: number;
+      sourceType: string;
+      sourceMarkdown: string | null;
+      sourceUrl: string | null;
+      sourcePdfPath: string | null;
+      questions?: string | null;
+    };
   };
-  assignment: {
-    id: string;
-    title: string;
-    description: string;
-    maxScore: number;
-    sourceType: string;
-    sourceMarkdown: string | null;
-    sourceUrl: string | null;
-    sourcePdfPath: string | null;
-  };
-};
 
 function scoreTone(score: number, max: number) {
   const pct = max > 0 ? score / max : 0;
@@ -241,6 +242,25 @@ export default function StudentResultDetail() {
             Open assignment brief
           </a>
         ) : null}
+
+        {assignment.questions && (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                <span className="inline-flex items-center gap-2">
+                  <Icon.FileCode className="h-4 w-4 text-[var(--fg-muted)]" />
+                  Questions
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                className="mdcontent text-sm leading-relaxed text-[var(--fg)]"
+                dangerouslySetInnerHTML={{ __html: marked(assignment.questions) as string }}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {feedback?.summary && (
           <Card>

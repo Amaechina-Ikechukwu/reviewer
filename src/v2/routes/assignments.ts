@@ -35,6 +35,7 @@ type AssignmentBody = {
   groupQuestionMode?: "same" | "per_group";
   track?: Track | null;
   cohortId?: string | null;
+  questions?: string | null;
 };
 
 function validateAssignmentSource(sourceType: string | undefined, sourceMarkdown: string | null | undefined, sourceUrl: string | null | undefined, sourcePdfPath: string | null | undefined): string | null {
@@ -198,6 +199,7 @@ export const assignmentRoutes = {
       allowFileUpload: body.allowFileUpload ?? true,
       defaultProvider: "openrouter",
       classNotes: body.classNotes?.trim() || null,
+      questions: body.questions?.trim() || null,
       isGroupAssignment,
       groupCount,
       groupQuestionMode,
@@ -288,6 +290,7 @@ export const assignmentRoutes = {
     if (body.allowFileUpload !== undefined) update.allowFileUpload = body.allowFileUpload;
     if (body.maxScore !== undefined) update.maxScore = body.maxScore > 0 ? Math.round(body.maxScore) : 100;
     if (body.classNotes !== undefined) update.classNotes = body.classNotes?.trim() || null;
+    if (body.questions !== undefined) update.questions = body.questions?.trim() || null;
 
     if (body.closesAt !== undefined) {
       const newClosesAt = new Date(body.closesAt);
