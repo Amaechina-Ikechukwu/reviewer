@@ -282,7 +282,7 @@ export default function ProjectDetailPage() {
                           src={project.deployedUrl}
                           style={{ height: previewHeight, width: "100%" }}
                           className="border-0"
-                          sandbox="allow-scripts allow-same-origin"
+                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-storage-access-by-user-activation"
                           title="Project preview"
                         />
                       </div>
