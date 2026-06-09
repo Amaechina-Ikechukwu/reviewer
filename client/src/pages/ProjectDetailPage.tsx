@@ -42,6 +42,7 @@ export default function ProjectDetailPage() {
   const [reviewing, setReviewing] = useState(false);
 
   const [previewHeight, setPreviewHeight] = useState(400);
+  const [previewDevice, setPreviewDevice] = useState<"laptop" | "tablet" | "mobile">("laptop");
   const resizing = useRef(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -240,6 +241,25 @@ export default function ProjectDetailPage() {
                       <span className="ml-2 min-w-0 flex-1 truncate rounded bg-[var(--bg)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
                         {project.deployedUrl}
                       </span>
+                      <div className="flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--bg)] p-0.5">
+                        {([
+                          ["laptop", "Laptop"],
+                          ["tablet", "Tablet"],
+                          ["mobile", "Mobile"],
+                        ] as const).map(([key, label]) => (
+                          <button
+                            key={key}
+                            onClick={() => setPreviewDevice(key)}
+                            className={`rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                              previewDevice === key
+                                ? "bg-[var(--accent)] text-[var(--accent-fg)]"
+                                : "text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                       <a
                         href={project.deployedUrl}
                         target="_blank"
@@ -250,13 +270,23 @@ export default function ProjectDetailPage() {
                         <Icon.External className="h-3.5 w-3.5" />
                       </a>
                     </div>
-                    <iframe
-                      src={project.deployedUrl}
-                      style={{ height: previewHeight }}
-                      className="w-full border-0"
-                      sandbox="allow-scripts allow-same-origin"
-                      title="Project preview"
-                    />
+                    <div className="flex justify-center bg-[var(--surface-muted)]/20">
+                      <div
+                        className="overflow-hidden transition-all duration-200"
+                        style={{
+                          width: previewDevice === "laptop" ? "100%" : previewDevice === "tablet" ? 768 : 375,
+                          maxWidth: "100%",
+                        }}
+                      >
+                        <iframe
+                          src={project.deployedUrl}
+                          style={{ height: previewHeight, width: "100%" }}
+                          className="border-0"
+                          sandbox="allow-scripts allow-same-origin"
+                          title="Project preview"
+                        />
+                      </div>
+                    </div>
                     <div
                       className="flex cursor-ns-resize items-center justify-center border-t border-[var(--border)] bg-[var(--surface-muted)]/30 py-1 transition-colors hover:bg-[var(--surface-muted)]"
                       onMouseDown={onResizeStart}
