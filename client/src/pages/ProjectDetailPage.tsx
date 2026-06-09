@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProject, updateProject, deleteProject, assignStudentsToProject, removeStudentFromProject, reviewProject } from "../api";
 import TeacherShell from "../components/TeacherShell";
@@ -41,6 +41,10 @@ export default function ProjectDetailPage() {
   const [declineComment, setDeclineComment] = useState("");
   const [reviewing, setReviewing] = useState(false);
 
+  const [previewHeight, setPreviewHeight] = useState(400);
+  const resizing = useRef(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!id) return;
     getProject(id)
@@ -53,6 +57,33 @@ export default function ProjectDetailPage() {
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!resizing.current || !previewRef.current) return;
+      const rect = previewRef.current.getBoundingClientRect();
+      const h = e.clientY - rect.top;
+      setPreviewHeight(Math.max(200, Math.min(1200, h)));
+    }
+    function onMouseUp() {
+      resizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  function onResizeStart(e: React.MouseEvent) {
+    e.preventDefault();
+    resizing.current = true;
+    document.body.style.cursor = "ns-resize";
+    document.body.style.userSelect = "none";
+  }
 
   async function handleSave() {
     if (!project) return;
@@ -199,6 +230,40 @@ export default function ProjectDetailPage() {
                       <span>Submitted <strong className="font-medium text-[var(--fg)]">{new Date(project.submittedAt).toLocaleString()}</strong></span>
                     </div>
                   )}
+
+                  {/* Browser preview */}
+                  <div ref={previewRef} className="overflow-hidden rounded-lg border border-[var(--border)]">
+                    <div className="flex items-center gap-1.5 border-b border-[var(--border)] bg-[var(--surface-muted)]/70 px-3 py-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-[#f5c33b]" />
+                      <span className="h-2.5 w-2.5 rounded-full bg-[var(--success)]" />
+                      <span className="ml-2 min-w-0 flex-1 truncate rounded bg-[var(--bg)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
+                        {project.deployedUrl}
+                      </span>
+                      <a
+                        href={project.deployedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 rounded p-1 text-[var(--fg-subtle)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                        title="Open in new tab"
+                      >
+                        <Icon.External className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                    <iframe
+                      src={project.deployedUrl}
+                      style={{ height: previewHeight }}
+                      className="w-full border-0"
+                      sandbox="allow-scripts allow-same-origin"
+                      title="Project preview"
+                    />
+                    <div
+                      className="flex cursor-ns-resize items-center justify-center border-t border-[var(--border)] bg-[var(--surface-muted)]/30 py-1 transition-colors hover:bg-[var(--surface-muted)]"
+                      onMouseDown={onResizeStart}
+                    >
+                      <div className="h-1 w-8 rounded-full bg-[var(--border)]" />
+                    </div>
+                  </div>
 
                   {project.reviewStatus ? (
                     <div className="flex items-start gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">

@@ -143,6 +143,7 @@ export const projectRoutes = {
     if (body.description !== undefined) update.description = body.description?.trim() ?? null;
     if (body.deadline !== undefined) update.deadline = body.deadline ?? null;
     if (body.status !== undefined) {
+      if (!isStaff(user.role)) return json({ error: "Only staff can change project status." }, 403);
       if (!VALID_STATUSES.includes(body.status)) return json({ error: "Invalid status." }, 400);
       update.status = body.status;
     }
