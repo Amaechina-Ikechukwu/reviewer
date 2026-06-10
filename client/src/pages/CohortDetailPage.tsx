@@ -83,6 +83,9 @@ export default function CohortDetailPage() {
   // Student performance modal
   const [perfStudent, setPerfStudent] = useState<StudentInCohort | null>(null);
 
+  // Copy invite link
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     if (!id) return;
     Promise.all([
@@ -197,6 +200,20 @@ export default function CohortDetailPage() {
     return gradebook.rows.find((r) => r.student.id === studentId) ?? null;
   }
 
+  function buildInviteLink(token: string) {
+    return `${window.location.origin}/register?invite=${token}`;
+  }
+
+  async function copyInviteLink(token: string) {
+    try {
+      await navigator.clipboard.writeText(buildInviteLink(token));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast().error("Failed to copy link");
+    }
+  }
+
   if (loading) {
     return (
       <TeacherShell section="cohorts">
@@ -240,6 +257,11 @@ export default function CohortDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {cohort.inviteToken && (
+              <Button variant="secondary" size="sm" onClick={() => copyInviteLink(cohort.inviteToken!)}>
+                <Icon.Link className="h-3.5 w-3.5 mr-1" /> {copied ? "Copied!" : "Copy join link"}
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={openEdit}>
               <Icon.Edit className="h-3.5 w-3.5 mr-1" /> Edit
             </Button>
