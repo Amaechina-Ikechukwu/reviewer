@@ -174,6 +174,7 @@ export type Cohort = {
   name: string;
   track: Track;
   description?: string | null;
+  inviteToken?: string | null;
   createdAt: string;
 };
 

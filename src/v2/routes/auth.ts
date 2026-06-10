@@ -45,7 +45,7 @@ async function findAuthToken(token: string, type: string) {
 
 const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
 
-type RegisterBody = { email?: string; password?: string; fullName?: string; role?: UserRole };
+type RegisterBody = { email?: string; password?: string; fullName?: string; role?: UserRole; inviteToken?: string };
 type LoginBody = { email?: string; password?: string };
 
 function userResponse(u: { id: string; email: string; fullName: string; role: UserRole }) {
@@ -68,14 +68,21 @@ export const authRoutes = {
     const existing = await data.findOne<{ id: string }>(COLLECTIONS.users, [["email", "==", email]]);
     if (existing) return json({ error: "An account with that email already exists." }, 409);
 
+    // If an inviteToken is provided, find the cohort and assign the new user to it
+    let cohortId: string | null = null;
+    if (body.inviteToken) {
+      const cohort = await data.findOne<any>(COLLECTIONS.cohorts, [["inviteToken", "==", body.inviteToken]]);
+      if (cohort) cohortId = cohort.id;
+    }
+
     const id = randomUUID();
     const user = await data.insert<{ id: string; email: string; fullName: string; role: UserRole }>(
       COLLECTIONS.users,
       id,
-      { email, passwordHash: await hashPassword(password), fullName, role, joinCode: null, teacherId: null },
+      { email, passwordHash: await hashPassword(password), fullName, role, joinCode: null, teacherId: null, cohortId },
     );
 
-    audit({ actorId: user.id, actorEmail: user.email, action: "auth.register", targetType: "user", targetId: user.id, details: { role } });
+    audit({ actorId: user.id, actorEmail: user.email, action: "auth.register", targetType: "user", targetId: user.id, details: { role, cohortId } });
     return json(userResponse(user), 201);
   },
 

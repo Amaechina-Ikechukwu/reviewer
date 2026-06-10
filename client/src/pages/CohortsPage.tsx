@@ -45,6 +45,9 @@ export default function CohortsPage() {
   const [deleteTarget, setDeleteTarget] = useState<CohortWithCount | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [createdInviteLink, setCreatedInviteLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     listCohorts()
       .then(setCohorts)
@@ -80,6 +83,10 @@ export default function CohortsPage() {
       } else {
         const created = await createCohort({ name: formName, track: formTrack, description: formDesc || undefined });
         setCohorts((prev) => [{ ...created, studentCount: 0 }, ...prev]);
+        if (created.inviteToken) {
+          setCreatedInviteLink(`${window.location.origin}/register?invite=${created.inviteToken}`);
+          setCopied(false);
+        }
         toast().success("Cohort created");
       }
       setModalOpen(false);
@@ -102,6 +109,20 @@ export default function CohortsPage() {
       toast().error(err.message ?? "Failed to delete cohort");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  function buildInviteLink(token: string) {
+    return `${window.location.origin}/register?invite=${token}`;
+  }
+
+  async function copyInviteLink(token: string) {
+    try {
+      await navigator.clipboard.writeText(buildInviteLink(token));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast().error("Failed to copy link");
     }
   }
 
@@ -147,6 +168,16 @@ export default function CohortsPage() {
                 <TrackBadge track={cohort.track} />
                 <span className="text-xs text-[var(--fg-muted)]">{cohort.studentCount} student{cohort.studentCount !== 1 ? "s" : ""}</span>
                 <div className="flex items-center gap-1">
+                  {cohort.inviteToken && (
+                    <button
+                      type="button"
+                      title="Copy invite link"
+                      className="rounded p-1.5 text-[var(--fg-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                      onClick={(e) => { e.stopPropagation(); copyInviteLink(cohort.inviteToken!); }}
+                    >
+                      <Icon.Link className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                   <button
                     type="button"
                     title="Edit cohort"
@@ -225,6 +256,30 @@ export default function CohortsPage() {
         }
       >
         <span />
+      </Modal>
+
+      {/* Invite link modal — shown after cohort creation */}
+      <Modal
+        open={!!createdInviteLink}
+        onClose={() => setCreatedInviteLink(null)}
+        title="Cohort created"
+        description="Share this link with students. They will be added to the cohort when they sign up."
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setCreatedInviteLink(null)}>Done</Button>
+            <Button onClick={() => { navigator.clipboard.writeText(createdInviteLink!); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+              {copied ? "Copied!" : "Copy link"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5">
+            <Icon.Link className="h-4 w-4 shrink-0 text-[var(--fg-muted)]" />
+            <span className="min-w-0 flex-1 truncate text-sm text-[var(--fg)]">{createdInviteLink}</span>
+          </div>
+        </div>
       </Modal>
     </TeacherShell>
   );

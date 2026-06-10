@@ -58,7 +58,11 @@ export default function StudentProjectsPage() {
     if (!submitTarget || !submitUrl.trim()) return;
     setSubmitting(true);
     try {
-      const updated = await submitProject(submitTarget.id, submitUrl.trim());
+      let url = submitUrl.trim();
+      if (!/^https?:\/\//i.test(url)) {
+        url = `https://${url}`;
+      }
+      const updated = await submitProject(submitTarget.id, url);
       setProjects((prev) => prev.map((p) => (p.id === submitTarget.id ? updated : p)));
       setSubmitTarget(null);
       setSubmitUrl("");

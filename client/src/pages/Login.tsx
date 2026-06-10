@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { AuthLayout } from "../components/AuthLayout";
 import { Button } from "../components/ui/Button";
@@ -13,8 +13,10 @@ type AuthResponse = { token: string; user: User };
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get("invite") || undefined;
   const { login } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(inviteToken ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -35,7 +37,7 @@ export default function Login() {
             })
           : await api<AuthResponse>("/auth/register", {
               method: "POST",
-              body: JSON.stringify({ email, password, fullName, role }),
+              body: JSON.stringify({ email, password, fullName, role, inviteToken }),
             });
       login(payload.token, payload.user);
       navigate(isStaffRole(payload.user.role) ? "/teacher" : "/student");
@@ -76,6 +78,11 @@ export default function Login() {
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {inviteToken && (
+          <div className="rounded-md border border-[var(--accent)]/30 bg-[var(--accent-soft)] px-3 py-2 text-xs text-[var(--accent)]">
+            You've been invited to join a cohort. Create your account to accept the invitation.
+          </div>
+        )}
         {mode === "register" && (
           <>
             <Label required>Full name

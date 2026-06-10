@@ -7,6 +7,13 @@ import { COLLECTIONS } from "../firebase";
 import { audit } from "../services/audit";
 import { enqueueEmailJob } from "../services/emailJobs";
 
+function normalizeUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.includes("://")) return trimmed;
+  return `https://${trimmed}`;
+}
+
 type ProjectStatus = "active" | "completed" | "archived";
 
 const VALID_STATUSES: ProjectStatus[] = ["active", "completed", "archived"];
@@ -246,7 +253,7 @@ export const projectRoutes = {
     const body = await parseJson<{ deployedUrl: string }>(request);
     if (!body.deployedUrl?.trim()) return json({ error: "Deployed URL is required." }, 400);
 
-    const deployedUrl = body.deployedUrl.trim();
+    const deployedUrl = normalizeUrl(body.deployedUrl);
 
     const submittedAt = new Date().toISOString();
 

@@ -45,15 +45,17 @@ export const cohortRoutes = {
     }
 
     const id = randomUUID();
+    const inviteToken = randomUUID();
     const cohort = await data.insert<any>(COLLECTIONS.cohorts, id, {
       name,
       track: body.track,
       description: body.description?.trim() || null,
       createdBy: user.userId,
+      inviteToken,
     });
 
     audit({ actorId: user.userId, actorEmail: user.email, action: "cohort.create", targetType: "cohort", targetId: id, details: { name, track: body.track } });
-    return json(cohort, 201);
+    return json({ ...cohort, inviteToken }, 201);
   },
 
   async get(request: Request, params: Record<string, string>) {
