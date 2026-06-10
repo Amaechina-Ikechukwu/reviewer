@@ -84,7 +84,7 @@ export default function CohortsPage() {
         const created = await createCohort({ name: formName, track: formTrack, description: formDesc || undefined });
         setCohorts((prev) => [{ ...created, studentCount: 0 }, ...prev]);
         if (created.inviteToken) {
-          setCreatedInviteLink(`${window.location.origin}/register?invite=${created.inviteToken}`);
+          setCreatedInviteLink(`${window.location.origin}/login?invite=${created.inviteToken}`);
           setCopied(false);
         }
         toast().success("Cohort created");
@@ -113,7 +113,7 @@ export default function CohortsPage() {
   }
 
   function buildInviteLink(token: string) {
-    return `${window.location.origin}/register?invite=${token}`;
+    return `${window.location.origin}/login?invite=${token}`;
   }
 
   async function copyInviteLink(token: string) {

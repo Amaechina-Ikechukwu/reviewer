@@ -201,7 +201,7 @@ export default function CohortDetailPage() {
   }
 
   function buildInviteLink(token: string) {
-    return `${window.location.origin}/register?invite=${token}`;
+    return `${window.location.origin}/login?invite=${token}`;
   }
 
   async function copyInviteLink(token: string) {
