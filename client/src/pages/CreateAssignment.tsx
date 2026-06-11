@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
@@ -8,9 +8,9 @@ import { Card, CardContent } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
-import { api } from "../api";
+import { api, listCohorts } from "../api";
 import { cn } from "../lib/cn";
-import type { Assignment, Track } from "../types";
+import type { Assignment, Cohort, Track } from "../types";
 import { CODE_TRACKS, TRACKS } from "../types";
 
 type SourceMode = "markdown" | "notion" | "pdf";
@@ -39,6 +39,12 @@ export default function CreateAssignment() {
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<Assignment | null>(null);
   const [copied, setCopied] = useState(false);
+  const [cohorts, setCohorts] = useState<(Cohort & { studentCount: number })[]>([]);
+  const [cohortId, setCohortId] = useState("");
+
+  useEffect(() => {
+    listCohorts().then(setCohorts).catch(() => {});
+  }, []);
 
   async function handleMarkdownFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -119,6 +125,7 @@ export default function CreateAssignment() {
           groupCount: isGroupAssignment ? groupCount : 0,
           groupQuestionMode: isGroupAssignment ? groupQuestionMode : "same",
           track: track || null,
+          cohortId: cohortId || null,
         }),
       });
 
@@ -151,6 +158,7 @@ export default function CreateAssignment() {
     setClosesAt("");
     setClassNotes("");
     setAllowGithub(true);
+    setCohortId("");
   }
 
   if (created) {
@@ -331,6 +339,19 @@ export default function CreateAssignment() {
                 {track && !CODE_TRACKS.includes(track as Track) && (
                   <p className="text-xs text-[var(--fg-muted)]">GitHub submissions are not available for this track.</p>
                 )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Cohort <span className="font-normal text-[var(--fg-muted)]">(optional)</span></span>
+                <Select
+                  value={cohortId}
+                  onChange={(e) => setCohortId(e.target.value)}
+                >
+                  <option value="">No specific cohort</option>
+                  {cohorts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.studentCount} student{c.studentCount === 1 ? "" : "s"})</option>
+                  ))}
+                </Select>
               </div>
 
               <div className="flex flex-col gap-3">

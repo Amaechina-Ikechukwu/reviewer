@@ -7,9 +7,9 @@ import { Card, CardContent } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
-import { api } from "../api";
+import { api, listCohorts } from "../api";
 import { cn } from "../lib/cn";
-import type { Assignment, StudentRecord, Track } from "../types";
+import type { Assignment, Cohort, StudentRecord, Track } from "../types";
 import { CODE_TRACKS, TRACKS } from "../types";
 
 type GroupSourceType = "markdown" | "link" | "pdf";
@@ -45,12 +45,18 @@ export default function CreateGroupProject() {
   const [hoverTeam, setHoverTeam] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [cohorts, setCohorts] = useState<(Cohort & { studentCount: number })[]>([]);
+  const [cohortId, setCohortId] = useState("");
 
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
   const studentById = new Map(students.map((s) => [s.id, s] as const));
 
   useEffect(() => {
     api<StudentRecord[]>("/students").then(setStudents).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    listCohorts().then(setCohorts).catch(() => {});
   }, []);
 
   // Re-distribute whenever the roster or team count changes, preserving existing manual placements.
@@ -161,6 +167,7 @@ export default function CreateGroupProject() {
           groupCount,
           groupQuestionMode: "per_group",
           track: track || null,
+          cohortId: cohortId || null,
           groupDrafts: teams.map((t, i) => ({
             name: t.name,
             memberIds: studentsByTeam[i] ?? [],
@@ -243,6 +250,19 @@ export default function CreateGroupProject() {
                 >
                   <option value="">No specific track</option>
                   {TRACKS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </Select>
+              </div>
+
+              {/* Cohort */}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">
+                  Cohort <span className="font-normal text-[var(--fg-muted)]">(optional)</span>
+                </span>
+                <Select value={cohortId} onChange={(e) => setCohortId(e.target.value)}>
+                  <option value="">No specific cohort</option>
+                  {cohorts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.studentCount} student{c.studentCount === 1 ? "" : "s"})</option>
+                  ))}
                 </Select>
               </div>
 
