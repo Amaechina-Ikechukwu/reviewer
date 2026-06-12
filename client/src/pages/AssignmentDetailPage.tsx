@@ -11,7 +11,7 @@ import { Icon } from "../components/ui/Icons";
 import { PageHeader } from "../components/ui/PageHeader";
 import { ReviewStatusPill } from "../components/ui/StatusPill";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
-import { api } from "../api";
+import { api, deleteSubmission } from "../api";
 import { formatDateTime } from "../lib/format";
 import type { Assignment, Review } from "../types";
 
@@ -34,6 +34,18 @@ export default function AssignmentDetailPage() {
   const [reviews, setReviews] = useState<Record<string, Review>>({});
   const [error, setError] = useState("");
   const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleDelete = async (submissionId: string, studentName: string | null) => {
+    if (!confirm(`Delete submission from ${studentName || "student"}? They will be able to resubmit.`)) return;
+    try {
+      await deleteSubmission(submissionId);
+      toast().success("Submission deleted");
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to delete submission");
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -73,7 +85,7 @@ export default function AssignmentDetailPage() {
         setSubmissions([]);
         setReviews({});
       });
-  }, [id]);
+  }, [id, refreshKey]);
 
   if (error) {
     return (
@@ -348,12 +360,22 @@ export default function AssignmentDetailPage() {
                     <TD className="text-xs capitalize">{row.submission.submissionType === "github" ? "GitHub" : "File"}</TD>
                     <TD><ReviewStatusPill status={review?.status} /></TD>
                     <TD className="text-right">
-                      <Link to={`/teacher/review/${row.submission.id}`}>
-                        <Button variant="ghost" size="sm">
-                          {review?.status === "completed" ? "View" : "Review"}
-                          <Icon.ChevronRight className="h-3.5 w-3.5" />
+                      <div className="flex items-center justify-end gap-1">
+                        <Link to={`/teacher/review/${row.submission.id}`}>
+                          <Button variant="ghost" size="sm">
+                            {review?.status === "completed" ? "View" : "Review"}
+                            <Icon.ChevronRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(row.submission.id, row.studentName)}
+                          className="text-[var(--danger)] hover:text-[var(--danger)]"
+                        >
+                          <Icon.Trash className="h-3.5 w-3.5" />
                         </Button>
-                      </Link>
+                      </div>
                     </TD>
                   </TR>
                 );

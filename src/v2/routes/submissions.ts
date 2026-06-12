@@ -6,7 +6,7 @@ import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../../services/code-reader";
-import { sendSubmissionNotification } from "../../services/email";
+import { sendSubmissionNotification, sendResubmissionNotification } from "../../services/email";
 import { extractZipBuffer, savePdfBuffer } from "../../services/file-extractor";
 import { cloneGithubRepo } from "../../services/github";
 import { isWithinDeadline } from "../../utils/deadline";
@@ -486,5 +486,37 @@ export const submissionRoutes = {
     }
 
     return json({ imported: results }, 201);
+  },
+
+  async delete(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+
+    await removeFiles(submission.filePath);
+    if (submission.storageKey) await storageDelete(submission.storageKey).catch(() => {});
+    await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", submission.id]]);
+    await data.del(COLLECTIONS.submissions, submission.id);
+
+    const [student, assignment] = await Promise.all([
+      data.getById<any>(COLLECTIONS.users, submission.studentId),
+      data.getById<any>(COLLECTIONS.assignments, submission.assignmentId),
+    ]);
+
+    if (student && assignment) {
+      sendResubmissionNotification(student, assignment).catch(console.error);
+    }
+
+    audit({
+      actorId: actor.userId,
+      action: "submission.deleted",
+      targetType: "submission",
+      targetId: submission.id,
+      details: { studentId: submission.studentId, assignmentId: submission.assignmentId },
+    });
+
+    return json({ deleted: true });
   },
 };

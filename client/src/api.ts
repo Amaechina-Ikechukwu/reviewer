@@ -100,6 +100,10 @@ export function deleteProject(id: string) {
   return api<{ deleted: boolean }>(`/projects/${id}`, { method: "DELETE" });
 }
 
+export function deleteSubmission(id: string) {
+  return api<{ deleted: boolean }>(`/submissions/${id}`, { method: "DELETE" });
+}
+
 export function assignStudentsToProject(projectId: string, studentIds: string[]) {
   return api<Project>(`/projects/${projectId}/students`, { method: "POST", body: JSON.stringify({ studentIds }) });
 }

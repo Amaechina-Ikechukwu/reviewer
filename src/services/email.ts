@@ -434,6 +434,27 @@ export async function sendProjectReviewNotification(
   `, { label: `project-review:${project.id}` });
 }
 
+export async function sendResubmissionNotification(
+  student: { email: string; fullName: string },
+  assignment: { title: string; id: string },
+) {
+  const link = `${APP_URL}/student/submit/${encodeURIComponent(assignment.id)}`;
+  const first = escapeHtml(student.fullName.split(" ")[0]);
+  const title = escapeHtml(assignment.title);
+
+  await sendOne(student.email, `Resubmit: ${assignment.title}`, `
+    ${shellOpen()}
+      <h2 style="margin:0 0 8px">Hi ${first},</h2>
+      <p style="margin:0 0 24px;color:#64748b;line-height:1.6">Your submission for <strong>${title}</strong> has been returned for revision. Please review the assignment requirements and resubmit using the link below.</p>
+      <div style="text-align:center;margin-bottom:24px">
+        <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:14px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">Resubmit assignment</a>
+      </div>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:0 0 16px"/>
+      <p style="margin:0;font-size:0.8rem;color:#94a3b8;text-align:center">Log in to Reviewer to submit your updated work.</p>
+    ${shellClose()}
+  `);
+}
+
 export async function sendDeadlineReminder(
   students: Array<{ email: string; fullName: string }>,
   assignment: { title: string; closesAt: Date; id: string },

@@ -11,7 +11,7 @@ import { Label, Select, Input } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { ReviewStatusPill } from "../components/ui/StatusPill";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
-import { api } from "../api";
+import { api, deleteSubmission } from "../api";
 import { formatDateTime } from "../lib/format";
 import type { Assignment, Review } from "../types";
 
@@ -34,6 +34,17 @@ export default function SubmissionsList() {
   const [rows, setRows] = useState<SubmissionRow[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleDelete = async (submissionId: string, studentName: string | null) => {
+    if (!confirm(`Delete submission from ${studentName || "student"}? They will be able to resubmit.`)) return;
+    try {
+      await deleteSubmission(submissionId);
+      toast().success("Submission deleted");
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to delete submission");
+    }
+  };
 
   useEffect(() => {
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => {
@@ -137,12 +148,22 @@ export default function SubmissionsList() {
                   <TD className="text-xs text-[var(--fg-muted)]">{formatDateTime(row.submission.submittedAt)}</TD>
                   <TD><ReviewStatusPill status={reviews[row.submission.id]?.status} /></TD>
                   <TD className="text-right">
-                    <Link to={`/teacher/review/${row.submission.id}`}>
-                      <Button variant="ghost" size="sm">
-                        Open
-                        <Icon.ChevronRight className="h-3.5 w-3.5" />
+                    <div className="flex items-center justify-end gap-1">
+                      <Link to={`/teacher/review/${row.submission.id}`}>
+                        <Button variant="ghost" size="sm">
+                          Open
+                          <Icon.ChevronRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(row.submission.id, row.studentName)}
+                        className="text-[var(--danger)] hover:text-[var(--danger)]"
+                      >
+                        <Icon.Trash className="h-3.5 w-3.5" />
                       </Button>
-                    </Link>
+                    </div>
                   </TD>
                 </TR>
               ))}
@@ -159,11 +180,11 @@ export default function SubmissionsList() {
             </Card>
           )}
           {rows.map((row) => (
-            <Link
-              key={row.submission.id}
-              to={`/teacher/review/${row.submission.id}`}
-              className="group block rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm transition-colors hover:border-[var(--accent)]/40 hover:bg-[var(--surface-muted)]/60"
-            >
+            <div key={row.submission.id} className="group relative block rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm transition-colors">
+              <Link
+                to={`/teacher/review/${row.submission.id}`}
+                className="block"
+              >
               <div className="flex items-start gap-3">
                 <Avatar name={row.studentName || "Student"} size="sm" />
                 <div className="min-w-0 flex-1">
@@ -184,6 +205,18 @@ export default function SubmissionsList() {
                 </div>
               </div>
             </Link>
+            <div className="mt-2 flex justify-end border-t border-[var(--border)] pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(row.submission.id, row.studentName); }}
+                className="text-[var(--danger)] hover:text-[var(--danger)]"
+              >
+                <Icon.Trash className="h-3.5 w-3.5" />
+                <span className="ml-1 text-xs">Delete</span>
+              </Button>
+            </div>
+          </div>
           ))}
         </div>
       </div>
