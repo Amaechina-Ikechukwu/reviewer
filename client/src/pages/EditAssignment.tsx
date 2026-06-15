@@ -5,11 +5,11 @@ import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
-import { Input, Label, Textarea } from "../components/ui/Input";
+import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
-import { api } from "../api";
+import { api, listCohorts } from "../api";
 import { cn } from "../lib/cn";
-import type { Assignment } from "../types";
+import type { Assignment, Cohort } from "../types";
 
 type SourceMode = "markdown" | "notion" | "pdf";
 
@@ -39,31 +39,38 @@ export default function EditAssignment() {
   const [maxScore, setMaxScore] = useState(100);
   const [classNotes, setClassNotes] = useState("");
   const [questions, setQuestions] = useState("");
+  const [cohortId, setCohortId] = useState("");
+  const [cohorts, setCohorts] = useState<(Cohort & { studentCount: number })[]>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api<Assignment>(`/assignments/${id}`)
-      .then((a) => {
-        setTitle(a.title);
-        setSourceMode(a.sourceType === "notion" ? "notion" : a.sourceType === "pdf" ? "pdf" : "markdown");
-        setSourceMarkdown(a.sourceMarkdown ?? "");
-        setSourceUrl(a.sourceUrl ?? "");
-        if (a.sourceType === "pdf" && a.sourcePdfPath) {
-          setSourcePdfPath(a.sourcePdfPath);
-          setPdfFileName("existing-brief.pdf");
-        }
-        setClosesAt(toDatetimeLocal(a.closesAt));
-        setAllowGithub(a.allowGithub);
-        setAllowFileUpload(a.allowFileUpload);
-        setMaxScore(a.maxScore);
-        setClassNotes(a.classNotes ?? "");
-      })
+        api<Assignment>(`/assignments/${id}`)
+          .then((a) => {
+            setTitle(a.title);
+            setSourceMode(a.sourceType === "notion" ? "notion" : a.sourceType === "pdf" ? "pdf" : "markdown");
+            setSourceMarkdown(a.sourceMarkdown ?? "");
+            setSourceUrl(a.sourceUrl ?? "");
+            if (a.sourceType === "pdf" && a.sourcePdfPath) {
+              setSourcePdfPath(a.sourcePdfPath);
+              setPdfFileName("existing-brief.pdf");
+            }
+            setClosesAt(toDatetimeLocal(a.closesAt));
+            setAllowGithub(a.allowGithub);
+            setAllowFileUpload(a.allowFileUpload);
+            setMaxScore(a.maxScore);
+            setClassNotes(a.classNotes ?? "");
+            setCohortId(a.cohortId ?? "");
+          })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : "Failed to load assignment");
       })
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    listCohorts().then(setCohorts).catch(() => {});
+  }, []);
 
   async function handleMarkdownFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -135,6 +142,7 @@ export default function EditAssignment() {
           allowGithub,
           allowFileUpload,
           classNotes: classNotes || null,
+          cohortId: cohortId || null,
         }),
       });
 
@@ -337,6 +345,19 @@ export default function EditAssignment() {
                 {classNotes && (
                   <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
                 )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <span className="text-sm font-medium">Cohort <span className="font-normal text-[var(--fg-muted)]">(optional)</span></span>
+                <Select
+                  value={cohortId}
+                  onChange={(e) => setCohortId(e.target.value)}
+                >
+                  <option value="">No specific cohort</option>
+                  {cohorts.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.studentCount} student{c.studentCount === 1 ? "" : "s"})</option>
+                  ))}
+                </Select>
               </div>
 
               {error && (
