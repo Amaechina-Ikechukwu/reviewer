@@ -147,7 +147,7 @@ export default function EditAssignment() {
       });
 
       toast().success("Assignment updated");
-      navigate("/teacher");
+      navigate("/teacher/assignments");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to update assignment";
       setError(msg);
@@ -367,7 +367,7 @@ export default function EditAssignment() {
               )}
 
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => navigate("/teacher")}>
+                <Button type="button" variant="ghost" onClick={() => navigate("/teacher/assignments")}>
                   Cancel
                 </Button>
                 <Button type="submit" loading={submitting}>
