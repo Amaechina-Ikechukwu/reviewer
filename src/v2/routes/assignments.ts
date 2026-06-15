@@ -64,7 +64,7 @@ type GroupDraft = {
   sourcePdfPath?: string | null;
 };
 
-async function autoCreateGroups(assignmentId: string, groupCount: number, drafts?: GroupDraft[]) {
+async function autoCreateGroups(assignmentId: string, groupCount: number, cohortId: string | null, drafts?: GroupDraft[]) {
   const groups: { id: string; name: string; memberIds: string[] }[] = [];
 
   const draftedMemberIds = new Set<string>();
@@ -83,7 +83,9 @@ async function autoCreateGroups(assignmentId: string, groupCount: number, drafts
       distributed[i] = (drafts?.[i]?.memberIds || []).filter(Boolean);
     }
   } else {
-    const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+    const studentWhere: any[] = [["role", "==", "student"]];
+    if (cohortId) studentWhere.push(["cohortId", "==", cohortId]);
+    const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: studentWhere });
     const real = allStudents.filter((s) => s.passwordHash !== "INVITE_PENDING");
     const shuffled = shuffle(real);
     shuffled.forEach((student, idx) => {
@@ -209,12 +211,14 @@ export const assignmentRoutes = {
 
     if (isGroupAssignment) {
       const drafts = Array.isArray((body as any).groupDrafts) ? ((body as any).groupDrafts as GroupDraft[]) : undefined;
-      const createdGroups = await autoCreateGroups(id, groupCount, drafts);
+      const createdGroups = await autoCreateGroups(id, groupCount, body.cohortId?.trim() || null, drafts);
       notifyGroupMembers({ id, title: assignment.title }, createdGroups).catch(console.error);
     }
 
     if (opensAt <= new Date()) {
-      const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
+      const studentWhere: any[] = [["role", "==", "student"]];
+      if (body.cohortId?.trim()) studentWhere.push(["cohortId", "==", body.cohortId.trim()]);
+      const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: studentWhere });
       const real = allStudents
         .filter((s) => s.passwordHash !== "INVITE_PENDING")
         .filter((s) => !String(s.email).endsWith("@historical.reviewai.local"))
@@ -235,14 +239,41 @@ export const assignmentRoutes = {
 
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    let where: any = undefined;
     if (isStaff(user.role)) {
-      // Managers and instructors see only their own; owners/admins see all
+      let where: any = undefined;
       if (["instructor", "teacher", "manager"].includes(user.role)) {
         where = [["createdBy", "==", user.userId]];
       }
+      const rows = await data.findMany<any>(COLLECTIONS.assignments, { where, orderBy: ["createdAt", "desc"] });
+      return json(rows);
     }
-    const rows = await data.findMany<any>(COLLECTIONS.assignments, { where, orderBy: ["createdAt", "desc"] });
+
+    // Student: only show assignments for their cohort + global assignments (no cohortId)
+    const student = await data.getById<any>(COLLECTIONS.users, user.userId);
+    if (student?.cohortId) {
+      const [cohortRows, globalRows] = await Promise.all([
+        data.findMany<any>(COLLECTIONS.assignments, {
+          where: [["cohortId", "==", student.cohortId]],
+          orderBy: ["createdAt", "desc"],
+        }),
+        data.findMany<any>(COLLECTIONS.assignments, {
+          where: [["cohortId", "==", null]],
+          orderBy: ["createdAt", "desc"],
+        }),
+      ]);
+      const seen = new Set<string>();
+      const merged: any[] = [];
+      for (const r of cohortRows) { seen.add(r.id); merged.push(r); }
+      for (const r of globalRows) { if (!seen.has(r.id)) merged.push(r); }
+      merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return json(merged);
+    }
+
+    // No cohort: show only global assignments
+    const rows = await data.findMany<any>(COLLECTIONS.assignments, {
+      where: [["cohortId", "==", null]],
+      orderBy: ["createdAt", "desc"],
+    });
     return json(rows);
   },
 
@@ -252,6 +283,13 @@ export const assignmentRoutes = {
     if (!a) return json({ error: "Assignment not found." }, 404);
     if (["instructor", "teacher", "manager"].includes(user.role) && a.createdBy !== user.userId) {
       return json({ error: "Assignment not found." }, 404);
+    }
+    // Student: ensure the assignment belongs to their cohort or is global (no cohort)
+    if (!isStaff(user.role) && a.cohortId) {
+      const student = await data.getById<any>(COLLECTIONS.users, user.userId);
+      if (student?.cohortId !== a.cohortId) {
+        return json({ error: "Assignment not found." }, 404);
+      }
     }
     return json(a);
   },
@@ -542,7 +580,7 @@ export const assignmentRoutes = {
     const groupCount = Math.max(1, Math.min(50, Math.round(body.groupCount ?? assignment.groupCount ?? 1)));
 
     await data.delMany(COLLECTIONS.assignmentGroups, [["assignmentId", "==", assignment.id]]);
-    const groups = await autoCreateGroups(assignment.id, groupCount);
+    const groups = await autoCreateGroups(assignment.id, groupCount, assignment.cohortId ?? null);
     await data.update(COLLECTIONS.assignments, assignment.id, { groupCount });
     notifyGroupMembers({ id: assignment.id, title: assignment.title }, groups).catch(console.error);
     return json({ groups });

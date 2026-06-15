@@ -111,7 +111,8 @@ export const authRoutes = {
 
   async me(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    return json({ user: { id: user.userId, email: user.email, fullName: user.fullName, role: user.role } });
+    const userDoc = await data.getById<any>(COLLECTIONS.users, user.userId);
+    return json({ user: { id: user.userId, email: user.email, fullName: user.fullName, role: user.role, cohortId: userDoc?.cohortId ?? null } });
   },
 
   async acceptInvite(request: Request, params: Record<string, string>) {

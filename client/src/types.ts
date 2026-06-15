@@ -40,6 +40,7 @@ export type User = {
   email: string;
   fullName: string;
   role: Role;
+  cohortId?: string | null;
 };
 
 export type Assignment = {

@@ -24,9 +24,13 @@ async function checkReminders() {
     const allStudents = await data.findMany<any>(COLLECTIONS.users, {
       where: [["role", "==", "student"]],
     });
-    const eligibleStudents = allStudents.filter(
-      (s) => s.passwordHash !== "INVITE_PENDING" && !String(s.email).endsWith("@historical.reviewai.local"),
-    );
+    const studentsByCohort = new Map<string | null, any[]>();
+    for (const s of allStudents) {
+      if (s.passwordHash === "INVITE_PENDING" || String(s.email).endsWith("@historical.reviewai.local")) continue;
+      const key = s.cohortId ?? null;
+      if (!studentsByCohort.has(key)) studentsByCohort.set(key, []);
+      studentsByCohort.get(key)!.push(s);
+    }
 
     for (const assignment of upcoming) {
       const subs = await data.findMany<any>(COLLECTIONS.submissions, {
@@ -34,7 +38,12 @@ async function checkReminders() {
       });
       const submittedStudentIds = new Set(subs.map((s) => s.studentId));
 
-      const pending = eligibleStudents
+      // If the assignment has a cohort, only remind students in that cohort; otherwise remind all eligible
+      const eligible = assignment.cohortId
+        ? (studentsByCohort.get(assignment.cohortId) || [])
+        : [...studentsByCohort.values()].flat();
+
+      const pending = eligible
         .filter((s) => !submittedStudentIds.has(s.id))
         .map((s) => ({ email: s.email, fullName: s.fullName }));
 
