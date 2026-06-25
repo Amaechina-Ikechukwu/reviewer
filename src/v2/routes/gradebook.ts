@@ -69,7 +69,7 @@ export const gradebookRoutes = {
         }
 
         return {
-          student: { id: student.id, fullName: student.fullName, email: student.email },
+          student: { id: student.id, fullName: student.fullName, email: student.email, cohortId: student.cohortId ?? null },
           scores, grandTotal, grandMaxTotal,
         };
       });
