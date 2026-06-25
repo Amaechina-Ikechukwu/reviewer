@@ -216,21 +216,25 @@ export const assignmentRoutes = {
     }
 
     if (opensAt <= new Date()) {
-      const studentWhere: any[] = [["role", "==", "student"]];
-      if (body.cohortId?.trim()) studentWhere.push(["cohortId", "==", body.cohortId.trim()]);
-      const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: studentWhere });
-      const real = allStudents
-        .filter((s) => s.passwordHash !== "INVITE_PENDING")
-        .filter((s) => !String(s.email).endsWith("@historical.reviewai.local"))
-        .map((s) => ({ email: s.email, fullName: s.fullName }));
-      if (real.length > 0) {
-        await enqueueEmailJob({
-          kind: "assignment",
-          recipients: real,
-          payload: { ...assignment, closesAt: new Date(assignment.closesAt).toISOString() },
-          actorId: user.userId,
-          idempotencyKey: `assignment:${id}`,
-        });
+      if (body.cohortId?.trim()) {
+        const studentWhere: any[] = [
+          ["role", "==", "student"],
+          ["cohortId", "==", body.cohortId.trim()],
+        ];
+        const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: studentWhere });
+        const real = allStudents
+          .filter((s) => s.passwordHash !== "INVITE_PENDING")
+          .filter((s) => !String(s.email).endsWith("@historical.reviewai.local"))
+          .map((s) => ({ email: s.email, fullName: s.fullName }));
+        if (real.length > 0) {
+          await enqueueEmailJob({
+            kind: "assignment",
+            recipients: real,
+            payload: { ...assignment, closesAt: new Date(assignment.closesAt).toISOString() },
+            actorId: user.userId,
+            idempotencyKey: `assignment:${id}`,
+          });
+        }
       }
     }
 

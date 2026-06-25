@@ -38,10 +38,10 @@ async function checkReminders() {
       });
       const submittedStudentIds = new Set(subs.map((s) => s.studentId));
 
-      // If the assignment has a cohort, only remind students in that cohort; otherwise remind all eligible
+      // If the assignment has a cohort, only remind students in that cohort
       const eligible = assignment.cohortId
         ? (studentsByCohort.get(assignment.cohortId) || [])
-        : [...studentsByCohort.values()].flat();
+        : [];
 
       const pending = eligible
         .filter((s) => !submittedStudentIds.has(s.id))
