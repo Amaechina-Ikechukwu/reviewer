@@ -69,6 +69,10 @@ export default function GradebookPage() {
       .then(([gradebookData, cohortsData]) => {
         setData(gradebookData);
         setCohorts(cohortsData);
+        setSelectedCohortId((prev) => {
+          if (prev === "all" && cohortsData.length > 0) return cohortsData[0].id;
+          return prev;
+        });
       })
       .catch(() => toast().error("Failed to load gradebook"))
       .finally(() => setLoading(false));
@@ -77,9 +81,7 @@ export default function GradebookPage() {
   const assignments = data?.assignments ?? [];
   const rows = data?.rows ?? [];
 
-  const displayRows = selectedCohortId === "all"
-    ? rows
-    : rows.filter((r) => r.student.cohortId === selectedCohortId);
+  const displayRows = rows.filter((r) => r.student.cohortId === selectedCohortId);
 
   const displayAssignments = assignments.filter((a) => {
     return displayRows.some((row) => row.scores[a.id] !== undefined);
@@ -98,7 +100,6 @@ export default function GradebookPage() {
                 onChange={(e) => setSelectedCohortId(e.target.value)}
                 className="w-48"
               >
-                <option value="all">All Cohorts</option>
                 {cohorts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
