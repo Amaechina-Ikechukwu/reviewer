@@ -515,7 +515,9 @@ export default function CohortDetailPage() {
                     <span className="text-right">Score</span>
                     <span className="text-right w-16">Status</span>
                   </div>
-                  {gradebook.assignments.map((a) => {
+                  {gradebook.assignments
+                    .filter((a) => !perf || perf.scores[a.id] !== undefined)
+                    .map((a) => {
                     const s = perf.scores[a.id];
                     const score = s?.score ?? null;
                     const pct = score !== null && a.maxScore > 0 ? Math.round((score / a.maxScore) * 100) : null;

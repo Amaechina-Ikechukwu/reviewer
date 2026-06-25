@@ -13,12 +13,16 @@ import type { Assignment } from "../types";
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api<Assignment[]>("/assignments").then(setAssignments).catch(() => {
-      setAssignments([]);
-      toast().error("Failed to load assignments");
-    });
+    api<Assignment[]>("/assignments")
+      .then(setAssignments)
+      .catch(() => {
+        setAssignments([]);
+        toast().error("Failed to load assignments");
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const [now] = useState(() => new Date());
@@ -47,7 +51,11 @@ export default function AssignmentsPage() {
           }
         />
 
-        <Card>
+        {loading ? (
+          <div className="text-sm text-[var(--fg-muted)]">Loading assignments...</div>
+        ) : (
+          <>
+            <Card>
           <CardHeader>
             <CardTitle>Upcoming</CardTitle>
             <Badge tone="accent">{upcomingAssignments.length}</Badge>
@@ -73,7 +81,9 @@ export default function AssignmentsPage() {
                 <AssignmentCard key={a.id} assignment={a} closed />
               ))}
             </CardContent>
-          </Card>
+            </Card>
+          )}
+        </>
         )}
       </div>
     </TeacherShell>

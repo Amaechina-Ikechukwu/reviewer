@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { GlobalLoading } from "./components/GlobalLoading";
 import { useAuth } from "./context/AuthContext";
 import AuditLogsPage from "./pages/AuditLogsPage";
 import ClassNotesPage from "./pages/ClassNotesPage";
@@ -121,8 +122,10 @@ function HomeRedirect() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
+    <>
+      <GlobalLoading />
+      <Routes>
+        <Route path="/login" element={<Login />} />
       <Route path="/join/:code" element={<JoinClass />} />
       <Route path="/setup/:token" element={<SetupAccount />} />
       <Route path="/reset/:token" element={<ResetPassword />} />
@@ -526,7 +529,8 @@ export default function App() {
       <Route path="/v2/student/submit/:assignmentId" element={<V2Wrapper><ProtectedRoute role="student"><V2SubmitAssignment /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/student/results" element={<V2Wrapper><ProtectedRoute role="student"><V2StudentResults /></ProtectedRoute></V2Wrapper>} />
       <Route path="/v2/student/results/:submissionId" element={<V2Wrapper><ProtectedRoute role="student"><V2StudentResultDetail /></ProtectedRoute></V2Wrapper>} />
-      <Route path="/v2/student/notes" element={<V2Wrapper><ProtectedRoute role="student"><V2StudentNotesPage /></ProtectedRoute></V2Wrapper>} />
-    </Routes>
+        <Route path="/v2/student/notes" element={<V2Wrapper><ProtectedRoute role="student"><V2StudentNotesPage /></ProtectedRoute></V2Wrapper>} />
+      </Routes>
+    </>
   );
 }

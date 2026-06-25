@@ -105,7 +105,9 @@ export default function StudentProfilePage() {
     ? Object.values(perfRow.scores).filter((s) => s !== null).length
     : 0;
 
-  const totalAssignments = gradebook?.assignments.length ?? 0;
+  const totalAssignments = perfRow
+    ? Object.values(perfRow.scores).filter((s) => s !== undefined).length
+    : 0;
 
   const trackLabel = student.track ? TRACKS.find((t) => t.value === student.track)?.label : null;
 
@@ -201,7 +203,9 @@ export default function StudentProfilePage() {
                 <span className="text-right">Grade</span>
               </div>
 
-              {gradebook.assignments.map((a) => {
+              {gradebook.assignments
+                .filter((a) => !perfRow || perfRow.scores[a.id] !== undefined)
+                .map((a) => {
                 const s = perfRow?.scores[a.id] ?? null;
                 const score = s?.score ?? null;
                 const pct = score !== null && a.maxScore > 0

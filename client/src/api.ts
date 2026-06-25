@@ -15,6 +15,14 @@ export function setToken(token: string | null) {
   }
 }
 
+let activeRequests = 0;
+
+function updateLoadingState(delta: number) {
+  activeRequests += delta;
+  if (activeRequests < 0) activeRequests = 0;
+  window.dispatchEvent(new CustomEvent('global-loading', { detail: { isLoading: activeRequests > 0 } }));
+}
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
 
@@ -26,18 +34,23 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${getApiBase()}${path}`, {
-    ...init,
-    headers,
-  });
+  updateLoadingState(1);
+  try {
+    const response = await fetch(`${getApiBase()}${path}`, {
+      ...init,
+      headers,
+    });
 
-  const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    throw new Error(payload.error || payload.details || "Request failed");
+    if (!response.ok) {
+      throw new Error(payload.error || payload.details || "Request failed");
+    }
+
+    return payload as T;
+  } finally {
+    updateLoadingState(-1);
   }
-
-  return payload as T;
 }
 
 // Cohort API

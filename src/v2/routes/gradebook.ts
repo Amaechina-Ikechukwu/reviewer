@@ -38,6 +38,7 @@ export const gradebookRoutes = {
       title: a.title,
       maxScore: a.maxScore,
       isGroupAssignment: !!a.isGroupAssignment,
+      cohortId: a.cohortId ?? null,
     }));
 
     const rows = allStudents
@@ -48,6 +49,10 @@ export const gradebookRoutes = {
         const scores: Record<string, any> = {};
 
         for (const assignment of assignmentsLite) {
+          if (assignment.cohortId && assignment.cohortId !== student.cohortId) {
+            continue;
+          }
+
           let sub: any = null;
           if (assignment.isGroupAssignment) {
             const gid = groupByStudentAssignment.get(`${student.id}:${assignment.id}`);
