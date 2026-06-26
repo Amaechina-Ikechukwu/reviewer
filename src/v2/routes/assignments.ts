@@ -13,7 +13,7 @@ function trackAllowsGithub(track?: Track | null): boolean {
   return CODE_TRACKS.includes(track);
 }
 
-const MAX_BRIEF_SIZE = 20 * 1024 * 1024; // 20 MB
+const MAX_BRIEF_SIZE = 100 * 1024 * 1024; // 100 MB
 
 type AssignmentBody = {
   title?: string;
@@ -313,6 +313,11 @@ export const assignmentRoutes = {
       return json({ error: "At least one submission method must be enabled." }, 400);
     }
 
+    const nextTrack = body.track !== undefined ? (body.track || null) : existing.track;
+    if (nextTrack && !trackAllowsGithub(nextTrack as Track) && newAllowGithub) {
+      return json({ error: "GitHub submissions are not available for this track." }, 400);
+    }
+
     const nextSourceType = body.sourceType !== undefined ? body.sourceType : existing.sourceType;
     const nextSourceMarkdown = body.sourceMarkdown !== undefined ? (body.sourceMarkdown?.trim() || null) : existing.sourceMarkdown;
     const nextSourceUrl = body.sourceUrl !== undefined ? (body.sourceUrl?.trim() || null) : existing.sourceUrl;
@@ -334,6 +339,7 @@ export const assignmentRoutes = {
     if (body.classNotes !== undefined) update.classNotes = body.classNotes?.trim() || null;
     if (body.questions !== undefined) update.questions = body.questions?.trim() || null;
     if (body.cohortId !== undefined) update.cohortId = body.cohortId?.trim() || null;
+    if (body.track !== undefined) update.track = body.track || null;
 
     if (body.closesAt !== undefined) {
       const newClosesAt = new Date(body.closesAt);
@@ -546,7 +552,7 @@ export const assignmentRoutes = {
     const file = fd.get("file") as File | null;
     if (!file) return json({ error: "No file provided." }, 400);
     if (!file.name.toLowerCase().endsWith(".pdf")) return json({ error: "Only PDF files are accepted." }, 400);
-    if (file.size > MAX_BRIEF_SIZE) return json({ error: "PDF must be under 20 MB." }, 400);
+    if (file.size > MAX_BRIEF_SIZE) return json({ error: "PDF must be under 100 MB." }, 400);
 
     const briefId = randomUUID();
     const buffer = Buffer.from(await file.arrayBuffer());

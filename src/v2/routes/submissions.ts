@@ -16,7 +16,7 @@ import { data } from "../data";
 import { COLLECTIONS, storageUpload, storageDownload, storageDelete } from "../firebase";
 
 const TMP_DIR = "/tmp/submissions";
-const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 52_428_800);
+const MAX_FILE_SIZE = Number(process.env.MAX_FILE_SIZE || 104_857_600);
 
 type ImportEntry = { fullName?: string; email?: string; githubUrl?: string };
 
@@ -462,7 +462,7 @@ export const submissionRoutes = {
       }
 
       const submissionId = randomUUID();
-      const dest = join(UPLOAD_DIR, submissionId);
+      const dest = join(TMP_DIR, submissionId);
       await cloneGithubRepo(githubUrl, dest);
 
       const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
