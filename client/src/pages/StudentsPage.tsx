@@ -125,6 +125,8 @@ export default function StudentsPage() {
   const [submitForStudent, setSubmitForStudent] = useState<StudentWithPending | null>(null);
   const [submitAssignmentId, setSubmitAssignmentId] = useState("");
   const [submitGithubUrl, setSubmitGithubUrl] = useState("");
+  const [submitSubmissionType, setSubmitSubmissionType] = useState<"github" | "file_upload">("github");
+  const [submitFile, setSubmitFile] = useState<File | null>(null);
   const [submitForError, setSubmitForError] = useState("");
   const [submittingFor, setSubmittingFor] = useState(false);
 
@@ -228,10 +230,22 @@ export default function StudentsPage() {
     setSubmitForError("");
     setSubmittingFor(true);
     try {
-      await api("/submissions/submit-for-student", {
-        method: "POST",
-        body: JSON.stringify({ studentId: submitForStudent.id, assignmentId: submitAssignmentId, githubUrl: submitGithubUrl }),
-      });
+      if (submitSubmissionType === "github") {
+        await api("/submissions/submit-for-student", {
+          method: "POST",
+          body: JSON.stringify({ studentId: submitForStudent.id, assignmentId: submitAssignmentId, githubUrl: submitGithubUrl }),
+        });
+      } else {
+        if (!submitFile) throw new Error("Please attach a ZIP or PDF file.");
+        const formData = new FormData();
+        formData.append("assignmentId", submitAssignmentId);
+        formData.append("studentId", submitForStudent.id);
+        formData.append("file", submitFile);
+        await api("/submissions/submit-for-student", {
+          method: "POST",
+          body: formData,
+        });
+      }
       toast().success(`Submission created for ${submitForStudent.fullName}`);
       setSubmitForStudent(null);
     } catch (err) {
@@ -309,6 +323,8 @@ export default function StudentsPage() {
         setSubmitForStudent(student);
         setSubmitAssignmentId(assignments[0]?.id || "");
         setSubmitGithubUrl("");
+        setSubmitSubmissionType(assignments[0]?.allowGithub ? "github" : "file_upload");
+        setSubmitFile(null);
         setSubmitForError("");
         break;
       case "edit":
@@ -560,19 +576,67 @@ export default function StudentsPage() {
       >
         <form id="submit-for-form" className="flex flex-col gap-4" onSubmit={handleSubmitForStudent}>
           <Label required>Assignment
-            <Select value={submitAssignmentId} onChange={(e) => setSubmitAssignmentId(e.target.value)} required>
+            <Select value={submitAssignmentId} onChange={(e) => {
+              setSubmitAssignmentId(e.target.value);
+              const a = assignments.find((x) => x.id === e.target.value);
+              if (a && submitSubmissionType === "github" && !a.allowGithub) setSubmitSubmissionType("file_upload");
+              if (a && submitSubmissionType === "file_upload" && !a.allowFileUpload) setSubmitSubmissionType("github");
+            }} required>
               {assignments.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
               {assignments.length === 0 && <option disabled value="">No assignments available</option>}
             </Select>
           </Label>
-          <Label required>GitHub URL
-            <Input
-              placeholder="https://github.com/owner/repo"
-              value={submitGithubUrl}
-              onChange={(e) => setSubmitGithubUrl(e.target.value)}
-              required
-            />
-          </Label>
+
+          {(() => {
+            const selectedAssignment = assignments.find((a) => a.id === submitAssignmentId);
+            if (!selectedAssignment) return null;
+            return (
+              <>
+                {(selectedAssignment.allowGithub && selectedAssignment.allowFileUpload) && (
+                  <div className="flex gap-4 mb-2">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name="submitSubmissionType"
+                        checked={submitSubmissionType === "github"}
+                        onChange={() => setSubmitSubmissionType("github")}
+                      />
+                      GitHub URL
+                    </label>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="radio"
+                        name="submitSubmissionType"
+                        checked={submitSubmissionType === "file_upload"}
+                        onChange={() => setSubmitSubmissionType("file_upload")}
+                      />
+                      File Upload
+                    </label>
+                  </div>
+                )}
+                {submitSubmissionType === "github" && selectedAssignment.allowGithub && (
+                  <Label required>GitHub URL
+                    <Input
+                      placeholder="https://github.com/owner/repo"
+                      value={submitGithubUrl}
+                      onChange={(e) => setSubmitGithubUrl(e.target.value)}
+                      required
+                    />
+                  </Label>
+                )}
+                {submitSubmissionType === "file_upload" && selectedAssignment.allowFileUpload && (
+                  <Label required>File (ZIP or PDF)
+                    <Input
+                      type="file"
+                      accept=".zip,.pdf"
+                      onChange={(e) => setSubmitFile(e.target.files?.[0] || null)}
+                      required
+                    />
+                  </Label>
+                )}
+              </>
+            );
+          })()}
           {submitForError && (
             <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
               {submitForError}

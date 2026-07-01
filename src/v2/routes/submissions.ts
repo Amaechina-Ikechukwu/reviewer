@@ -204,18 +204,47 @@ export const submissionRoutes = {
     const actor = (request as AuthenticatedRequest).user;
     if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
 
-    const body = await request.json() as { studentId?: string; assignmentId?: string; githubUrl?: string };
-    const { studentId, assignmentId } = body;
-    if (!studentId || !assignmentId) return json({ error: "studentId and assignmentId are required." }, 400);
+    const ct = request.headers.get("content-type") || "";
+    let assignmentId = "";
+    let studentId = "";
+    let submissionType: "github" | "file_upload";
+    let githubUrl: string | null = null;
+    let uploadedFile: File | null = null;
 
-    const githubUrl = normalizeGithubUrl(body.githubUrl);
-    if (!githubUrl) return json({ error: "A GitHub URL is required." }, 400);
+    if (ct.includes("multipart/form-data")) {
+      const fd = await request.formData();
+      assignmentId = String(fd.get("assignmentId") || "");
+      studentId = String(fd.get("studentId") || "");
+      submissionType = "file_upload";
+      uploadedFile = fd.get("file") as File | null;
+    } else {
+      const body = await request.json() as { studentId?: string; assignmentId?: string; githubUrl?: string };
+      assignmentId = String(body.assignmentId || "");
+      studentId = String(body.studentId || "");
+      submissionType = "github";
+      githubUrl = body.githubUrl?.trim() || null;
+    }
+
+    if (!studentId || !assignmentId) return json({ error: "studentId and assignmentId are required." }, 400);
 
     const student = await data.getById<any>(COLLECTIONS.users, studentId);
     if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, assignmentId);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    if (submissionType === "github" && !assignment.allowGithub) return json({ error: "GitHub submissions are not enabled for this assignment." }, 400);
+    if (submissionType === "file_upload" && !assignment.allowFileUpload) return json({ error: "File uploads are not enabled for this assignment." }, 400);
+    if (uploadedFile && uploadedFile.size > MAX_FILE_SIZE) return json({ error: "Uploaded file is too large." }, 400);
+    if (uploadedFile && !uploadedFile.name.toLowerCase().endsWith(".zip") && !uploadedFile.name.toLowerCase().endsWith(".pdf")) {
+      return json({ error: "Only .zip and .pdf uploads are supported." }, 400);
+    }
+
+    let normalizedGithubUrl = null;
+    if (submissionType === "github") {
+      normalizedGithubUrl = normalizeGithubUrl(githubUrl);
+      if (!normalizedGithubUrl) return json({ error: "A GitHub URL is required." }, 400);
+    }
 
     let groupId: string | null = null;
     if (assignment.isGroupAssignment) {
@@ -243,18 +272,38 @@ export const submissionRoutes = {
     }
 
     const submissionId = randomUUID();
+    let filePath: string | null = null;
+    let storageKey: string | null = null;
+
+    if (submissionType === "file_upload") {
+      if (!uploadedFile) return json({ error: "Please attach a ZIP or PDF file." }, 400);
+      const isPdf = uploadedFile.name.toLowerCase().endsWith(".pdf");
+      const ext = isPdf ? "pdf" : "zip";
+      const rawBuffer = Buffer.from(await uploadedFile.arrayBuffer());
+      const dest = join(TMP_DIR, submissionId);
+      if (isPdf) {
+        await savePdfBuffer(rawBuffer, uploadedFile.name, dest);
+      } else {
+        await extractZipBuffer(rawBuffer, dest);
+      }
+      filePath = dest;
+      storageKey = `submissions/${submissionId}.${ext}`;
+      await storageUpload(storageKey, rawBuffer, isPdf ? "application/pdf" : "application/zip").catch(console.error);
+    }
+
     const submission = await data.insert<any>(COLLECTIONS.submissions, submissionId, {
       assignmentId,
       studentId,
       groupId,
-      submissionType: "github",
-      githubUrl,
-      filePath: null,
+      submissionType,
+      githubUrl: normalizedGithubUrl,
+      filePath,
+      storageKey,
       submittedAt: new Date(),
       isLate: false,
     });
 
-    audit({ actorId: actor.userId, action: "submission.created_by_teacher", targetType: "submission", targetId: submissionId, details: { studentId, assignmentId, githubUrl } });
+    audit({ actorId: actor.userId, action: "submission.created_by_teacher", targetType: "submission", targetId: submissionId, details: { studentId, assignmentId, submissionType, githubUrl: normalizedGithubUrl } });
     return json(submission, 201);
   },
 
