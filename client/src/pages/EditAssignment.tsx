@@ -38,7 +38,13 @@ export default function EditAssignment() {
   const [allowGithub, setAllowGithub] = useState(true);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const [maxScore, setMaxScore] = useState(100);
+  const [classNotesType, setClassNotesType] = useState<"markdown" | "pdf" | "docx" | "link">("markdown");
   const [classNotes, setClassNotes] = useState("");
+  const [classNotesUrl, setClassNotesUrl] = useState("");
+  const [classNotesPdfPath, setClassNotesPdfPath] = useState<string | null>(null);
+  const [classNotesDocxPath, setClassNotesDocxPath] = useState<string | null>(null);
+  const [classNotesFileName, setClassNotesFileName] = useState<string | null>(null);
+  const [uploadingClassNotes, setUploadingClassNotes] = useState(false);
   const [questions, setQuestions] = useState("");
   const [track, setTrack] = useState<Track | "">("");
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
@@ -62,7 +68,16 @@ export default function EditAssignment() {
             setAllowGithub(a.allowGithub);
             setAllowFileUpload(a.allowFileUpload);
             setMaxScore(a.maxScore);
+            setClassNotesType(a.classNotesType || "markdown");
             setClassNotes(a.classNotes ?? "");
+            setClassNotesUrl(a.classNotesUrl ?? "");
+            if (a.classNotesType === "pdf" && a.classNotesPdfPath) {
+              setClassNotesPdfPath(a.classNotesPdfPath);
+              setClassNotesFileName("existing-notes.pdf");
+            } else if (a.classNotesType === "docx" && a.classNotesDocxPath) {
+              setClassNotesDocxPath(a.classNotesDocxPath);
+              setClassNotesFileName("existing-notes.docx");
+            }
             setTrack(a.track ?? "");
             setCohortId(a.cohortId ?? "");
           })
@@ -87,6 +102,30 @@ export default function EditAssignment() {
     if (!file) return;
     setClassNotes(await file.text());
     event.target.value = "";
+  }
+
+  async function handleClassNotesAsset(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingClassNotes(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api<{ briefId: string, ext?: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+      if (res.ext === "docx") {
+        setClassNotesDocxPath(res.briefId);
+        setClassNotesPdfPath(null);
+      } else {
+        setClassNotesPdfPath(res.briefId);
+        setClassNotesDocxPath(null);
+      }
+      setClassNotesFileName(file.name);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingClassNotes(false);
+      event.target.value = "";
+    }
   }
 
   async function handlePdfBrief(event: ChangeEvent<HTMLInputElement>) {
@@ -130,6 +169,25 @@ export default function EditAssignment() {
       return;
     }
 
+    if (classNotesType === "pdf" && !classNotesPdfPath) {
+      const msg = "Please upload a PDF for class notes.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+    if (classNotesType === "docx" && !classNotesDocxPath) {
+      const msg = "Please upload a DOCX for class notes.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+    if (classNotesType === "link" && !classNotesUrl.trim()) {
+      const msg = "Please provide a URL for class notes.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -145,7 +203,11 @@ export default function EditAssignment() {
           closesAt: new Date(closesAt).toISOString(),
           allowGithub: isCodeTrack ? allowGithub : false,
           allowFileUpload,
-          classNotes: classNotes || null,
+          classNotesType,
+          classNotes: classNotesType === "markdown" ? (classNotes || null) : null,
+          classNotesUrl: classNotesType === "link" ? classNotesUrl : null,
+          classNotesPdfPath: classNotesType === "pdf" ? classNotesPdfPath : null,
+          classNotesDocxPath: classNotesType === "docx" ? classNotesDocxPath : null,
           track: track || null,
           cohortId: cohortId || null,
         }),
@@ -354,24 +416,82 @@ export default function EditAssignment() {
                 />
               </Label>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
-                  </span>
-                  <label className="cursor-pointer text-xs text-[var(--accent)] hover:underline">
-                    Upload .md file
-                    <input accept=".md,.markdown,.txt" type="file" className="sr-only" onChange={handleClassNotesFile} />
-                  </label>
+              <div className="flex flex-col gap-3">
+                <span className="text-sm font-medium">
+                  Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
+                </span>
+                
+                <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                  {(["markdown", "pdf", "docx", "link"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setClassNotesType(mode)}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 text-xs font-medium transition-colors",
+                        classNotesType === mode
+                          ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                          : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                      )}
+                    >
+                      {mode === "markdown" ? "Markdown" : mode === "pdf" ? "PDF" : mode === "docx" ? "DOCX" : "Drive link"}
+                    </button>
+                  ))}
                 </div>
-                <Textarea
-                  placeholder="Paste any notes, instructions, or resources students should read before submitting..."
-                  rows={5}
-                  value={classNotes}
-                  onChange={(e) => setClassNotes(e.target.value)}
-                />
-                {classNotes && (
-                  <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
+
+                {classNotesType === "markdown" && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-end">
+                      <label className="cursor-pointer text-xs text-[var(--accent)] hover:underline">
+                        Upload .md file
+                        <input accept=".md,.markdown,.txt" type="file" className="sr-only" onChange={handleClassNotesFile} />
+                      </label>
+                    </div>
+                    <Textarea
+                      placeholder="Paste any notes, instructions, or resources students should read before submitting..."
+                      rows={5}
+                      value={classNotes}
+                      onChange={(e) => setClassNotes(e.target.value)}
+                    />
+                    {classNotes && (
+                      <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
+                    )}
+                  </div>
+                )}
+
+                {classNotesType === "link" && (
+                  <Label>
+                    Drive link URL
+                    <Input
+                      placeholder="https://..."
+                      type="url"
+                      value={classNotesUrl}
+                      onChange={(e) => setClassNotesUrl(e.target.value)}
+                    />
+                  </Label>
+                )}
+
+                {(classNotesType === "pdf" || classNotesType === "docx") && (
+                  <div className="flex flex-col gap-2">
+                    <Label>
+                      Upload {classNotesType.toUpperCase()} file
+                      <Input
+                        accept={classNotesType === "pdf" ? ".pdf" : ".docx"}
+                        type="file"
+                        disabled={uploadingClassNotes}
+                        onChange={handleClassNotesAsset}
+                      />
+                    </Label>
+                    {uploadingClassNotes && (
+                      <div className="text-xs text-[var(--fg-muted)]">Uploading…</div>
+                    )}
+                    {classNotesFileName && !uploadingClassNotes && (
+                      <div className="inline-flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+                        <Icon.Check className="h-3 w-3 text-[var(--success)]" />
+                        {classNotesFileName} uploaded
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
