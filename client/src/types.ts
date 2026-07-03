@@ -33,7 +33,7 @@ export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
 };
 
 export type ProviderName = "gemini";
-export type AssignmentSourceType = "manual" | "markdown" | "notion" | "mixed" | "pdf";
+export type AssignmentSourceType = "manual" | "markdown" | "notion" | "mixed" | "pdf" | "docx" | "link";
 
 export type User = {
   id: string;
@@ -52,6 +52,7 @@ export type Assignment = {
   sourceMarkdown: string | null;
   sourceUrl: string | null;
   sourcePdfPath: string | null;
+  sourceDocxPath: string | null;
   createdBy: string;
   opensAt: string;
   closesAt: string;
@@ -59,7 +60,11 @@ export type Assignment = {
   allowGithub: boolean;
   allowFileUpload: boolean;
   defaultProvider: ProviderName;
+  classNotesType: "markdown" | "pdf" | "docx" | "link" | null;
   classNotes: string | null;
+  classNotesUrl: string | null;
+  classNotesPdfPath: string | null;
+  classNotesDocxPath: string | null;
   isGroupAssignment?: boolean;
   groupCount?: number;
   groupQuestionMode?: "same" | "per_group";

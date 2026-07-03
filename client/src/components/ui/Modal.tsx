@@ -8,7 +8,7 @@ type Props = {
   title?: string;
   description?: string;
   size?: "sm" | "md" | "lg";
-  children: ReactNode;
+  children?: ReactNode;
   footer?: ReactNode;
 };
 

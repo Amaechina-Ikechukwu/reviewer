@@ -133,4 +133,8 @@ export const Icon = {
   Folder: (p: SVGProps<SVGSVGElement>) => (
     <svg {...base} {...p}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2Z" /></svg>
   ),
+  Download: (p: SVGProps<SVGSVGElement>) => (
+    <svg {...base} {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+  ),
 };
+

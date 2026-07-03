@@ -13,7 +13,7 @@ import { cn } from "../lib/cn";
 import type { Assignment, Cohort, Track } from "../types";
 import { CODE_TRACKS, TRACKS } from "../types";
 
-type SourceMode = "markdown" | "notion" | "pdf";
+type SourceMode = "markdown" | "notion" | "pdf" | "docx" | "link";
 
 export default function CreateAssignment() {
   const navigate = useNavigate();
@@ -22,6 +22,7 @@ export default function CreateAssignment() {
   const [sourceMarkdown, setSourceMarkdown] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourcePdfPath, setSourcePdfPath] = useState<string | null>(null);
+  const [sourceDocxPath, setSourceDocxPath] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [closesAt, setClosesAt] = useState("");
@@ -30,7 +31,13 @@ export default function CreateAssignment() {
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
   const [maxScore, setMaxScore] = useState(100);
+  const [classNotesType, setClassNotesType] = useState<"markdown" | "pdf" | "docx" | "link">("markdown");
   const [classNotes, setClassNotes] = useState("");
+  const [classNotesUrl, setClassNotesUrl] = useState("");
+  const [classNotesPdfPath, setClassNotesPdfPath] = useState<string | null>(null);
+  const [classNotesDocxPath, setClassNotesDocxPath] = useState<string | null>(null);
+  const [classNotesFileName, setClassNotesFileName] = useState<string | null>(null);
+  const [uploadingClassNotes, setUploadingClassNotes] = useState(false);
   const [questions, setQuestions] = useState("");
   const [isGroupAssignment, setIsGroupAssignment] = useState(false);
   const [groupCount, setGroupCount] = useState(3);
@@ -66,13 +73,43 @@ export default function CreateAssignment() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await api<{ briefId: string }>("/assignments/upload-brief", { method: "POST", body: fd });
-      setSourcePdfPath(res.briefId);
+      const res = await api<{ briefId: string, ext?: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+      if (res.ext === "docx") {
+        setSourceDocxPath(res.briefId);
+        setSourcePdfPath(null);
+      } else {
+        setSourcePdfPath(res.briefId);
+        setSourceDocxPath(null);
+      }
       setPdfFileName(file.name);
     } catch (err) {
-      toast().error(err instanceof Error ? err.message : "PDF upload failed.");
+      toast().error(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploadingPdf(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleClassNotesAsset(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingClassNotes(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await api<{ briefId: string, ext?: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+      if (res.ext === "docx") {
+        setClassNotesDocxPath(res.briefId);
+        setClassNotesPdfPath(null);
+      } else {
+        setClassNotesPdfPath(res.briefId);
+        setClassNotesDocxPath(null);
+      }
+      setClassNotesFileName(file.name);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingClassNotes(false);
       event.target.value = "";
     }
   }
@@ -87,16 +124,35 @@ export default function CreateAssignment() {
       toast().error(msg);
       return;
     }
+    if (sourceMode === "docx" && !sourceDocxPath) {
+      const msg = "Please upload a DOCX brief before creating the assignment.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
     if (sourceMode === "markdown" && !sourceMarkdown.trim()) {
       const msg = "Please upload or paste the assignment markdown.";
       setError(msg);
       toast().error(msg);
       return;
     }
-    if (sourceMode === "notion" && !sourceUrl.trim()) {
-      const msg = "Please paste the Notion page URL.";
+    if ((sourceMode === "notion" || sourceMode === "link") && !sourceUrl.trim()) {
+      const msg = "Please paste the URL.";
       setError(msg);
       toast().error(msg);
+      return;
+    }
+
+    if (classNotesType === "pdf" && !classNotesPdfPath) {
+      setError("Please upload a PDF for class notes.");
+      return;
+    }
+    if (classNotesType === "docx" && !classNotesDocxPath) {
+      setError("Please upload a DOCX for class notes.");
+      return;
+    }
+    if (classNotesType === "link" && !classNotesUrl.trim()) {
+      setError("Please provide a URL for class notes.");
       return;
     }
 
@@ -112,14 +168,19 @@ export default function CreateAssignment() {
           maxScore,
           sourceType: sourceMode,
           sourceMarkdown: sourceMode === "markdown" ? sourceMarkdown : null,
-          sourceUrl: sourceMode === "notion" ? sourceUrl : null,
+          sourceUrl: (sourceMode === "notion" || sourceMode === "link") ? sourceUrl : null,
           sourcePdfPath: sourceMode === "pdf" ? sourcePdfPath : null,
+          sourceDocxPath: sourceMode === "docx" ? sourceDocxPath : null,
           opensAt: new Date().toISOString(),
           closesAt: new Date(closesAt).toISOString(),
           allowGithub: isCodeTrack ? allowGithub : false,
           allowFileUpload,
           defaultProvider: "gemini",
-          classNotes: classNotes || null,
+          classNotesType,
+          classNotes: classNotesType === "markdown" ? (classNotes || null) : null,
+          classNotesUrl: classNotesType === "link" ? classNotesUrl : null,
+          classNotesPdfPath: classNotesType === "pdf" ? classNotesPdfPath : null,
+          classNotesDocxPath: classNotesType === "docx" ? classNotesDocxPath : null,
           questions: questions || null,
           isGroupAssignment,
           groupCount: isGroupAssignment ? groupCount : 0,
@@ -154,9 +215,15 @@ export default function CreateAssignment() {
     setSourceMarkdown("");
     setSourceUrl("");
     setSourcePdfPath(null);
+    setSourceDocxPath(null);
     setPdfFileName(null);
     setClosesAt("");
+    setClassNotesType("markdown");
     setClassNotes("");
+    setClassNotesUrl("");
+    setClassNotesPdfPath(null);
+    setClassNotesDocxPath(null);
+    setClassNotesFileName(null);
     setAllowGithub(true);
     setCohortId("");
   }
@@ -243,7 +310,7 @@ export default function CreateAssignment() {
               <div className="flex flex-col gap-3">
                 <div className="text-sm font-medium">Assignment source</div>
                 <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
-                  {(["markdown", "notion", "pdf"] as const).map((mode) => (
+                  {(["markdown", "notion", "pdf", "docx", "link"] as const).map((mode) => (
                     <button
                       key={mode}
                       type="button"
@@ -255,7 +322,7 @@ export default function CreateAssignment() {
                           : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                       )}
                     >
-                      {mode === "markdown" ? "Markdown file" : mode === "notion" ? "Notion link" : "PDF"}
+                      {mode === "markdown" ? "Markdown file" : mode === "notion" ? "Notion page" : mode === "pdf" ? "PDF" : mode === "docx" ? "DOCX" : "Drive link"}
                     </button>
                   ))}
                 </div>
@@ -274,11 +341,11 @@ export default function CreateAssignment() {
                   </div>
                 )}
 
-                {sourceMode === "notion" && (
+                {(sourceMode === "notion" || sourceMode === "link") && (
                   <Label>
-                    Notion page URL
+                    {sourceMode === "notion" ? "Notion page URL" : "Drive link URL"}
                     <Input
-                      placeholder="https://www.notion.so/..."
+                      placeholder="https://..."
                       type="url"
                       value={sourceUrl}
                       onChange={(e) => setSourceUrl(e.target.value)}
@@ -286,12 +353,12 @@ export default function CreateAssignment() {
                   </Label>
                 )}
 
-                {sourceMode === "pdf" && (
+                {(sourceMode === "pdf" || sourceMode === "docx") && (
                   <div className="flex flex-col gap-2">
                     <Label>
-                      Upload PDF brief
+                      Upload {sourceMode.toUpperCase()} brief
                       <Input
-                        accept=".pdf"
+                        accept={sourceMode === "pdf" ? ".pdf" : ".docx"}
                         type="file"
                         disabled={uploadingPdf}
                         onChange={handlePdfBrief}
@@ -464,24 +531,82 @@ export default function CreateAssignment() {
                 />
               </Label>
 
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
-                  </span>
-                  <label className="cursor-pointer text-xs text-[var(--accent)] hover:underline">
-                    Upload .md file
-                    <input accept=".md,.markdown,.txt" type="file" className="sr-only" onChange={handleClassNotesFile} />
-                  </label>
+              <div className="flex flex-col gap-3">
+                <span className="text-sm font-medium">
+                  Class notes <span className="font-normal text-[var(--fg-muted)]">(optional — shown to students when submitting)</span>
+                </span>
+                
+                <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
+                  {(["markdown", "pdf", "docx", "link"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setClassNotesType(mode)}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 text-xs font-medium transition-colors",
+                        classNotesType === mode
+                          ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                          : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                      )}
+                    >
+                      {mode === "markdown" ? "Markdown" : mode === "pdf" ? "PDF" : mode === "docx" ? "DOCX" : "Drive link"}
+                    </button>
+                  ))}
                 </div>
-                <Textarea
-                  placeholder="Paste any notes, instructions, or resources students should read before submitting..."
-                  rows={5}
-                  value={classNotes}
-                  onChange={(e) => setClassNotes(e.target.value)}
-                />
-                {classNotes && (
-                  <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
+
+                {classNotesType === "markdown" && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-end">
+                      <label className="cursor-pointer text-xs text-[var(--accent)] hover:underline">
+                        Upload .md file
+                        <input accept=".md,.markdown,.txt" type="file" className="sr-only" onChange={handleClassNotesFile} />
+                      </label>
+                    </div>
+                    <Textarea
+                      placeholder="Paste any notes, instructions, or resources students should read before submitting..."
+                      rows={5}
+                      value={classNotes}
+                      onChange={(e) => setClassNotes(e.target.value)}
+                    />
+                    {classNotes && (
+                      <div className="text-xs text-[var(--fg-muted)]">{classNotes.split("\n").length} lines · renders as markdown for students</div>
+                    )}
+                  </div>
+                )}
+
+                {classNotesType === "link" && (
+                  <Label>
+                    Drive link URL
+                    <Input
+                      placeholder="https://..."
+                      type="url"
+                      value={classNotesUrl}
+                      onChange={(e) => setClassNotesUrl(e.target.value)}
+                    />
+                  </Label>
+                )}
+
+                {(classNotesType === "pdf" || classNotesType === "docx") && (
+                  <div className="flex flex-col gap-2">
+                    <Label>
+                      Upload {classNotesType.toUpperCase()} file
+                      <Input
+                        accept={classNotesType === "pdf" ? ".pdf" : ".docx"}
+                        type="file"
+                        disabled={uploadingClassNotes}
+                        onChange={handleClassNotesAsset}
+                      />
+                    </Label>
+                    {uploadingClassNotes && (
+                      <div className="text-xs text-[var(--fg-muted)]">Uploading…</div>
+                    )}
+                    {classNotesFileName && !uploadingClassNotes && (
+                      <div className="inline-flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+                        <Icon.Check className="h-3 w-3 text-[var(--success)]" />
+                        {classNotesFileName} uploaded
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

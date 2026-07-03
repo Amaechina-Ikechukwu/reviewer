@@ -12,7 +12,7 @@ import { cn } from "../lib/cn";
 import type { Assignment, Cohort, Track } from "../types";
 import { CODE_TRACKS, TRACKS } from "../types";
 
-type SourceMode = "markdown" | "notion" | "pdf";
+type SourceMode = "markdown" | "notion" | "pdf" | "docx" | "link";
 
 function toDatetimeLocal(iso: string) {
   const d = new Date(iso);

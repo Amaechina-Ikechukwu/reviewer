@@ -36,6 +36,7 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/assignments/upload-brief", handler: assignmentRoutes.uploadBrief, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id", handler: assignmentRoutes.get, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id/brief", handler: assignmentRoutes.getBrief, requiresAuth: true },
+  { method: "GET", path: "/v2/api/assignments/:id/class-notes-asset", handler: assignmentRoutes.getClassNotesAsset, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/assignments/:id", handler: assignmentRoutes.update, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/assignments/:id", handler: assignmentRoutes.remove, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id/groups", handler: assignmentRoutes.listGroups, requiresAuth: true },

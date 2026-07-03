@@ -21,7 +21,10 @@ export default function SubmitAssignment() {
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
+  const [assetBriefUrl, setAssetBriefUrl] = useState<string | null>(null);
+  const [assetBriefType, setAssetBriefType] = useState<"pdf" | "docx" | null>(null);
+  const [classNotesAssetUrl, setClassNotesAssetUrl] = useState<string | null>(null);
+  const [classNotesAssetError, setClassNotesAssetError] = useState<string | null>(null);
   const [briefError, setBriefError] = useState<string | null>(null);
   const [hasOverride, setHasOverride] = useState(false);
   const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string; submittedByStudentId?: string; submittedByName?: string } | null>(null);
@@ -52,7 +55,7 @@ export default function SubmitAssignment() {
                 if (!r.ok) throw new Error(`Brief unavailable (${r.status})`);
                 const blob = await r.blob();
                 if (blob.type !== "application/pdf") throw new Error("Brief unavailable");
-                setPdfBriefUrl(URL.createObjectURL(blob));
+                setAssetBriefUrl(URL.createObjectURL(blob));
               })
               .catch((err) => {
                 setBriefError(err instanceof Error ? err.message : "Failed to load assignment brief.");
@@ -193,7 +196,7 @@ export default function SubmitAssignment() {
         </Card>
       )}
 
-      {assignment.classNotes && (
+      {(!assignment.classNotesType || assignment.classNotesType === "markdown") && assignment.classNotes && (
         <Card>
           <CardHeader>
             <CardTitle>Class notes</CardTitle>
@@ -203,6 +206,38 @@ export default function SubmitAssignment() {
               className="mdcontent text-sm text-[var(--fg)]"
               dangerouslySetInnerHTML={{ __html: marked(assignment.classNotes) as string }}
             />
+          </CardContent>
+        </Card>
+      )}
+      
+      {assignment.classNotesType === "link" && assignment.classNotesUrl && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Class notes (Link)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <a href={assignment.classNotesUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-[var(--accent)] hover:underline">
+              <Icon.External className="h-4 w-4" /> Open class notes link
+            </a>
+          </CardContent>
+        </Card>
+      )}
+      
+      {(assignment.classNotesType === "pdf" || assignment.classNotesType === "docx") && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Class notes ({assignment.classNotesType.toUpperCase()})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {classNotesAssetUrl ? (
+              <a href={classNotesAssetUrl} download={`class-notes.${assignment.classNotesType}`} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]">
+                <Icon.Download className="h-4 w-4" /> Download Class Notes
+              </a>
+            ) : classNotesAssetError ? (
+              <div className="text-sm text-[var(--danger)]">{classNotesAssetError}</div>
+            ) : (
+              <div className="text-sm text-[var(--fg-muted)]">Loading file...</div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -352,8 +387,8 @@ export default function SubmitAssignment() {
                 <p className="text-sm leading-relaxed text-[var(--fg-muted)]">{assignment.description}</p>
               )}
             </div>
-            {pdfBriefUrl ? (
-              <iframe src={pdfBriefUrl} className="flex-1 rounded-lg border border-[var(--border)]" title="Assignment brief" />
+            {assetBriefUrl ? (
+              <iframe src={assetBriefUrl} className="flex-1 rounded-lg border border-[var(--border)]" title="Assignment brief" />
             ) : briefError ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-4 py-8 text-center">
                 <Icon.AlertTriangle className="h-5 w-5 text-[var(--danger)]" />

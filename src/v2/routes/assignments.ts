@@ -20,16 +20,21 @@ type AssignmentBody = {
   description?: string;
   rubric?: string;
   maxScore?: number;
-  sourceType?: "manual" | "markdown" | "notion" | "mixed" | "pdf";
+  sourceType?: "manual" | "markdown" | "notion" | "mixed" | "pdf" | "docx" | "link";
   sourceMarkdown?: string;
   sourceUrl?: string;
   sourcePdfPath?: string | null;
+  sourceDocxPath?: string | null;
   opensAt?: string;
   closesAt?: string;
   allowGithub?: boolean;
   allowFileUpload?: boolean;
   defaultProvider?: "openrouter";
+  classNotesType?: "markdown" | "pdf" | "docx" | "link" | null;
   classNotes?: string;
+  classNotesUrl?: string | null;
+  classNotesPdfPath?: string | null;
+  classNotesDocxPath?: string | null;
   isGroupAssignment?: boolean;
   groupCount?: number;
   groupQuestionMode?: "same" | "per_group";
@@ -38,10 +43,11 @@ type AssignmentBody = {
   questions?: string | null;
 };
 
-function validateAssignmentSource(sourceType: string | undefined, sourceMarkdown: string | null | undefined, sourceUrl: string | null | undefined, sourcePdfPath: string | null | undefined): string | null {
+function validateAssignmentSource(sourceType: string | undefined, sourceMarkdown: string | null | undefined, sourceUrl: string | null | undefined, sourcePdfPath: string | null | undefined, sourceDocxPath: string | null | undefined): string | null {
   if (sourceType === "pdf" && !sourcePdfPath) return "Please upload a PDF brief before creating the assignment.";
+  if (sourceType === "docx" && !sourceDocxPath) return "Please upload a DOCX brief before creating the assignment.";
   if (sourceType === "markdown" && !(sourceMarkdown && sourceMarkdown.trim())) return "Please provide markdown content for the assignment brief.";
-  if (sourceType === "notion" && !(sourceUrl && sourceUrl.trim())) return "Please provide a Notion URL for the assignment brief.";
+  if ((sourceType === "notion" || sourceType === "link") && !(sourceUrl && sourceUrl.trim())) return "Please provide a valid URL for the assignment brief.";
   return null;
 }
 
@@ -155,7 +161,7 @@ export const assignmentRoutes = {
     const body = await parseJson<AssignmentBody>(request);
     if (!body.title || !body.closesAt) return json({ error: "Missing required assignment fields." }, 400);
 
-    const sourceErr = validateAssignmentSource(body.sourceType, body.sourceMarkdown, body.sourceUrl, body.sourcePdfPath);
+    const sourceErr = validateAssignmentSource(body.sourceType, body.sourceMarkdown, body.sourceUrl, body.sourcePdfPath, body.sourceDocxPath);
     if (sourceErr) return json({ error: sourceErr }, 400);
 
     const opensAt = body.opensAt ? new Date(body.opensAt) : new Date();
@@ -193,6 +199,7 @@ export const assignmentRoutes = {
       sourceMarkdown: body.sourceMarkdown?.trim() || null,
       sourceUrl: body.sourceUrl?.trim() || null,
       sourcePdfPath: body.sourcePdfPath || null,
+      sourceDocxPath: body.sourceDocxPath || null,
       createdBy: user.userId,
       opensAt,
       closesAt,
@@ -200,7 +207,11 @@ export const assignmentRoutes = {
       allowGithub: effectiveAllowGithub,
       allowFileUpload: body.allowFileUpload ?? true,
       defaultProvider: "openrouter",
+      classNotesType: body.classNotesType || null,
       classNotes: body.classNotes?.trim() || null,
+      classNotesUrl: body.classNotesUrl?.trim() || null,
+      classNotesPdfPath: body.classNotesPdfPath || null,
+      classNotesDocxPath: body.classNotesDocxPath || null,
       questions: body.questions?.trim() || null,
       isGroupAssignment,
       groupCount,
@@ -322,7 +333,8 @@ export const assignmentRoutes = {
     const nextSourceMarkdown = body.sourceMarkdown !== undefined ? (body.sourceMarkdown?.trim() || null) : existing.sourceMarkdown;
     const nextSourceUrl = body.sourceUrl !== undefined ? (body.sourceUrl?.trim() || null) : existing.sourceUrl;
     const nextSourcePdfPath = body.sourcePdfPath !== undefined ? (body.sourcePdfPath || null) : existing.sourcePdfPath;
-    const sourceErr = validateAssignmentSource(nextSourceType, nextSourceMarkdown, nextSourceUrl, nextSourcePdfPath);
+    const nextSourceDocxPath = body.sourceDocxPath !== undefined ? (body.sourceDocxPath || null) : existing.sourceDocxPath;
+    const sourceErr = validateAssignmentSource(nextSourceType, nextSourceMarkdown, nextSourceUrl, nextSourcePdfPath, nextSourceDocxPath);
     if (sourceErr) return json({ error: sourceErr }, 400);
 
     const update: Record<string, unknown> = {};
@@ -333,10 +345,15 @@ export const assignmentRoutes = {
     if (body.sourceMarkdown !== undefined) update.sourceMarkdown = body.sourceMarkdown?.trim() || null;
     if (body.sourceUrl !== undefined) update.sourceUrl = body.sourceUrl?.trim() || null;
     if (body.sourcePdfPath !== undefined) update.sourcePdfPath = body.sourcePdfPath || null;
+    if (body.sourceDocxPath !== undefined) update.sourceDocxPath = body.sourceDocxPath || null;
     if (body.allowGithub !== undefined) update.allowGithub = body.allowGithub;
     if (body.allowFileUpload !== undefined) update.allowFileUpload = body.allowFileUpload;
     if (body.maxScore !== undefined) update.maxScore = body.maxScore > 0 ? Math.round(body.maxScore) : 100;
+    if (body.classNotesType !== undefined) update.classNotesType = body.classNotesType || null;
     if (body.classNotes !== undefined) update.classNotes = body.classNotes?.trim() || null;
+    if (body.classNotesUrl !== undefined) update.classNotesUrl = body.classNotesUrl?.trim() || null;
+    if (body.classNotesPdfPath !== undefined) update.classNotesPdfPath = body.classNotesPdfPath || null;
+    if (body.classNotesDocxPath !== undefined) update.classNotesDocxPath = body.classNotesDocxPath || null;
     if (body.questions !== undefined) update.questions = body.questions?.trim() || null;
     if (body.cohortId !== undefined) update.cohortId = body.cohortId?.trim() || null;
     if (body.track !== undefined) update.track = body.track || null;
@@ -543,7 +560,7 @@ export const assignmentRoutes = {
 
   async uploadBrief(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can upload assignment briefs." }, 403);
+    if (!isStaff(user.role)) return json({ error: "Only staff can upload assignment files." }, 403);
 
     const ct = request.headers.get("content-type") || "";
     if (!ct.includes("multipart/form-data")) return json({ error: "Multipart form data required." }, 400);
@@ -551,32 +568,66 @@ export const assignmentRoutes = {
     const fd = await request.formData();
     const file = fd.get("file") as File | null;
     if (!file) return json({ error: "No file provided." }, 400);
-    if (!file.name.toLowerCase().endsWith(".pdf")) return json({ error: "Only PDF files are accepted." }, 400);
-    if (file.size > MAX_BRIEF_SIZE) return json({ error: "PDF must be under 100 MB." }, 400);
+    
+    const isPdf = file.name.toLowerCase().endsWith(".pdf");
+    const isDocx = file.name.toLowerCase().endsWith(".docx");
+    if (!isPdf && !isDocx) return json({ error: "Only PDF and DOCX files are accepted." }, 400);
+    if (file.size > MAX_BRIEF_SIZE) return json({ error: "File must be under 100 MB." }, 400);
 
     const briefId = randomUUID();
+    const ext = isPdf ? "pdf" : "docx";
     const buffer = Buffer.from(await file.arrayBuffer());
-    await storageUpload(`briefs/${briefId}.pdf`, buffer, "application/pdf");
+    await storageUpload(`briefs/${briefId}.${ext}`, buffer, isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 
-    return json({ briefId });
+    return json({ briefId, ext });
   },
 
   async getBrief(request: Request, params: Record<string, string>) {
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment) return new Response("Not found", { status: 404 });
 
-    const briefId = assignment.sourcePdfPath;
+    const isDocx = assignment.sourceType === "docx";
+    const briefId = isDocx ? assignment.sourceDocxPath : assignment.sourcePdfPath;
     if (!briefId) return new Response("Brief not found", { status: 404 });
 
-    const buffer = await storageDownload(`briefs/${briefId}.pdf`).catch(() => null);
+    const ext = isDocx ? "docx" : "pdf";
+    const buffer = await storageDownload(`briefs/${briefId}.${ext}`).catch(() => null);
     if (!buffer) return new Response("Brief not found", { status: 404 });
 
-    return new Response(buffer, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": "inline",
-      },
-    });
+    const headers: Record<string, string> = {
+      "Content-Type": isDocx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf",
+    };
+    if (isDocx) {
+      headers["Content-Disposition"] = `attachment; filename="${assignment.title.replace(/[^a-z0-9]/gi, '_')}_Brief.docx"`;
+    } else {
+      headers["Content-Disposition"] = "inline";
+    }
+
+    return new Response(buffer as unknown as BodyInit, { headers });
+  },
+
+  async getClassNotesAsset(request: Request, params: Record<string, string>) {
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!assignment) return new Response("Not found", { status: 404 });
+
+    const isDocx = assignment.classNotesType === "docx";
+    const assetId = isDocx ? assignment.classNotesDocxPath : assignment.classNotesPdfPath;
+    if (!assetId) return new Response("Asset not found", { status: 404 });
+
+    const ext = isDocx ? "docx" : "pdf";
+    const buffer = await storageDownload(`briefs/${assetId}.${ext}`).catch(() => null);
+    if (!buffer) return new Response("Asset not found", { status: 404 });
+
+    const headers: Record<string, string> = {
+      "Content-Type": isDocx ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf",
+    };
+    if (isDocx) {
+      headers["Content-Disposition"] = `attachment; filename="${assignment.title.replace(/[^a-z0-9]/gi, '_')}_ClassNotes.docx"`;
+    } else {
+      headers["Content-Disposition"] = "inline";
+    }
+
+    return new Response(buffer as unknown as BodyInit, { headers });
   },
 
   async regenerateGroups(request: Request, params: Record<string, string>) {
