@@ -467,7 +467,8 @@ export default function ReviewSubmission() {
     );
   }
 
-  const canRelease = review && review.status === "completed";
+  const parsedOverrideScore = Number(overrideScore);
+  const canRelease = overrideScore.trim() !== "" && Number.isFinite(parsedOverrideScore) && parsedOverrideScore >= 0;
   const firstName = submission.studentName?.split(" ")[0] || "Student";
 
   return (
@@ -650,7 +651,7 @@ export default function ReviewSubmission() {
                 </pre>
               ) : (
                 <div className="flex h-40 items-center justify-center text-sm text-[var(--fg-muted)]">
-                  No files yet. Run Gemini review to clone the repo.
+                  No files available for this submission.
                 </div>
               )}
             </div>
@@ -850,7 +851,7 @@ export default function ReviewSubmission() {
                     onClick={applyOverride}
                     disabled={!canRelease}
                     loading={releasing}
-                    title={!canRelease ? "Run AI review first" : undefined}
+                    title={!canRelease ? "Enter a score first" : undefined}
                   >
                     <Icon.Check className="h-3.5 w-3.5" />
                     Release grade
@@ -859,7 +860,7 @@ export default function ReviewSubmission() {
                 </div>
                 {!canRelease && (
                   <p className="text-center text-[11px] text-[var(--fg-muted)]">
-                    Run AI review first to enable grading.
+                    Enter a score to release a grade.
                   </p>
                 )}
 
