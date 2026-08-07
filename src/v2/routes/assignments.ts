@@ -309,6 +309,27 @@ export const assignmentRoutes = {
     return json(a);
   },
 
+  // Unauthenticated: returns only the brief-facing fields so the assignment
+  // brief can be shared with anyone via a public link, without exposing
+  // teacher-only data (rubric, createdBy, cohortId, etc).
+  async getPublicBrief(request: Request, params: Record<string, string>) {
+    const a = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!a) return json({ error: "Assignment not found." }, 404);
+    return json({
+      id: a.id,
+      title: a.title,
+      description: a.description,
+      sourceType: a.sourceType,
+      sourceMarkdown: a.sourceMarkdown,
+      sourceUrl: a.sourceUrl,
+      sourcePdfPath: a.sourcePdfPath,
+      sourceDocxPath: a.sourceDocxPath,
+      maxScore: a.maxScore,
+      closesAt: a.closesAt,
+      track: a.track,
+    });
+  },
+
   async update(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
     if (!isStaff(user.role)) return json({ error: "Only staff can edit assignments." }, 403);

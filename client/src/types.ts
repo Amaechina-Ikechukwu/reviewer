@@ -74,6 +74,20 @@ export type Assignment = {
   createdAt: string;
 };
 
+export type PublicAssignmentBrief = {
+  id: string;
+  title: string;
+  description: string;
+  sourceType: AssignmentSourceType;
+  sourceMarkdown: string | null;
+  sourceUrl: string | null;
+  sourcePdfPath: string | null;
+  sourceDocxPath: string | null;
+  maxScore: number;
+  closesAt: string;
+  track?: Track | null;
+};
+
 export type GroupSourceType = "markdown" | "link" | "pdf";
 
 export type AssignmentGroup = {

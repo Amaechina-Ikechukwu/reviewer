@@ -35,6 +35,14 @@ export default function AssignmentDetailPage() {
   const [error, setError] = useState("");
   const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  function copyPublicLink() {
+    if (!assignment) return;
+    navigator.clipboard.writeText(`${window.location.origin}/assignments/${assignment.id}/brief`);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  }
 
   const handleDelete = async (submissionId: string, studentName: string | null) => {
     if (!confirm(`Delete submission from ${studentName || "student"}? They will be able to resubmit.`)) return;
@@ -124,6 +132,10 @@ export default function AssignmentDetailPage() {
             description={assignment.description || undefined}
             actions={
               <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={copyPublicLink}>
+                  <Icon.Link className="h-3.5 w-3.5" />
+                  {linkCopied ? "Copied!" : "Copy public link"}
+                </Button>
                 <Link to={`/teacher/assignments/${assignment.id}/edit`}>
                   <Button variant="secondary" size="sm">
                     <Icon.Edit className="h-3.5 w-3.5" />
