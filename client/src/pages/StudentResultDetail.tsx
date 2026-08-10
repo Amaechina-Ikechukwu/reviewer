@@ -2,15 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { marked } from "marked";
 import StudentShell from "../components/StudentShell";
+import SubmissionViewer from "../components/SubmissionViewer";
 import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { ReviewStatusPill } from "../components/ui/StatusPill";
 import { api } from "../api";
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
-import type { Review } from "../types";
+import type { CodeFile, Review } from "../types";
 
   type SubmissionResponse = {
     submission: {
@@ -19,6 +21,7 @@ import type { Review } from "../types";
       submissionType: "github" | "file_upload";
       githubUrl: string | null;
       isLate: boolean;
+      shareToken?: string | null;
     };
     assignment: {
       id: string;
@@ -47,6 +50,45 @@ export default function StudentResultDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
+  const [files, setFiles] = useState<CodeFile[]>([]);
+  const [filesWarning, setFilesWarning] = useState("");
+  const [filesLoading, setFilesLoading] = useState(true);
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const shareUrl = shareToken ? `${window.location.origin}/s/${shareToken}` : "";
+
+  async function copyPublicLink() {
+    if (!submissionId) return;
+    setSharing(true);
+    try {
+      const token =
+        shareToken || (await api<{ shareToken: string }>(`/submissions/${submissionId}/share`, { method: "POST" })).shareToken;
+      setShareToken(token);
+      await navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Could not create a public link");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function stopSharing() {
+    if (!submissionId) return;
+    setSharing(true);
+    try {
+      await api(`/submissions/${submissionId}/share`, { method: "DELETE" });
+      setShareToken(null);
+      toast().success("Public link disabled");
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Could not disable the link");
+    } finally {
+      setSharing(false);
+    }
+  }
 
   useEffect(() => {
     if (!data?.assignment) return;
@@ -73,11 +115,29 @@ export default function StudentResultDetail() {
       api<Review>(`/reviews/${submissionId}`).catch(() => null),
     ])
       .then(([s, r]) => {
-        if (s) setData(s);
+        if (s) {
+          setData(s);
+          setShareToken(s.submission.shareToken || null);
+        }
         if (r) setReview(r);
       })
       .catch(() => toast().error("Failed to load result"))
       .finally(() => setLoading(false));
+  }, [submissionId]);
+
+  useEffect(() => {
+    if (!submissionId) return;
+    setFilesLoading(true);
+    api<{ files: CodeFile[]; warning?: string }>(`/submissions/${submissionId}/files`)
+      .then((res) => {
+        setFiles(res.files || []);
+        setFilesWarning(res.warning || "");
+      })
+      .catch(() => {
+        setFiles([]);
+        setFilesWarning("Your submitted files could not be loaded right now.");
+      })
+      .finally(() => setFilesLoading(false));
   }, [submissionId]);
 
   if (loading) {
@@ -161,6 +221,41 @@ export default function StudentResultDetail() {
                 <Icon.External className="h-3 w-3" />
               </a>
             )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={copyPublicLink} loading={sharing}>
+                <Icon.Link className="h-3.5 w-3.5" />
+                {linkCopied ? "Copied!" : shareToken ? "Copy public link" : "Create public link"}
+              </Button>
+              {shareToken && (
+                <>
+                  <a href={shareUrl} target="_blank" rel="noreferrer">
+                    <Button variant="ghost" size="sm">
+                      <Icon.External className="h-3.5 w-3.5" />
+                      Open
+                    </Button>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={stopSharing}
+                    disabled={sharing}
+                    className="text-xs font-medium text-[var(--fg-muted)] underline-offset-2 hover:text-[var(--danger)] hover:underline disabled:opacity-50"
+                  >
+                    Disable link
+                  </button>
+                </>
+              )}
+            </div>
+            {shareToken && (
+              <p className="mt-2 max-w-xl break-all font-mono text-[11px] text-[var(--fg-muted)]">
+                {shareUrl}
+              </p>
+            )}
+            <p className="mt-1 max-w-xl text-[11px] text-[var(--fg-muted)]">
+              {shareToken
+                ? "Anyone with this link can view your submitted work. Your grade and feedback stay private."
+                : "Share your work with anyone — no sign-in needed. Your grade and feedback stay private."}
+            </p>
           </div>
 
           <div className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-6 py-4 text-center shadow-[var(--shadow-sm)]">
@@ -177,6 +272,41 @@ export default function StudentResultDetail() {
             )}
           </div>
         </div>
+
+        {/* What the student actually submitted */}
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <CardTitle>
+              <span className="inline-flex items-center gap-2">
+                <Icon.FileCode className="h-4 w-4 text-[var(--fg-muted)]" />
+                Your submission
+              </span>
+            </CardTitle>
+            {files.length > 0 && (
+              <span className="text-xs text-[var(--fg-muted)]">
+                {files.length} {files.length === 1 ? "file" : "files"}
+              </span>
+            )}
+          </CardHeader>
+          {filesLoading ? (
+            <CardContent className="py-10 text-center text-sm text-[var(--fg-muted)]">
+              Loading your files...
+            </CardContent>
+          ) : files.length === 0 ? (
+            <CardContent className="py-10 text-center text-sm text-[var(--fg-muted)]">
+              {filesWarning || "No files are available for this submission."}
+            </CardContent>
+          ) : (
+            <>
+              {filesWarning && (
+                <div className="border-b border-[var(--border)] bg-[var(--warn-soft)] px-5 py-2 text-xs text-[var(--warn)]">
+                  {filesWarning}
+                </div>
+              )}
+              <SubmissionViewer files={files} previewTitle="Your submission" className="rounded-none border-0" />
+            </>
+          )}
+        </Card>
 
         {/* Assignment doc */}
         {assignment.sourceType === "pdf" ? (

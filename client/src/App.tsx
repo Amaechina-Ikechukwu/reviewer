@@ -20,6 +20,7 @@ import GradebookPage from "./pages/GradebookPage";
 import AssignmentsPage from "./pages/AssignmentsPage";
 import AssignmentDetailPage from "./pages/AssignmentDetailPage";
 import PublicAssignmentBrief from "./pages/PublicAssignmentBrief";
+import PublicSubmission from "./pages/PublicSubmission";
 import CreateAssignment from "./pages/CreateAssignment";
 import EditAssignment from "./pages/EditAssignment";
 import ManageGroups from "./pages/ManageGroups";
@@ -132,6 +133,7 @@ export default function App() {
       <Route path="/reset/:token" element={<ResetPassword />} />
       <Route path="/changelog" element={<ChangelogPage />} />
       <Route path="/assignments/:id/brief" element={<PublicAssignmentBrief />} />
+      <Route path="/s/:token" element={<PublicSubmission />} />
       <Route path="/" element={<HomeRedirect />} />
 
       <Route

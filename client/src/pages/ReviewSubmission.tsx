@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { marked } from "marked";
+import SubmissionViewer from "../components/SubmissionViewer";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
@@ -54,241 +55,6 @@ function structureLabel(classification?: string) {
   }
 }
 
-function buildReactPreviewDocument(files: CodeFile[]): string | null {
-  const hasReact = files.some((f) => /\.(jsx|tsx)$/i.test(f.filename));
-  if (!hasReact) return null;
-
-  // Partition files into text sources and binary images
-  const textFiles: Record<string, string> = {};
-  const imageFiles: Record<string, string> = {};
-  for (const file of files) {
-    if (file.language === "image") imageFiles[file.filename] = file.content;
-    else textFiles[file.filename] = file.content;
-  }
-
-  // Find an entry file: prefer src/main, src/index, then App
-  const entryCandidates = [
-    "src/main.jsx", "src/main.tsx", "src/index.jsx", "src/index.tsx",
-    "main.jsx", "main.tsx", "index.jsx", "index.tsx",
-    "src/App.jsx", "src/App.tsx", "App.jsx", "App.tsx",
-  ];
-  const allKeys = Object.keys(textFiles);
-  let entry = entryCandidates.find((c) => textFiles[c]) ||
-    allKeys.find((k) => /\/(main|index)\.(jsx|tsx)$/i.test(k)) ||
-    allKeys.find((k) => /\.(jsx|tsx)$/i.test(k));
-  if (!entry) return null;
-
-  // Loader runs inside the iframe — written as a plain string, no interpolation inside.
-  const loaderScript = `
-(async () => {
-  const root = document.getElementById('root');
-  const errBox = document.getElementById('__err');
-  const showErr = (msg) => {
-    errBox.textContent = msg;
-    errBox.style.display = 'block';
-    if (root) root.innerHTML = '';
-    console.error(msg);
-  };
-
-  try {
-    const FILES = window.__FILES__;
-    const IMAGES = window.__IMAGES__;
-    const ENTRY = window.__ENTRY__;
-
-    const TEXT_EXT = ['.jsx', '.tsx', '.js', '.ts', '.mjs', '.cjs'];
-
-    function normalize(p) {
-      const parts = p.split('/');
-      const out = [];
-      for (const part of parts) {
-        if (part === '..') out.pop();
-        else if (part !== '.' && part !== '') out.push(part);
-      }
-      return out.join('/');
-    }
-
-    function resolveRel(base, rel) {
-      const lastSlash = base.lastIndexOf('/');
-      const baseDir = lastSlash >= 0 ? base.substring(0, lastSlash) : '';
-      return normalize((baseDir ? baseDir + '/' : '') + rel);
-    }
-
-    function findFile(path) {
-      if (FILES[path]) return path;
-      if (IMAGES[path]) return path;
-      for (const ext of TEXT_EXT) {
-        if (FILES[path + ext]) return path + ext;
-      }
-      for (const ext of TEXT_EXT) {
-        if (FILES[path + '/index' + ext]) return path + '/index' + ext;
-      }
-      return null;
-    }
-
-    const blobCache = {};
-    const cssInjected = new Set();
-
-    async function loadModule(path) {
-      if (blobCache[path]) return blobCache[path];
-
-      const found = findFile(path);
-      if (!found) throw new Error('Cannot resolve module: ' + path);
-
-      if (IMAGES[found]) {
-        const js = 'export default ' + JSON.stringify(IMAGES[found]) + ';';
-        const blob = new Blob([js], { type: 'application/javascript' });
-        const url = URL.createObjectURL(blob);
-        blobCache[path] = url;
-        return url;
-      }
-
-      let code = FILES[found];
-
-      // Side-effect CSS imports → inject <style>
-      code = code.replace(/import\\s+['"]([^'"]+\\.css)['"]\\s*;?/g, (_, p) => {
-        const resolved = resolveRel(found, p);
-        if (!cssInjected.has(resolved)) {
-          cssInjected.add(resolved);
-          const css = FILES[resolved];
-          if (css) {
-            const style = document.createElement('style');
-            style.textContent = css;
-            document.head.appendChild(style);
-          }
-        }
-        return '';
-      });
-
-      // Rewrite bare package imports (except react* and local src/ aliases) to esm.sh — do this BEFORE blob substitution
-      code = code.replace(/(\\bfrom\\s+|\\bimport\\s*\\(\\s*)(["\\'])(@?[a-zA-Z][\\w\\-.]*(?:\\/[\\w\\-.@]+)*)\\2/g, (m, prefix, q, spec) => {
-        if (spec === 'react' || spec === 'react-dom' || spec.startsWith('react/') || spec.startsWith('react-dom/')) return m;
-        // CRA / Vite path aliases — keep as-is for local resolution
-        if (spec.startsWith('src/')) return m;
-        return prefix + q + 'https://esm.sh/' + spec + q;
-      });
-
-      // Collect relative specifiers
-      const specs = new Set();
-      code.replace(/\\bfrom\\s+['"](\\.[^'"]+)['"]/g, (_, s) => { specs.add(s); return ''; });
-      code.replace(/\\bimport\\s*\\(\\s*['"](\\.[^'"]+)['"]\\s*\\)/g, (_, s) => { specs.add(s); return ''; });
-
-      // Resolve each relative import to a blob URL
-      for (const spec of specs) {
-        const resolvedPath = resolveRel(found, spec);
-        const blobUrl = await loadModule(resolvedPath);
-        const escaped = spec.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
-        code = code.replace(new RegExp('(\\\\bfrom\\\\s+|\\\\bimport\\\\s*\\\\(\\\\s*)(["\\'])' + escaped + '\\\\2', 'g'), (_, prefix, q) => prefix + q + blobUrl + q);
-      }
-
-      // Resolve CRA/Vite src/ path aliases (project-root-relative, no resolveRel needed)
-      const srcSpecs = new Set();
-      code.replace(/\\bfrom\\s+['"](src\\/[^'"]+)['"]/g, (_, s) => { srcSpecs.add(s); return ''; });
-      code.replace(/\\bimport\\s*\\(\\s*['"](src\\/[^'"]+)['"]\\s*\\)/g, (_, s) => { srcSpecs.add(s); return ''; });
-      for (const spec of srcSpecs) {
-        const blobUrl = await loadModule(spec);
-        const escaped = spec.replace(/[.*+?^\${}()|[\\]\\\\]/g, '\\\\$&');
-        code = code.replace(new RegExp('(\\\\bfrom\\\\s+|\\\\bimport\\\\s*\\\\(\\\\s*)(["\\'])' + escaped + '\\\\2', 'g'), (_, prefix, q) => prefix + q + blobUrl + q);
-      }
-
-      // Transform JSX / TS with Babel
-      const presets = [['react', { runtime: 'automatic' }]];
-      if (/\\.tsx?$/i.test(found)) {
-        presets.push(['typescript', { isTSX: true, allExtensions: true }]);
-      }
-      let transformed;
-      try {
-        transformed = Babel.transform(code, { presets, filename: found, sourceType: 'module' }).code;
-      } catch (e) {
-        throw new Error('Babel failed in ' + found + ': ' + e.message);
-      }
-
-      const blob = new Blob([transformed], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
-      blobCache[path] = url;
-      return url;
-    }
-
-    const url = await loadModule(ENTRY);
-    const entryCode = FILES[ENTRY] || '';
-    const hasRenderCall = /createRoot\\s*\\(|ReactDOM\\.render\\s*\\(/.test(entryCode);
-
-    if (hasRenderCall) {
-      await import(url);
-    } else {
-      const mod = await import(url);
-      const Component = mod.default;
-      if (!Component) throw new Error('Entry ' + ENTRY + ' has no default export to render.');
-      const React = await import('react');
-      const ReactDOMClient = await import('react-dom/client');
-      ReactDOMClient.createRoot(root).render(React.createElement(Component));
-    }
-  } catch (err) {
-    showErr('Preview error: ' + (err && err.message ? err.message : String(err)) + (err && err.stack ? '\\n\\n' + err.stack : ''));
-  }
-})();
-`;
-
-  const filesJson = JSON.stringify(textFiles).replace(/</g, "\\u003c");
-  const imagesJson = JSON.stringify(imageFiles).replace(/</g, "\\u003c");
-  const entryJson = JSON.stringify(entry);
-
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react-dom": "https://esm.sh/react-dom@18.3.1",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-    "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime"
-  }
-}
-</script>
-<script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
-<style>
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-body { font-family: system-ui, -apple-system, sans-serif; background: #fff; }
-#root { min-height: 100vh; }
-#__err { display: none; color: #b42318; background: #fef3f2; border: 1px solid #fda29b; padding: 16px; margin: 16px; border-radius: 8px; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; }
-</style>
-</head>
-<body>
-<div id="root"></div>
-<pre id="__err"></pre>
-<script>
-window.__FILES__ = ${filesJson};
-window.__IMAGES__ = ${imagesJson};
-window.__ENTRY__ = ${entryJson};
-</script>
-<script>${loaderScript}</script>
-</body>
-</html>`;
-}
-
-function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile) {
-  const dir = htmlFile.filename.includes("/")
-    ? htmlFile.filename.slice(0, htmlFile.filename.lastIndexOf("/") + 1)
-    : "";
-
-  let html = htmlFile.content;
-  const css = files
-    .filter((f) => f.filename.toLowerCase().endsWith(".css") && f.filename.startsWith(dir))
-    .map((f) => `<style>${f.content}</style>`)
-    .join("\n");
-  const js = files
-    .filter((f) => f.filename.toLowerCase().endsWith(".js") && f.filename.startsWith(dir))
-    .map((f) => `<script>${f.content}<\/script>`)
-    .join("\n");
-
-  html = html.includes("</head>") ? html.replace("</head>", `${css}</head>`) : `${css}${html}`;
-  html = html.includes("</body>") ? html.replace("</body>", `${js}</body>`) : `${html}${js}`;
-  return html;
-}
 
 function ScorePill({ score, max }: { score: number; max: number }) {
   const pct = max > 0 ? score / max : 0;
@@ -323,7 +89,7 @@ export default function ReviewSubmission() {
   useEffect(() => {
     api<typeof availableProviders>("/reviews/providers").then(setAvailableProviders).catch(() => {});
   }, []);
-  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [selectedFilename, setSelectedFilename] = useState("");
   const [overrideScore, setOverrideScore] = useState("");
   const [finalFeedback, setFinalFeedback] = useState("");
   const [message, setMessage] = useState("");
@@ -363,30 +129,11 @@ export default function ReviewSubmission() {
   }, [submissionId]);
 
   useEffect(() => {
-    if (selectedFileIndex >= files.length) setSelectedFileIndex(0);
-  }, [files, selectedFileIndex]);
+    if (files.length === 0) return;
+    if (!files.some((file) => file.filename === selectedFilename)) setSelectedFilename(files[0].filename);
+  }, [files, selectedFilename]);
 
-  const selectedFile = files[selectedFileIndex] || files[0];
-  const isHtmlFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".html");
-  const isImageFile = (f?: CodeFile) => f?.language === "image";
-  const isSvgFile = (f?: CodeFile) => !!f && f.filename.toLowerCase().endsWith(".svg");
-  const isPdfFile = (f?: CodeFile) => f?.language === "pdf";
-
-  const reactPreviewDoc = useMemo(() => {
-    const hasReact = files.some((f) => /\.(jsx|tsx)$/i.test(f.filename));
-    return hasReact ? buildReactPreviewDocument(files) : null;
-  }, [files]);
-
-  const previewDoc = useMemo(() => {
-    if (selectedFile && isHtmlFile(selectedFile)) return buildPreviewDocument(files, selectedFile);
-    return reactPreviewDoc;
-  }, [files, selectedFile, reactPreviewDoc]);
-
-  const previewLabel = useMemo(() => {
-    if (selectedFile && isHtmlFile(selectedFile)) return "HTML Preview";
-    if (reactPreviewDoc) return "React Preview";
-    return "Preview";
-  }, [selectedFile, reactPreviewDoc]);
+  const selectedFile = files.find((file) => file.filename === selectedFilename) || files[0];
 
   const maxScore = review?.maxScore || submission?.assignment.maxScore || 100;
   const geminiSummary = review?.feedback?.summary || "No Gemini review has been run for this submission yet.";
@@ -397,17 +144,9 @@ export default function ReviewSubmission() {
   const fileScores = review?.feedback?.fileScores || [];
   const averageFileScore = review?.feedback?.averageFileScore;
   const questionGroups = review?.feedback?.questionGroups || [];
-  const selectedFileLineCount =
-    selectedFile && !isImageFile(selectedFile) && !isSvgFile(selectedFile) && !isPdfFile(selectedFile)
-      ? selectedFile.content.split("\n").length
-      : 0;
-  const selectedFileScore = selectedFile
-    ? fileScores.find((entry) => entry.filename === selectedFile.filename)
-    : undefined;
 
   function focusFile(filename: string) {
-    const nextIndex = files.findIndex((file) => file.filename === filename);
-    if (nextIndex >= 0) setSelectedFileIndex(nextIndex);
+    if (files.some((file) => file.filename === filename)) setSelectedFilename(filename);
   }
 
   async function runReview(providerKey: ProviderKey = "gemini") {
@@ -488,7 +227,7 @@ export default function ReviewSubmission() {
               <h1 className="truncate text-2xl font-semibold tracking-tight">{submission.assignment.title}</h1>
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--fg-muted)]">
                 <span className="font-medium text-[var(--fg)]">{submission.studentName || "Student"}</span>
-                <span>·</span>
+                <span>Â·</span>
                 <span>{formatDateTime(submission.submission.submittedAt)}</span>
               </div>
             </div>
@@ -586,109 +325,13 @@ export default function ReviewSubmission() {
         )}
 
         {/* Code + preview */}
-        <Card className="overflow-hidden">
-          {files.length > 0 && (
-            <div className="flex items-center gap-1 overflow-x-auto border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-2 py-1.5">
-              {files.map((file, index) => (
-                <button
-                  key={file.filename}
-                  onClick={() => setSelectedFileIndex(index)}
-                  type="button"
-                  className={cn(
-                    "whitespace-nowrap rounded-md px-2.5 py-1 font-mono text-[11px] transition-colors",
-                    index === selectedFileIndex
-                      ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm ring-1 ring-[var(--border)]"
-                      : "text-[var(--fg-muted)] hover:bg-[var(--surface)]/60 hover:text-[var(--fg)]",
-                  )}
-                >
-                  {file.filename}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className={cn("grid", previewDoc !== null ? "lg:grid-cols-2" : "grid-cols-1")}>
-            <div className="flex min-w-0 flex-col border-r border-[var(--border)]">
-              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)]/30 px-4 py-2 text-[11px] text-[var(--fg-muted)]">
-                <span className="truncate font-mono">{selectedFile?.filename || "—"}</span>
-                <span>
-                  {selectedFile && isImageFile(selectedFile)
-                    ? "image"
-                    : selectedFile && isSvgFile(selectedFile)
-                      ? "svg"
-                      : selectedFile && isPdfFile(selectedFile)
-                        ? "pdf"
-                        : selectedFile
-                          ? `${selectedFileLineCount} lines`
-                          : ""}
-                </span>
-              </div>
-              {selectedFile && isImageFile(selectedFile) ? (
-                <div className="flex max-h-[520px] items-center justify-center overflow-auto bg-[var(--surface)] p-4">
-                  <img
-                    src={selectedFile.content}
-                    alt={selectedFile.filename}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
-              ) : selectedFile && isSvgFile(selectedFile) ? (
-                <div className="flex max-h-[520px] items-center justify-center overflow-auto bg-[var(--surface)] p-4">
-                  <img
-                    src={`data:image/svg+xml,${encodeURIComponent(selectedFile.content)}`}
-                    alt={selectedFile.filename}
-                    className="max-h-full max-w-full object-contain"
-                  />
-                </div>
-              ) : selectedFile && isPdfFile(selectedFile) ? (
-                <iframe
-                  src={selectedFile.content}
-                  title={selectedFile.filename}
-                  className="h-[520px] w-full border-0 bg-[var(--surface)]"
-                />
-              ) : selectedFile ? (
-                <pre className="m-0 max-h-[520px] overflow-auto bg-[var(--surface)] p-4 font-mono text-xs leading-relaxed text-[var(--fg)]">
-                  {selectedFile.content}
-                </pre>
-              ) : (
-                <div className="flex h-40 items-center justify-center text-sm text-[var(--fg-muted)]">
-                  No files available for this submission.
-                </div>
-              )}
-            </div>
-
-            {previewDoc !== null && (
-              <div className="flex min-w-0 flex-col">
-                <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)]/30 px-3 py-2">
-                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--danger)]/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--warn)]/70" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[var(--success)]/70" />
-                  <div className="ml-2 flex flex-1 items-center gap-1.5 truncate rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
-                    <Icon.Link className="h-3 w-3 shrink-0" />
-                    <span className="truncate">
-                      {previewLabel} — {submission.studentName || "Student"}
-                    </span>
-                  </div>
-                </div>
-                <iframe
-                  className="h-[520px] w-full border-0 bg-white"
-                  sandbox="allow-scripts"
-                  srcDoc={previewDoc}
-                  title="Student preview"
-                />
-              </div>
-            )}
-          </div>
-
-          {selectedFileScore && (
-            <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-muted)]/30 px-4 py-2.5">
-              <div className="min-w-0">
-                <div className="truncate font-mono text-xs font-semibold">{selectedFileScore.filename}</div>
-                <div className="truncate text-[11px] text-[var(--fg-muted)]">{selectedFileScore.summary}</div>
-              </div>
-              <ScorePill score={selectedFileScore.score} max={selectedFileScore.maxScore} />
-            </div>
-          )}
-        </Card>
+        <SubmissionViewer
+          files={files}
+          previewTitle={submission.studentName || "Student"}
+          fileScores={fileScores}
+          selectedFilename={selectedFile?.filename}
+          onSelectFile={setSelectedFilename}
+        />
 
         {/* Review analysis + assessment grid */}
         <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
@@ -902,15 +545,15 @@ export default function ReviewSubmission() {
             const opts: Option[] = [];
             for (const p of availableProviders) {
               if (p.name === "gemini") {
-                opts.push({ key: "gemini", label: "Gemini 2.5 Flash", sub: "Google · Reads PDF rubrics natively", isDefault: true, configured: p.configured });
+                opts.push({ key: "gemini", label: "Gemini 2.5 Flash", sub: "Google Â· Reads PDF rubrics natively", isDefault: true, configured: p.configured });
               } else if (p.name === "nvidia") {
-                opts.push({ key: "nvidia", label: "Gemma 4 31B", sub: "NVIDIA Build · Free tier", configured: p.configured });
+                opts.push({ key: "nvidia", label: "Gemma 4 31B", sub: "NVIDIA Build Â· Free tier", configured: p.configured });
               } else if (p.name === "openrouter") {
                 for (const m of p.models || []) {
                   opts.push({
                     key: `openrouter:${m.id}` as ProviderKey,
                     label: `${m.label} (OpenRouter)`,
-                    sub: m.note || "OpenRouter · Free",
+                    sub: m.note || "OpenRouter Â· Free",
                     configured: p.configured,
                   });
                 }

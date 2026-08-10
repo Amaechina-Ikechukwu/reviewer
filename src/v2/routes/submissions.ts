@@ -81,6 +81,56 @@ async function removeFiles(filePath?: string | null) {
   await rm(filePath, { recursive: true, force: true });
 }
 
+/** Students may read their own submission, and any submission belonging to a
+ * group they are a member of. Staff may read all of them. */
+async function canReadSubmission(user: { userId: string; role: string }, submission: any) {
+  if (isStaff(user.role)) return true;
+  if (submission.studentId === user.userId) return true;
+  if (!submission.groupId) return false;
+  const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+  return !!group && (group.memberIds || []).includes(user.userId);
+}
+
+/**
+ * Reads the submission's files, restoring them from object storage or
+ * re-cloning the repo when the ephemeral /tmp copy is gone.
+ */
+async function resolveSubmissionFiles(submission: any): Promise<{ files: any[]; warning?: string }> {
+  let filePath = submission.filePath;
+
+  if (!filePath || !existsSync(filePath)) {
+    const dest = join(TMP_DIR, submission.id);
+
+    if (submission.storageKey) {
+      try {
+        const rawBuffer = await storageDownload(submission.storageKey);
+        if (submission.storageKey.endsWith(".pdf")) {
+          await savePdfBuffer(rawBuffer, "submission.pdf", dest);
+        } else {
+          await extractZipBuffer(rawBuffer, dest);
+        }
+      } catch (err) {
+        console.error("[v2.submissions] Storage restore failed:", err);
+        return { files: [], warning: "Uploaded files could not be restored from storage." };
+      }
+    } else if (submission.githubUrl) {
+      try {
+        await cloneGithubRepo(submission.githubUrl, dest);
+      } catch (err) {
+        console.error("[v2.submissions] Re-clone failed:", err instanceof Error ? err.message : String(err));
+        return { files: [], warning: "Could not fetch files — repository may be private or unavailable." };
+      }
+    } else {
+      return { files: [], warning: "Uploaded files are no longer available on this server." };
+    }
+
+    filePath = dest;
+    await data.update(COLLECTIONS.submissions, submission.id, { filePath });
+  }
+
+  return { files: await readSubmissionFiles(filePath) };
+}
+
 export const submissionRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
@@ -362,14 +412,7 @@ export const submissionRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
     if (!submission) return json({ error: "Submission not found." }, 404);
-    if (user.role === "student" && submission.studentId !== user.userId) {
-      let allowed = false;
-      if (submission.groupId) {
-        const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
-        if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
-      }
-      if (!allowed) return json({ error: "Forbidden" }, 403);
-    }
+    if (!(await canReadSubmission(user, submission))) return json({ error: "Forbidden" }, 403);
 
     const [assignment, student] = await Promise.all([
       data.getById<any>(COLLECTIONS.assignments, submission.assignmentId),
@@ -388,50 +431,66 @@ export const submissionRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
     if (!submission) return json({ error: "Submission not found." }, 404);
-    if (user.role === "student" && submission.studentId !== user.userId) {
-      let allowed = false;
-      if (submission.groupId) {
-        const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
-        if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
-      }
-      if (!allowed) return json({ error: "Forbidden" }, 403);
-    }
+    if (!(await canReadSubmission(user, submission))) return json({ error: "Forbidden" }, 403);
 
-    let filePath = submission.filePath;
-    if (!filePath || !existsSync(filePath)) {
-      if (submission.storageKey) {
-        const dest = join(TMP_DIR, submission.id);
-        try {
-          const rawBuffer = await storageDownload(submission.storageKey);
-          if (submission.storageKey.endsWith(".pdf")) {
-            await savePdfBuffer(rawBuffer, `submission.pdf`, dest);
-          } else {
-            await extractZipBuffer(rawBuffer, dest);
-          }
-          filePath = dest;
-          await data.update(COLLECTIONS.submissions, submission.id, { filePath });
-        } catch (err) {
-          console.error(`[v2.getFiles] Storage restore failed:`, err);
-          return json({ files: [], warning: "Uploaded files could not be restored from storage." });
-        }
-      } else if (submission.githubUrl) {
-        const dest = join(TMP_DIR, submission.id);
-        try {
-          await cloneGithubRepo(submission.githubUrl, dest);
-          filePath = dest;
-          await data.update(COLLECTIONS.submissions, submission.id, { filePath });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[v2.getFiles] Re-clone failed:`, msg);
-          return json({ files: [], warning: "Could not fetch files — repository may be private or unavailable." });
-        }
-      } else {
-        return json({ files: [], warning: "Uploaded files are no longer available on this server." });
-      }
-    }
+    return json(await resolveSubmissionFiles(submission));
+  },
 
-    const files = await readSubmissionFiles(filePath);
-    return json({ files });
+  /** Mints (or returns) the unguessable token behind a submission's public link. */
+  async share(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+    if (!(await canReadSubmission(user, submission))) return json({ error: "Forbidden" }, 403);
+
+    if (submission.shareToken) return json({ shareToken: submission.shareToken });
+
+    const shareToken = randomBytes(16).toString("base64url");
+    await data.update(COLLECTIONS.submissions, submission.id, { shareToken, sharedAt: new Date() });
+
+    audit({ actorId: user.userId, action: "submission.shared", targetType: "submission", targetId: submission.id });
+    return json({ shareToken });
+  },
+
+  async unshare(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+    if (!(await canReadSubmission(user, submission))) return json({ error: "Forbidden" }, 403);
+
+    await data.update(COLLECTIONS.submissions, submission.id, { shareToken: null, sharedAt: null });
+
+    audit({ actorId: user.userId, action: "submission.unshared", targetType: "submission", targetId: submission.id });
+    return json({ shareToken: null });
+  },
+
+  /**
+   * Unauthenticated read of a shared submission. Only the work itself is
+   * exposed — never the grade, the AI review, or the student's email.
+   */
+  async getPublic(_request: Request, params: Record<string, string>) {
+    const token = params.token?.trim();
+    if (!token) return json({ error: "Submission not found." }, 404);
+
+    const submission = await data.findOne<any>(COLLECTIONS.submissions, [["shareToken", "==", token]]);
+    if (!submission) return json({ error: "This link is no longer available." }, 404);
+
+    const [assignment, student, { files, warning }] = await Promise.all([
+      data.getById<any>(COLLECTIONS.assignments, submission.assignmentId),
+      data.getById<any>(COLLECTIONS.users, submission.studentId),
+      resolveSubmissionFiles(submission),
+    ]);
+
+    return json({
+      id: submission.id,
+      submittedAt: submission.submittedAt,
+      submissionType: submission.submissionType,
+      githubUrl: submission.githubUrl,
+      assignmentTitle: assignment?.title || null,
+      studentName: student?.fullName || null,
+      files,
+      warning,
+    });
   },
 
   async import(request: Request) {

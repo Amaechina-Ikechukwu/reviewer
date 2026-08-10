@@ -120,6 +120,17 @@ export type CodeFile = {
   language: string;
 };
 
+export type PublicSubmission = {
+  id: string;
+  submittedAt: string;
+  submissionType: "github" | "file_upload";
+  githubUrl: string | null;
+  assignmentTitle: string | null;
+  studentName: string | null;
+  files: CodeFile[];
+  warning?: string;
+};
+
 export type Review = {
   id: string;
   submissionId: string;

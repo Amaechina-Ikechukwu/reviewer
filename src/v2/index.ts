@@ -50,6 +50,9 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "GET", path: "/v2/api/submissions", handler: submissionRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/submissions/:id", handler: submissionRoutes.get, requiresAuth: true },
   { method: "GET", path: "/v2/api/submissions/:id/files", handler: submissionRoutes.getFiles, requiresAuth: true },
+  { method: "POST", path: "/v2/api/submissions/:id/share", handler: submissionRoutes.share, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/submissions/:id/share", handler: submissionRoutes.unshare, requiresAuth: true },
+  { method: "GET", path: "/v2/api/public/submissions/:token", handler: submissionRoutes.getPublic, requiresAuth: false },
   { method: "POST", path: "/v2/api/submissions/submit-for-student", handler: submissionRoutes.submitForStudent, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/submissions/:id", handler: submissionRoutes.delete, requiresAuth: true },
 
