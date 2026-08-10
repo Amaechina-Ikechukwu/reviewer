@@ -54,12 +54,33 @@ export function hasReactApp(files: CodeFile[]) {
   });
 }
 
-function usesTailwind(files: CodeFile[]) {
-  return files.some((file) => {
-    if (/(^|\/)tailwind\.config\.(js|cjs|mjs|ts)$/i.test(file.filename)) return true;
-    if (!/\.css$/i.test(file.filename)) return false;
-    return /@tailwind\b|@import\s+["']tailwindcss/.test(file.content);
-  });
+/**
+ * Which major version of Tailwind the submission uses, or 0 for none.
+ * The two versions need different browser builds and different CSS handling:
+ * v3 uses `@tailwind` directives and a config file, v4 uses
+ * `@import "tailwindcss"` and `@theme`. Loading the v3 CDN for a v4 project
+ * silently produces an unstyled page.
+ */
+function tailwindVersion(files: CodeFile[]): 0 | 3 | 4 {
+  const pkg = files.find((file) => /(^|\/)package\.json$/i.test(file.filename));
+  if (pkg) {
+    if (/@tailwindcss\/(vite|postcss|browser|cli)/.test(pkg.content)) return 4;
+    const pinned = pkg.content.match(/"tailwindcss"\s*:\s*"[^\d"]*(\d+)/);
+    if (pinned) return Number(pinned[1]) >= 4 ? 4 : 3;
+  }
+
+  const stylesheets = files.filter((file) => /\.css$/i.test(file.filename));
+  if (stylesheets.some((file) => /@import\s+["']tailwindcss|@theme\b|@plugin\s+["']/.test(file.content))) return 4;
+  if (stylesheets.some((file) => /@tailwind\b/.test(file.content))) return 3;
+  if (files.some((file) => /(^|\/)tailwind\.config\.(js|cjs|mjs|ts)$/i.test(file.filename))) return 3;
+
+  return 0;
+}
+
+function tailwindScript(version: 0 | 3 | 4) {
+  if (version === 4) return '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>';
+  if (version === 3) return '<script src="https://cdn.tailwindcss.com"></script>';
+  return "";
 }
 
 function pickEntry(textFiles: Record<string, string>): string | null {
@@ -95,7 +116,7 @@ function previewLoader() {
   const FILES: Record<string, string> = w.__FILES__;
   const IMAGES: Record<string, string> = w.__IMAGES__;
   const ENTRY: string = w.__ENTRY__;
-  const TAILWIND: boolean = w.__TAILWIND__;
+  const TAILWIND: number = w.__TAILWIND__;
   const MODULE_EXT = [".jsx", ".tsx", ".js", ".ts", ".mjs", ".cjs"];
 
   const errBox = document.getElementById("__err") as HTMLElement;
@@ -164,15 +185,23 @@ function previewLoader() {
   function injectCss(path: string, css: string) {
     if (injectedCss[path]) return;
     injectedCss[path] = true;
-    // Tailwind directives are meaningless as plain CSS; the Play CDN compiles
-    // them (and any @apply) only from a text/tailwindcss style block.
-    const needsTailwind = TAILWIND && /@tailwind\b|@apply\b|@layer\b|@import\s+["']tailwindcss/.test(css);
-    const cleaned = needsTailwind
-      ? css
-      : css.replace(/@tailwind[^;]*;/g, "").replace(/@import\s+["']tailwindcss[^"']*["']\s*;?/g, "");
+
+    // Tailwind syntax is inert as plain CSS — the browser build compiles it
+    // only from a text/tailwindcss block. v3's CDN already ships base and
+    // utilities, so its @tailwind directives are dropped; v4's build needs
+    // the `@import "tailwindcss"` line kept so it knows what to generate.
+    const hasTailwindSyntax = /@tailwind\b|@apply\b|@import\s+["']tailwindcss|@theme\b|@plugin\s+["']|@variant\b/.test(css);
+    const asTailwind = TAILWIND > 0 && hasTailwindSyntax;
+    const cleaned =
+      TAILWIND === 3
+        ? css.replace(/@tailwind[^;]*;/g, "")
+        : TAILWIND === 4
+          ? css
+          : css.replace(/@tailwind[^;]*;/g, "").replace(/@import\s+["']tailwindcss[^"']*["']\s*;?/g, "");
+
     if (!cleaned.trim()) return;
     const style = document.createElement("style");
-    if (needsTailwind) style.setAttribute("type", "text/tailwindcss");
+    if (asTailwind) style.setAttribute("type", "text/tailwindcss");
     style.textContent = cleaned;
     document.head.appendChild(style);
   }
@@ -208,12 +237,38 @@ function previewLoader() {
     return "export default " + JSON.stringify(found) + ";";
   }
 
+  /** Last-ditch match on file name alone, for assets whose folder did not
+   * survive the upload (a Vite scaffold's `/vite.svg` is the usual case). */
+  function findByBasename(path: string) {
+    const base = path.slice(path.lastIndexOf("/") + 1);
+    if (!base) return null;
+    const keys = Object.keys(FILES).concat(Object.keys(IMAGES));
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].slice(keys[i].lastIndexOf("/") + 1) === base) return keys[i];
+    }
+    return null;
+  }
+
   const blobCache: Record<string, string> = {};
   const loading: Record<string, boolean> = {};
 
   async function loadModule(path: string, importChain: string[]): Promise<string> {
-    const found = findFile(path);
-    if (!found) throw new Error("Cannot resolve module: " + path);
+    if (blobCache[path]) return blobCache[path];
+
+    const ext = extOf(path);
+    const assetLike = !!ext && MODULE_EXT.indexOf(ext) === -1;
+    const found = findFile(path) || (assetLike ? findByBasename(path) : null);
+
+    if (!found) {
+      // A missing image or stylesheet must not blank out the whole preview,
+      // so stub it and let the rest of the app render.
+      if (!assetLike) throw new Error("Cannot resolve module: " + path);
+      console.warn("Preview: no file matches " + path + " — using a placeholder.");
+      const stub = ext === ".css" ? "export default {};" : "export default " + JSON.stringify(path) + ";";
+      blobCache[path] = URL.createObjectURL(new Blob([stub], { type: "application/javascript" }));
+      return blobCache[path];
+    }
+
     if (blobCache[found]) return blobCache[found];
     if (loading[found]) {
       throw new Error("Circular import: " + importChain.concat(found).join(" -> "));
@@ -311,6 +366,18 @@ function previewLoader() {
       // Specifier is a variable so the outer app's bundler leaves it alone
       // when this function is serialized into the preview document.
       await import(/* @vite-ignore */ target);
+
+      // A silently blank pane is the least debuggable outcome there is.
+      setTimeout(function () {
+        const root = document.getElementById("root");
+        if (failed || !root) return;
+        if (root.children.length === 0 && !(root.textContent || "").trim()) {
+          showErr(
+            "The preview loaded but nothing was rendered into #root.\n" +
+            "Check that " + ENTRY + " mounts a component, and look for errors above.",
+          );
+        }
+      }, 1500);
     } catch (err: any) {
       showErr(
         "Preview error: " + (err && err.message ? err.message : String(err)) +
@@ -370,7 +437,7 @@ export function buildReactPreviewDocument(files: CodeFile[]): string | null {
   const entry = pickEntry(textFiles);
   if (!entry) return null;
 
-  const tailwind = usesTailwind(files);
+  const tailwind = tailwindVersion(files);
   const encode = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 
   return `<!DOCTYPE html>
@@ -391,7 +458,7 @@ ${STORAGE_SHIM}
 }
 </script>
 <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
-${tailwind ? '<script src="https://cdn.tailwindcss.com"></script>' : ""}
+${tailwindScript(tailwind)}
 <style>
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
