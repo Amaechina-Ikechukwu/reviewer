@@ -71,6 +71,7 @@ export type Assignment = {
   track?: Track | null;
   cohortId?: string | null;
   questions?: string | null;
+  excludedStudentIds?: string[];
   createdAt: string;
 };
 
@@ -90,6 +91,14 @@ export type PublicAssignmentBrief = {
 
 export type GroupSourceType = "markdown" | "link" | "pdf";
 
+export type GroupAsset = {
+  id: string;
+  name: string;
+  kind: "file" | "link";
+  ext: string | null;
+  url: string | null;
+};
+
 export type AssignmentGroup = {
   id: string;
   assignmentId: string;
@@ -100,6 +109,7 @@ export type AssignmentGroup = {
   sourceType?: GroupSourceType | null;
   sourceUrl?: string | null;
   sourcePdfPath?: string | null;
+  assets?: GroupAsset[];
 };
 
 export type Submission = {

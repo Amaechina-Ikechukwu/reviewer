@@ -30,6 +30,8 @@ export default function SubmitAssignment() {
   const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string; submittedByStudentId?: string; submittedByName?: string } | null>(null);
   const [myGroup, setMyGroup] = useState<AssignmentGroup | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [groupBriefUrl, setGroupBriefUrl] = useState<string | null>(null);
+  const [assetUrls, setAssetUrls] = useState<Record<string, string>>({});
   const [submissionType, setSubmissionType] = useState<"github" | "file_upload">("github");
   const [githubUrl, setGithubUrl] = useState("");
   const [notes, setNotes] = useState("");
@@ -64,10 +66,32 @@ export default function SubmitAssignment() {
         }
         if (data.isGroupAssignment) {
           api<{ groups: AssignmentGroup[]; members: Record<string, GroupMember>; myGroupId: string | null }>(`/assignments/${data.id}/groups`)
-            .then((res) => {
+            .then(async (res) => {
               const g = res.groups.find((x) => x.id === res.myGroupId) || null;
               setMyGroup(g);
               setGroupMembers(g ? g.memberIds.map((id) => res.members[id]).filter(Boolean) : []);
+              if (!g) return;
+
+              const token = localStorage.getItem("token");
+              const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+              const blobUrl = async (url: string) => {
+                const r = await fetch(url, { headers: authHeaders });
+                if (!r.ok) throw new Error(`Unavailable (${r.status})`);
+                return URL.createObjectURL(await r.blob());
+              };
+
+              if (g.sourceType === "pdf" && g.sourcePdfPath) {
+                blobUrl(`/v2/api/assignments/${data.id}/groups/${g.id}/brief`)
+                  .then(setGroupBriefUrl)
+                  .catch(() => {});
+              }
+
+              for (const asset of g.assets ?? []) {
+                if (asset.kind !== "file") continue;
+                blobUrl(`/v2/api/assignments/${data.id}/groups/${g.id}/assets/${asset.id}`)
+                  .then((u) => setAssetUrls((prev) => ({ ...prev, [asset.id]: u })))
+                  .catch(() => {});
+              }
             })
             .catch(() => {});
         }
@@ -178,6 +202,103 @@ export default function SubmitAssignment() {
                 You haven't been assigned to a group yet. Contact your teacher.
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {myGroup && (myGroup.description || myGroup.sourceUrl || groupBriefUrl || myGroup.rubric) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your team&apos;s brief</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {myGroup.description && (
+              <div
+                className="mdcontent text-sm text-[var(--fg)]"
+                dangerouslySetInnerHTML={{ __html: marked(myGroup.description) as string }}
+              />
+            )}
+            {myGroup.sourceType === "link" && myGroup.sourceUrl && (
+              <a
+                href={myGroup.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-fit items-center gap-2 text-sm text-[var(--accent)] hover:underline"
+              >
+                <Icon.External className="h-4 w-4" /> Open team brief
+              </a>
+            )}
+            {groupBriefUrl && (
+              <iframe
+                src={groupBriefUrl}
+                title="Team brief"
+                className="h-96 w-full rounded-lg border border-[var(--border)]"
+              />
+            )}
+            {myGroup.rubric && (
+              <div className="rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                  Rubric
+                </div>
+                <div
+                  className="mdcontent text-sm text-[var(--fg)]"
+                  dangerouslySetInnerHTML={{ __html: marked(myGroup.rubric) as string }}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {myGroup && (myGroup.assets?.length ?? 0) > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Team resources</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {(myGroup.assets ?? []).map((asset) => {
+              if (asset.kind === "link") {
+                return (
+                  <a
+                    key={asset.id}
+                    href={asset.url ?? "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  >
+                    <Icon.External className="h-4 w-4 shrink-0" />
+                    <span className="min-w-0 truncate">{asset.name}</span>
+                  </a>
+                );
+              }
+              const url = assetUrls[asset.id];
+              const isImage = asset.ext !== "pdf";
+              return (
+                <div key={asset.id} className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--fg-muted)]">
+                    <Icon.FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{asset.name}</span>
+                  </div>
+                  {!url ? (
+                    <div className="rounded-lg border border-[var(--border)] px-3 py-6 text-center text-xs text-[var(--fg-muted)]">
+                      Loading…
+                    </div>
+                  ) : isImage ? (
+                    <img
+                      src={url}
+                      alt={asset.name}
+                      className="w-full rounded-lg border border-[var(--border)]"
+                    />
+                  ) : (
+                    <iframe
+                      src={url}
+                      title={asset.name}
+                      className="h-96 w-full rounded-lg border border-[var(--border)]"
+                    />
+                  )}
+                </div>
+              );
+            })}
           </CardContent>
         </Card>
       )}

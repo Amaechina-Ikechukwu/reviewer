@@ -41,6 +41,7 @@ type AssignmentBody = {
   track?: Track | null;
   cohortId?: string | null;
   questions?: string | null;
+  excludedStudentIds?: string[];
 };
 
 function validateAssignmentSource(sourceType: string | undefined, sourceMarkdown: string | null | undefined, sourceUrl: string | null | undefined, sourcePdfPath: string | null | undefined, sourceDocxPath: string | null | undefined): string | null {
@@ -68,15 +69,62 @@ type GroupDraft = {
   sourceType?: "markdown" | "link" | "pdf" | null;
   sourceUrl?: string | null;
   sourcePdfPath?: string | null;
+  assets?: GroupAssetInput[];
 };
 
-async function autoCreateGroups(assignmentId: string, groupCount: number, cohortId: string | null, drafts?: GroupDraft[]) {
+type GroupAssetInput = {
+  id?: string;
+  name?: string;
+  kind?: "file" | "link";
+  ext?: string | null;
+  url?: string | null;
+};
+
+const GROUP_ASSET_EXTS: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+};
+const MAX_GROUP_ASSETS = 20;
+
+function sanitizeGroupAssets(input: unknown): { id: string; name: string; kind: "file" | "link"; ext: string | null; url: string | null }[] {
+  if (!Array.isArray(input)) return [];
+  const out: { id: string; name: string; kind: "file" | "link"; ext: string | null; url: string | null }[] = [];
+  for (const raw of input as GroupAssetInput[]) {
+    if (out.length >= MAX_GROUP_ASSETS) break;
+    if (!raw || typeof raw !== "object") continue;
+    const name = typeof raw.name === "string" ? raw.name.trim().slice(0, 120) : "";
+    if (raw.kind === "link") {
+      const url = typeof raw.url === "string" ? raw.url.trim() : "";
+      if (!/^https?:\/\//i.test(url)) continue;
+      out.push({ id: typeof raw.id === "string" && raw.id ? raw.id : randomUUID(), name: name || url, kind: "link", ext: null, url });
+    } else if (raw.kind === "file") {
+      const id = typeof raw.id === "string" ? raw.id : "";
+      const ext = typeof raw.ext === "string" ? raw.ext.toLowerCase() : "";
+      if (!/^[a-z0-9-]{10,64}$/i.test(id) || !GROUP_ASSET_EXTS[ext]) continue;
+      out.push({ id, name: name || `asset.${ext}`, kind: "file", ext, url: null });
+    }
+  }
+  return out;
+}
+
+async function autoCreateGroups(
+  assignmentId: string,
+  groupCount: number,
+  cohortId: string | null,
+  drafts?: GroupDraft[],
+  excludedStudentIds: string[] = [],
+) {
   const groups: { id: string; name: string; memberIds: string[] }[] = [];
+  const excluded = new Set(excludedStudentIds);
 
   const draftedMemberIds = new Set<string>();
   if (drafts && drafts.length > 0) {
     for (const d of drafts) {
-      for (const m of d.memberIds || []) draftedMemberIds.add(m);
+      for (const m of d.memberIds || []) if (!excluded.has(m)) draftedMemberIds.add(m);
     }
   }
 
@@ -86,13 +134,13 @@ async function autoCreateGroups(assignmentId: string, groupCount: number, cohort
   let distributed: string[][] = Array.from({ length: groupCount }, () => []);
   if (useDraftMembers) {
     for (let i = 0; i < groupCount; i++) {
-      distributed[i] = (drafts?.[i]?.memberIds || []).filter(Boolean);
+      distributed[i] = (drafts?.[i]?.memberIds || []).filter((m) => Boolean(m) && !excluded.has(m));
     }
   } else {
     const studentWhere: any[] = [["role", "==", "student"]];
     if (cohortId) studentWhere.push(["cohortId", "==", cohortId]);
     const allStudents = await data.findMany<any>(COLLECTIONS.users, { where: studentWhere });
-    const real = allStudents.filter((s) => s.passwordHash !== "INVITE_PENDING");
+    const real = allStudents.filter((s) => s.passwordHash !== "INVITE_PENDING" && !excluded.has(s.id));
     const shuffled = shuffle(real);
     shuffled.forEach((student, idx) => {
       distributed[idx % groupCount].push(student.id);
@@ -115,6 +163,7 @@ async function autoCreateGroups(assignmentId: string, groupCount: number, cohort
       sourceType: d?.sourceType ?? null,
       sourceUrl: d?.sourceUrl ?? null,
       sourcePdfPath: d?.sourcePdfPath ?? null,
+      assets: sanitizeGroupAssets(d?.assets),
     });
   }
   return groups;
@@ -218,11 +267,12 @@ export const assignmentRoutes = {
       groupQuestionMode,
       track: track || null,
       cohortId: body.cohortId?.trim() || null,
+      excludedStudentIds: Array.isArray(body.excludedStudentIds) ? body.excludedStudentIds.filter((s) => typeof s === "string") : [],
     });
 
     if (isGroupAssignment) {
       const drafts = Array.isArray((body as any).groupDrafts) ? ((body as any).groupDrafts as GroupDraft[]) : undefined;
-      const createdGroups = await autoCreateGroups(id, groupCount, body.cohortId?.trim() || null, drafts);
+      const createdGroups = await autoCreateGroups(id, groupCount, body.cohortId?.trim() || null, drafts, assignment.excludedStudentIds);
       notifyGroupMembers({ id, title: assignment.title }, createdGroups).catch(console.error);
     }
 
@@ -498,9 +548,14 @@ export const assignmentRoutes = {
       }),
     );
 
+    // Students only ever see their own group — other teams' briefs, rubrics and
+    // assets stay private to their members.
     if (user.role === "student") {
       const myGroup = groups.find((g) => (g.memberIds || []).includes(user.userId)) || null;
-      return json({ groups, members, myGroupId: myGroup?.id ?? null });
+      if (!myGroup) return json({ groups: [], members: {}, myGroupId: null });
+      const myMembers: typeof members = {};
+      for (const id of myGroup.memberIds || []) if (members[id]) myMembers[id] = members[id];
+      return json({ groups: [myGroup], members: myMembers, myGroupId: myGroup.id });
     }
 
     return json({ groups, members });
@@ -515,7 +570,7 @@ export const assignmentRoutes = {
     if (!assignment.isGroupAssignment) return json({ error: "This assignment is not a group project." }, 400);
 
     const body = await parseJson<{
-      groups?: { id?: string; name?: string; memberIds?: string[]; description?: string | null; rubric?: string | null; sourceType?: string | null; sourceUrl?: string | null; sourcePdfPath?: string | null }[];
+      groups?: { id?: string; name?: string; memberIds?: string[]; description?: string | null; rubric?: string | null; sourceType?: string | null; sourceUrl?: string | null; sourcePdfPath?: string | null; assets?: GroupAssetInput[] }[];
     }>(request);
     const incoming = body.groups || [];
     if (!Array.isArray(incoming) || incoming.length === 0) {
@@ -550,6 +605,7 @@ export const assignmentRoutes = {
       const sourceType = g.sourceType ?? null;
       const sourceUrl = typeof g.sourceUrl === "string" ? g.sourceUrl.trim() || null : g.sourceUrl ?? null;
       const sourcePdfPath = typeof g.sourcePdfPath === "string" ? g.sourcePdfPath.trim() || null : g.sourcePdfPath ?? null;
+      const assets = sanitizeGroupAssets(g.assets);
       await data.insert(COLLECTIONS.assignmentGroups, id, {
         assignmentId: assignment.id,
         name,
@@ -559,8 +615,9 @@ export const assignmentRoutes = {
         sourceType,
         sourceUrl,
         sourcePdfPath,
+        assets,
       });
-      created.push({ id, name, memberIds, description, rubric, sourceType, sourceUrl, sourcePdfPath });
+      created.push({ id, name, memberIds, description, rubric, sourceType, sourceUrl, sourcePdfPath, assets });
     }
 
     await data.update(COLLECTIONS.assignments, assignment.id, { groupCount: created.length });
@@ -601,6 +658,65 @@ export const assignmentRoutes = {
     await storageUpload(`briefs/${briefId}.${ext}`, buffer, isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 
     return json({ briefId, ext });
+  },
+
+  async uploadGroupAsset(request: Request) {
+    const user = (request as AuthenticatedRequest).user;
+    if (!isStaff(user.role)) return json({ error: "Only staff can upload group assets." }, 403);
+
+    const ct = request.headers.get("content-type") || "";
+    if (!ct.includes("multipart/form-data")) return json({ error: "Multipart form data required." }, 400);
+
+    const fd = await request.formData();
+    const file = fd.get("file") as File | null;
+    if (!file) return json({ error: "No file provided." }, 400);
+
+    const ext = file.name.toLowerCase().split(".").pop() || "";
+    const contentType = GROUP_ASSET_EXTS[ext];
+    if (!contentType) return json({ error: "Only PDF and image files (PNG, JPG, GIF, WEBP) are accepted." }, 400);
+    if (file.size > MAX_BRIEF_SIZE) return json({ error: "File must be under 100 MB." }, 400);
+
+    const assetId = randomUUID();
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await storageUpload(`group-assets/${assetId}.${ext}`, buffer, contentType);
+
+    return json({ assetId, ext, name: file.name });
+  },
+
+  async getGroupAsset(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const group = await data.getById<any>(COLLECTIONS.assignmentGroups, params.groupId);
+    if (!group || group.assignmentId !== params.id) return new Response("Not found", { status: 404 });
+    if (!isStaff(user.role) && !(group.memberIds || []).includes(user.userId)) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const asset = (group.assets || []).find((a: any) => a.id === params.assetId && a.kind === "file");
+    if (!asset || !GROUP_ASSET_EXTS[asset.ext]) return new Response("Not found", { status: 404 });
+
+    const buffer = await storageDownload(`group-assets/${asset.id}.${asset.ext}`).catch(() => null);
+    if (!buffer) return new Response("Not found", { status: 404 });
+
+    return new Response(buffer as unknown as BodyInit, {
+      headers: { "Content-Type": GROUP_ASSET_EXTS[asset.ext], "Content-Disposition": "inline" },
+    });
+  },
+
+  async getGroupBrief(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const group = await data.getById<any>(COLLECTIONS.assignmentGroups, params.groupId);
+    if (!group || group.assignmentId !== params.id) return new Response("Not found", { status: 404 });
+    if (!isStaff(user.role) && !(group.memberIds || []).includes(user.userId)) {
+      return new Response("Not found", { status: 404 });
+    }
+    if (!group.sourcePdfPath) return new Response("Brief not found", { status: 404 });
+
+    const buffer = await storageDownload(`briefs/${group.sourcePdfPath}.pdf`).catch(() => null);
+    if (!buffer) return new Response("Brief not found", { status: 404 });
+
+    return new Response(buffer as unknown as BodyInit, {
+      headers: { "Content-Type": "application/pdf", "Content-Disposition": "inline" },
+    });
   },
 
   async getBrief(request: Request, params: Record<string, string>) {
@@ -659,11 +775,17 @@ export const assignmentRoutes = {
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
     if (!assignment.isGroupAssignment) return json({ error: "This assignment is not a group project." }, 400);
 
-    const body = await parseJson<{ groupCount?: number }>(request).catch(() => ({} as any));
+    const body = await parseJson<{ groupCount?: number; excludedStudentIds?: string[] }>(request).catch(() => ({} as any));
     const groupCount = Math.max(1, Math.min(50, Math.round(body.groupCount ?? assignment.groupCount ?? 1)));
+    const excludedStudentIds = Array.isArray(body.excludedStudentIds)
+      ? body.excludedStudentIds.filter((s: unknown) => typeof s === "string")
+      : (assignment.excludedStudentIds ?? []);
+    if (Array.isArray(body.excludedStudentIds)) {
+      await data.update(COLLECTIONS.assignments, assignment.id, { excludedStudentIds });
+    }
 
     await data.delMany(COLLECTIONS.assignmentGroups, [["assignmentId", "==", assignment.id]]);
-    const groups = await autoCreateGroups(assignment.id, groupCount, assignment.cohortId ?? null);
+    const groups = await autoCreateGroups(assignment.id, groupCount, assignment.cohortId ?? null, undefined, excludedStudentIds);
     await data.update(COLLECTIONS.assignments, assignment.id, { groupCount });
     notifyGroupMembers({ id: assignment.id, title: assignment.title }, groups).catch(console.error);
     return json({ groups });
