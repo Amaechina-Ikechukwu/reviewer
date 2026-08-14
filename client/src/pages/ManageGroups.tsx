@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
@@ -8,13 +8,15 @@ import { Icon } from "../components/ui/Icons";
 import { Input, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
-import type { Assignment, AssignmentGroup, GroupSourceType } from "../types";
+import type { Assignment, AssignmentGroup, GroupAsset, GroupSourceType, StudentRecord } from "../types";
 
 type Member = { id: string; fullName: string; email: string };
 type GroupsPayload = {
   groups: AssignmentGroup[];
   members: Record<string, Member>;
 };
+
+const UNASSIGNED = "__unassigned__";
 
 export default function ManageGroups() {
   const { id } = useParams();
@@ -28,6 +30,7 @@ export default function ManageGroups() {
   const [dragMember, setDragMember] = useState<{ memberId: string; fromGroup: string } | null>(null);
   const [hoverGroup, setHoverGroup] = useState<string | null>(null);
   const [regenCount, setRegenCount] = useState(0);
+  const [unassigned, setUnassigned] = useState<string[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -39,6 +42,20 @@ export default function ManageGroups() {
         const g = await api<GroupsPayload>(`/assignments/${id}/groups`);
         setGroups(g.groups);
         setMembers(g.members);
+
+        // Roster for this assignment's cohort, so students who are in no group
+        // are still visible and can be dragged back in.
+        const all = await api<StudentRecord[]>("/students").catch(() => [] as StudentRecord[]);
+        const eligible = a.cohortId ? all.filter((s) => s.cohortId === a.cohortId) : all;
+        setMembers((prev) => {
+          const next = { ...prev };
+          for (const s of eligible) {
+            if (!next[s.id]) next[s.id] = { id: s.id, fullName: s.fullName, email: s.email };
+          }
+          return next;
+        });
+        const assigned = new Set(g.groups.flatMap((x) => x.memberIds));
+        setUnassigned(eligible.filter((s) => !assigned.has(s.id)).map((s) => s.id));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load groups");
       } finally {
@@ -66,7 +83,9 @@ export default function ManageGroups() {
     setHoverGroup(null);
     if (!dragMember) return;
     const { memberId, fromGroup } = dragMember;
+    setDragMember(null);
     if (fromGroup === toGroupId) return;
+
     setGroups((prev) =>
       prev.map((g) => {
         if (g.id === fromGroup) return { ...g, memberIds: g.memberIds.filter((m) => m !== memberId) };
@@ -74,7 +93,17 @@ export default function ManageGroups() {
         return g;
       }),
     );
-    setDragMember(null);
+    setUnassigned((prev) => {
+      if (toGroupId === UNASSIGNED) return prev.includes(memberId) ? prev : [...prev, memberId];
+      return prev.filter((m) => m !== memberId);
+    });
+  }
+
+  function excludeMember(memberId: string, fromGroup: string) {
+    setGroups((prev) =>
+      prev.map((g) => (g.id === fromGroup ? { ...g, memberIds: g.memberIds.filter((m) => m !== memberId) } : g)),
+    );
+    setUnassigned((prev) => (prev.includes(memberId) ? prev : [...prev, memberId]));
   }
 
   function renameGroup(groupId: string, name: string) {
@@ -83,6 +112,56 @@ export default function ManageGroups() {
 
   function updateGroupField(groupId: string, patch: Partial<AssignmentGroup>) {
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...patch } : g)));
+  }
+
+  async function handleAssetUpload(groupId: string, e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await api<{ assetId: string; ext: string; name: string }>("/assignments/upload-group-asset", {
+          method: "POST",
+          body: fd,
+        });
+        setGroups((prev) =>
+          prev.map((g) =>
+            g.id === groupId
+              ? {
+                  ...g,
+                  assets: [
+                    ...(g.assets ?? []),
+                    { id: res.assetId, name: res.name, kind: "file" as const, ext: res.ext, url: null },
+                  ],
+                }
+              : g,
+          ),
+        );
+      }
+      toast().success("Asset uploaded — remember to save changes.");
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Asset upload failed");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  function addAssetLink(groupId: string) {
+    const url = prompt("Link URL (https://…)");
+    if (!url || !/^https?:\/\//i.test(url.trim())) {
+      if (url) toast().error("Please enter a URL starting with http:// or https://");
+      return;
+    }
+    const name = prompt("Label for this link (optional)") || url.trim();
+    const asset: GroupAsset = { id: crypto.randomUUID(), name, kind: "link", ext: null, url: url.trim() };
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, assets: [...(g.assets ?? []), asset] } : g)));
+  }
+
+  function removeAsset(groupId: string, assetId: string) {
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, assets: (g.assets ?? []).filter((a) => a.id !== assetId) } : g)),
+    );
   }
 
   function addGroup() {
@@ -118,6 +197,7 @@ export default function ManageGroups() {
           sourceType: g.sourceType ?? null,
           sourceUrl: g.sourceUrl ?? null,
           sourcePdfPath: g.sourcePdfPath ?? null,
+          assets: g.assets ?? [],
         })),
       };
       const res = await api<{ groups: AssignmentGroup[] }>(`/assignments/${id}/groups`, {
@@ -143,12 +223,12 @@ export default function ManageGroups() {
     try {
       const res = await api<{ groups: AssignmentGroup[] }>(`/assignments/${id}/groups/regenerate`, {
         method: "POST",
-        body: JSON.stringify({ groupCount: regenCount }),
+        body: JSON.stringify({ groupCount: regenCount, excludedStudentIds: unassigned }),
       });
       setGroups(res.groups);
       // Refetch members in case roster changed
       const g = await api<GroupsPayload>(`/assignments/${id}/groups`);
-      setMembers(g.members);
+      setMembers((prev) => ({ ...prev, ...g.members }));
       toast().success("Groups regenerated");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to regenerate";
@@ -319,10 +399,12 @@ export default function ManageGroups() {
                             const fd = new FormData();
                             fd.append("file", file);
                             try {
-                              const res = await api<{ path: string; url: string }>("/assignments/upload-brief", { method: "POST", body: fd });
-                              updateGroupField(g.id, { sourcePdfPath: res.path, sourceUrl: res.url });
+                              const res = await api<{ briefId: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+                              updateGroupField(g.id, { sourcePdfPath: res.briefId });
                             } catch (err: any) {
                               toast().error(err.message ?? "Upload failed");
+                            } finally {
+                              e.target.value = "";
                             }
                           }}
                         />
@@ -341,6 +423,54 @@ export default function ManageGroups() {
                     />
                   </div>
                 )}
+
+                {/* Team assets — displayed in-app to this team only */}
+                <div className="flex flex-col gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                      Team assets
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => addAssetLink(g.id)}
+                      className="text-[11px] font-medium text-[var(--accent)] hover:underline"
+                    >
+                      + Link
+                    </button>
+                  </div>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+                    className="text-xs text-[var(--fg-muted)] file:mr-2 file:rounded file:border file:border-[var(--border)] file:bg-[var(--surface)] file:px-2 file:py-1 file:text-xs file:text-[var(--fg)] file:hover:bg-[var(--surface-muted)]"
+                    onChange={(e) => handleAssetUpload(g.id, e)}
+                  />
+                  {(g.assets ?? []).length === 0 ? (
+                    <span className="text-[11px] text-[var(--fg-muted)]">
+                      PDFs and images show inline for this team.
+                    </span>
+                  ) : (
+                    <div className="flex flex-col gap-1">
+                      {(g.assets ?? []).map((a) => (
+                        <div
+                          key={a.id}
+                          className="flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px]"
+                        >
+                          <Icon.FileText className="h-3 w-3 shrink-0 text-[var(--fg-muted)]" />
+                          <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeAsset(g.id, a.id)}
+                            title="Remove asset"
+                            className="shrink-0 rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                          >
+                            <Icon.X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div className="flex min-h-[80px] flex-col gap-1.5">
                   {g.memberIds.length === 0 && (
                     <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-4 text-center text-xs text-[var(--fg-muted)]">
@@ -362,7 +492,14 @@ export default function ManageGroups() {
                             <div className="truncate text-[11px] text-[var(--fg-muted)]">{m.email}</div>
                           )}
                         </div>
-                        <Icon.Users className="h-3.5 w-3.5 shrink-0 text-[var(--fg-muted)]" />
+                        <button
+                          type="button"
+                          onClick={() => excludeMember(mId, g.id)}
+                          title="Remove from this project"
+                          className="shrink-0 rounded p-1 text-[var(--fg-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                        >
+                          <Icon.X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     );
                   })}
@@ -371,6 +508,45 @@ export default function ManageGroups() {
             </Card>
           ))}
         </div>
+
+        {/* Students in no group — excluded from the project until dragged into a team */}
+        <Card
+          onDragOver={(e) => onDragOver(e as unknown as DragEvent, UNASSIGNED)}
+          onDragLeave={() => setHoverGroup((h) => (h === UNASSIGNED ? null : h))}
+          onDrop={(e) => onDrop(e as unknown as DragEvent, UNASSIGNED)}
+          className={hoverGroup === UNASSIGNED ? "ring-2 ring-[var(--accent)]" : undefined}
+        >
+          <CardContent className="flex flex-col gap-2">
+            <div className="text-sm font-semibold text-[var(--fg)]">
+              Not participating
+              <span className="ml-1 text-xs font-normal text-[var(--fg-muted)]">
+                ({unassigned.length}) — in no team. Drag a student here to exclude them, or back into a team to include them.
+              </span>
+            </div>
+            {unassigned.length === 0 ? (
+              <div className="rounded-md border border-dashed border-[var(--border)] px-3 py-4 text-center text-xs text-[var(--fg-muted)]">
+                Everyone is assigned to a team.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {unassigned.map((mId) => {
+                  const m = members[mId];
+                  return (
+                    <div
+                      key={mId}
+                      draggable
+                      onDragStart={() => onDragStart(mId, UNASSIGNED)}
+                      className="flex cursor-move items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-xs text-[var(--fg-muted)]"
+                    >
+                      <Icon.Users className="h-3 w-3 shrink-0" />
+                      {m?.fullName || "Unknown student"}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </TeacherShell>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
@@ -9,7 +9,7 @@ import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api, listCohorts } from "../api";
 import { cn } from "../lib/cn";
-import type { Assignment, Cohort, StudentRecord, Track } from "../types";
+import type { Assignment, Cohort, GroupAsset, StudentRecord, Track } from "../types";
 import { CODE_TRACKS, TRACKS } from "../types";
 
 type GroupSourceType = "markdown" | "link" | "pdf";
@@ -22,10 +22,22 @@ type TeamDraft = {
   sourcePdfPath: string | null;
   pdfFileName: string | null;
   uploadingPdf: boolean;
+  assets: GroupAsset[];
+  uploadingAsset: boolean;
 };
 
 function makeTeam(n: number): TeamDraft {
-  return { name: `Team ${n}`, sourceType: "markdown", content: "", sourceUrl: "", sourcePdfPath: null, pdfFileName: null, uploadingPdf: false };
+  return {
+    name: `Team ${n}`,
+    sourceType: "markdown",
+    content: "",
+    sourceUrl: "",
+    sourcePdfPath: null,
+    pdfFileName: null,
+    uploadingPdf: false,
+    assets: [],
+    uploadingAsset: false,
+  };
 }
 
 export default function CreateGroupProject() {
@@ -47,9 +59,28 @@ export default function CreateGroupProject() {
   const [submitting, setSubmitting] = useState(false);
   const [cohorts, setCohorts] = useState<(Cohort & { studentCount: number })[]>([]);
   const [cohortId, setCohortId] = useState("");
+  const [excludedIds, setExcludedIds] = useState<string[]>([]);
 
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
-  const studentById = new Map(students.map((s) => [s.id, s] as const));
+  const studentById = useMemo(() => new Map(students.map((s) => [s.id, s] as const)), [students]);
+
+  // Only students in the selected cohort take part; "no specific cohort" means everyone.
+  const cohortStudents = useMemo(
+    () => (cohortId ? students.filter((s) => s.cohortId === cohortId) : students),
+    [students, cohortId],
+  );
+
+  // The roster that actually gets distributed into teams.
+  const roster = useMemo(
+    () => cohortStudents.filter((s) => !excludedIds.includes(s.id)),
+    [cohortStudents, excludedIds],
+  );
+  const rosterKey = useMemo(() => roster.map((s) => s.id).join(","), [roster]);
+
+  const excludedStudents = useMemo(
+    () => cohortStudents.filter((s) => excludedIds.includes(s.id)),
+    [cohortStudents, excludedIds],
+  );
 
   useEffect(() => {
     api<StudentRecord[]>("/students").then(setStudents).catch(() => {});
@@ -61,20 +92,35 @@ export default function CreateGroupProject() {
 
   // Re-distribute whenever the roster or team count changes, preserving existing manual placements.
   useEffect(() => {
+    const rosterIds = rosterKey ? rosterKey.split(",") : [];
     setStudentsByTeam((prev) => {
       const buckets: string[][] = Array.from({ length: groupCount }, (_, i) => (prev[i] || []).slice());
-      const placed = new Set<string>(buckets.flat());
-      const roster = students.map((s) => s.id);
-      // Drop ids no longer in roster
+      const rosterSet = new Set(rosterIds);
+      // Drop ids that left the roster (cohort change or exclusion)
       for (let i = 0; i < buckets.length; i++) {
-        buckets[i] = buckets[i].filter((id) => roster.includes(id));
+        buckets[i] = buckets[i].filter((id) => rosterSet.has(id));
       }
-      // Round-robin any new/unplaced students
-      const unplaced = roster.filter((id) => !placed.has(id));
-      unplaced.forEach((id, i) => buckets[i % groupCount].push(id));
+      // Round-robin any new/unplaced students into the smallest teams
+      const placed = new Set<string>(buckets.flat());
+      const unplaced = rosterIds.filter((id) => !placed.has(id));
+      for (const id of unplaced) {
+        let smallest = 0;
+        for (let i = 1; i < buckets.length; i++) {
+          if (buckets[i].length < buckets[smallest].length) smallest = i;
+        }
+        buckets[smallest].push(id);
+      }
       return buckets;
     });
-  }, [students, groupCount]);
+  }, [rosterKey, groupCount]);
+
+  function excludeStudent(studentId: string) {
+    setExcludedIds((prev) => (prev.includes(studentId) ? prev : [...prev, studentId]));
+  }
+
+  function includeStudent(studentId: string) {
+    setExcludedIds((prev) => prev.filter((id) => id !== studentId));
+  }
 
   // Sync teams array length when groupCount changes
   function handleGroupCountChange(n: number) {
@@ -134,6 +180,54 @@ export default function CreateGroupProject() {
     }
   }
 
+  async function handleAssetUpload(idx: number, e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    updateTeam(idx, { uploadingAsset: true });
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await api<{ assetId: string; ext: string; name: string }>("/assignments/upload-group-asset", {
+          method: "POST",
+          body: fd,
+        });
+        setTeams((prev) =>
+          prev.map((t, i) =>
+            i === idx
+              ? { ...t, assets: [...t.assets, { id: res.assetId, name: res.name, kind: "file", ext: res.ext, url: null }] }
+              : t,
+          ),
+        );
+      }
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Asset upload failed.");
+    } finally {
+      updateTeam(idx, { uploadingAsset: false });
+      e.target.value = "";
+    }
+  }
+
+  function addAssetLink(idx: number) {
+    const url = prompt("Link URL (https://…)");
+    if (!url || !/^https?:\/\//i.test(url.trim())) {
+      if (url) toast().error("Please enter a URL starting with http:// or https://");
+      return;
+    }
+    const name = prompt("Label for this link (optional)") || url.trim();
+    setTeams((prev) =>
+      prev.map((t, i) =>
+        i === idx
+          ? { ...t, assets: [...t.assets, { id: crypto.randomUUID(), name, kind: "link", ext: null, url: url.trim() }] }
+          : t,
+      ),
+    );
+  }
+
+  function removeAsset(idx: number, assetId: string) {
+    setTeams((prev) => prev.map((t, i) => (i === idx ? { ...t, assets: t.assets.filter((a) => a.id !== assetId) } : t)));
+  }
+
   async function handleClassNotesFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -153,7 +247,8 @@ export default function CreateGroupProject() {
           description: "",
           rubric: "",
           maxScore,
-          sourceType: "markdown",
+          // Each team gets its own brief, so the assignment itself has no source.
+          sourceType: "manual",
           sourceMarkdown: null,
           sourceUrl: null,
           sourcePdfPath: null,
@@ -168,6 +263,7 @@ export default function CreateGroupProject() {
           groupQuestionMode: "per_group",
           track: track || null,
           cohortId: cohortId || null,
+          excludedStudentIds: excludedIds,
           groupDrafts: teams.map((t, i) => ({
             name: t.name,
             memberIds: studentsByTeam[i] ?? [],
@@ -175,6 +271,7 @@ export default function CreateGroupProject() {
             description: t.sourceType === "markdown" ? t.content : null,
             sourceUrl: t.sourceType === "link" ? t.sourceUrl : null,
             sourcePdfPath: t.sourceType === "pdf" ? t.sourcePdfPath : null,
+            assets: t.assets,
           })),
         }),
       });
@@ -321,9 +418,14 @@ export default function CreateGroupProject() {
             <div className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-[var(--fg)]">Number of teams</span>
               <span className="text-xs text-[var(--fg-muted)]">
-                {students.length > 0
-                  ? `${students.length} student${students.length === 1 ? "" : "s"} → ~${Math.ceil(students.length / groupCount)} per team`
-                  : "Students are distributed evenly after creation."}
+                {roster.length > 0
+                  ? `${roster.length} student${roster.length === 1 ? "" : "s"}` +
+                    (cohortId ? " in this cohort" : "") +
+                    (excludedStudents.length > 0 ? ` · ${excludedStudents.length} excluded` : "") +
+                    ` → ~${Math.ceil(roster.length / groupCount)} per team`
+                  : cohortId
+                    ? "No students in this cohort yet."
+                    : "Students are distributed evenly after creation."}
               </span>
             </div>
             <div className="ml-auto flex items-center gap-2">
@@ -429,6 +531,56 @@ export default function CreateGroupProject() {
                     )}
                   </div>
 
+                  {/* Team assets — shown to this team inside the app */}
+                  <div className="flex flex-col gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+                        Team assets
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addAssetLink(idx)}
+                        className="text-[11px] font-medium text-[var(--accent)] hover:underline"
+                      >
+                        + Link
+                      </button>
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
+                      disabled={team.uploadingAsset}
+                      className="text-xs text-[var(--fg-muted)] file:mr-2 file:rounded file:border file:border-[var(--border)] file:bg-[var(--surface)] file:px-2 file:py-1 file:text-xs file:text-[var(--fg)] file:hover:bg-[var(--surface-muted)]"
+                      onChange={(e) => handleAssetUpload(idx, e)}
+                    />
+                    {team.uploadingAsset && <span className="text-[11px] text-[var(--fg-muted)]">Uploading…</span>}
+                    {team.assets.length === 0 ? (
+                      <span className="text-[11px] text-[var(--fg-muted)]">
+                        PDFs and images appear inline for this team only.
+                      </span>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {team.assets.map((a) => (
+                          <div
+                            key={a.id}
+                            className="flex items-center gap-1.5 rounded border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px]"
+                          >
+                            <Icon.FileText className="h-3 w-3 shrink-0 text-[var(--fg-muted)]" />
+                            <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeAsset(idx, a.id)}
+                              title="Remove asset"
+                              className="shrink-0 rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                            >
+                              <Icon.X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Students (drag between teams) */}
                   <div className="flex flex-col gap-1.5">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
@@ -462,6 +614,14 @@ export default function CreateGroupProject() {
                                   <div className="truncate text-[10px] text-[var(--fg-muted)]">{s.email}</div>
                                 )}
                               </div>
+                              <button
+                                type="button"
+                                onClick={() => excludeStudent(sid)}
+                                title="Exclude from this project"
+                                className="shrink-0 rounded p-0.5 text-[var(--fg-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                              >
+                                <Icon.X className="h-3 w-3" />
+                              </button>
                             </div>
                           );
                         })}
@@ -472,6 +632,34 @@ export default function CreateGroupProject() {
               </Card>
             ))}
           </div>
+
+          {/* Excluded students */}
+          {excludedStudents.length > 0 && (
+            <Card>
+              <CardContent className="flex flex-col gap-2">
+                <div className="text-sm font-semibold text-[var(--fg)]">
+                  Not participating
+                  <span className="ml-1 text-xs font-normal text-[var(--fg-muted)]">
+                    ({excludedStudents.length}) — left out of every team
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {excludedStudents.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => includeStudent(s.id)}
+                      title="Add back to the teams"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1.5 text-xs text-[var(--fg-muted)] transition-colors hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    >
+                      <Icon.Plus className="h-3 w-3" />
+                      {s.fullName}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {error && (
             <div className="rounded-lg border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">
