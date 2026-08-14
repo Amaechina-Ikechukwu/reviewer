@@ -21,6 +21,7 @@ import AssignmentsPage from "./pages/AssignmentsPage";
 import AssignmentDetailPage from "./pages/AssignmentDetailPage";
 import PublicAssignmentBrief from "./pages/PublicAssignmentBrief";
 import PublicSubmission from "./pages/PublicSubmission";
+import PublicGroupBrief from "./pages/PublicGroupBrief";
 import CreateAssignment from "./pages/CreateAssignment";
 import EditAssignment from "./pages/EditAssignment";
 import ManageGroups from "./pages/ManageGroups";
@@ -134,6 +135,7 @@ export default function App() {
       <Route path="/changelog" element={<ChangelogPage />} />
       <Route path="/assignments/:id/brief" element={<PublicAssignmentBrief />} />
       <Route path="/s/:token" element={<PublicSubmission />} />
+      <Route path="/g/:token" element={<PublicGroupBrief />} />
       <Route path="/" element={<HomeRedirect />} />
 
       <Route

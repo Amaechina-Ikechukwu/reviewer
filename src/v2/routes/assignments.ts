@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { enqueueEmailJob } from "../services/emailJobs";
@@ -589,8 +589,10 @@ export const assignmentRoutes = {
       where: [["assignmentId", "==", assignment.id]],
     });
     const previousMembership = new Map<string, string>();
+    const previousShareTokens = new Map<string, string>();
     for (const g of previousGroups) {
       for (const m of g.memberIds || []) previousMembership.set(m, g.id);
+      if (g.shareToken) previousShareTokens.set(g.id, g.shareToken);
     }
 
     await data.delMany(COLLECTIONS.assignmentGroups, [["assignmentId", "==", assignment.id]]);
@@ -616,8 +618,13 @@ export const assignmentRoutes = {
         sourceUrl,
         sourcePdfPath,
         assets,
+        // Saving rewrites the group docs; keep any existing public link alive.
+        shareToken: previousShareTokens.get(id) ?? null,
       });
-      created.push({ id, name, memberIds, description, rubric, sourceType, sourceUrl, sourcePdfPath, assets });
+      created.push({
+        id, name, memberIds, description, rubric, sourceType, sourceUrl, sourcePdfPath, assets,
+        shareToken: previousShareTokens.get(id) ?? null,
+      });
     }
 
     await data.update(COLLECTIONS.assignments, assignment.id, { groupCount: created.length });
@@ -690,6 +697,98 @@ export const assignmentRoutes = {
     if (!isStaff(user.role) && !(group.memberIds || []).includes(user.userId)) {
       return new Response("Not found", { status: 404 });
     }
+
+    const asset = (group.assets || []).find((a: any) => a.id === params.assetId && a.kind === "file");
+    if (!asset || !GROUP_ASSET_EXTS[asset.ext]) return new Response("Not found", { status: 404 });
+
+    const buffer = await storageDownload(`group-assets/${asset.id}.${asset.ext}`).catch(() => null);
+    if (!buffer) return new Response("Not found", { status: 404 });
+
+    return new Response(buffer as unknown as BodyInit, {
+      headers: { "Content-Type": GROUP_ASSET_EXTS[asset.ext], "Content-Disposition": "inline" },
+    });
+  },
+
+  async shareGroup(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (!isStaff(user.role)) return json({ error: "Only staff can share groups." }, 403);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+    if (["instructor", "teacher", "manager"].includes(user.role) && assignment.createdBy !== user.userId) {
+      return json({ error: "Assignment not found." }, 404);
+    }
+
+    const group = await data.getById<any>(COLLECTIONS.assignmentGroups, params.groupId);
+    if (!group || group.assignmentId !== assignment.id) return json({ error: "Group not found." }, 404);
+    if (group.shareToken) return json({ shareToken: group.shareToken });
+
+    const shareToken = randomBytes(16).toString("base64url");
+    await data.update(COLLECTIONS.assignmentGroups, group.id, { shareToken, sharedAt: new Date() });
+    return json({ shareToken });
+  },
+
+  async unshareGroup(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (!isStaff(user.role)) return json({ error: "Only staff can unshare groups." }, 403);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+    if (["instructor", "teacher", "manager"].includes(user.role) && assignment.createdBy !== user.userId) {
+      return json({ error: "Assignment not found." }, 404);
+    }
+
+    const group = await data.getById<any>(COLLECTIONS.assignmentGroups, params.groupId);
+    if (!group || group.assignmentId !== assignment.id) return json({ error: "Group not found." }, 404);
+
+    await data.update(COLLECTIONS.assignmentGroups, group.id, { shareToken: null, sharedAt: null });
+    return json({ shareToken: null });
+  },
+
+  // Unauthenticated read of a shared group. Exposes the team's brief, resources
+  // and member names — never emails, rubric-only teacher notes or other teams.
+  async getPublicGroup(_request: Request, params: Record<string, string>) {
+    const token = params.token?.trim();
+    if (!token) return json({ error: "Group not found." }, 404);
+
+    const group = await data.findOne<any>(COLLECTIONS.assignmentGroups, [["shareToken", "==", token]]);
+    if (!group) return json({ error: "This link is no longer available." }, 404);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, group.assignmentId);
+    const members = await Promise.all(
+      (group.memberIds || []).map((id: string) => data.getById<any>(COLLECTIONS.users, id)),
+    );
+
+    return json({
+      name: group.name,
+      description: group.description ?? null,
+      rubric: group.rubric ?? null,
+      sourceType: group.sourceType ?? null,
+      sourceUrl: group.sourceUrl ?? null,
+      hasBrief: Boolean(group.sourcePdfPath),
+      assets: (group.assets || []).map((a: any) => ({ id: a.id, name: a.name, kind: a.kind, ext: a.ext, url: a.url })),
+      memberNames: members.filter(Boolean).map((m: any) => m.fullName),
+      assignmentTitle: assignment?.title ?? null,
+      closesAt: assignment?.closesAt ?? null,
+      maxScore: assignment?.maxScore ?? null,
+    });
+  },
+
+  async getPublicGroupBrief(_request: Request, params: Record<string, string>) {
+    const group = await data.findOne<any>(COLLECTIONS.assignmentGroups, [["shareToken", "==", params.token?.trim()]]);
+    if (!group || !group.sourcePdfPath) return new Response("Not found", { status: 404 });
+
+    const buffer = await storageDownload(`briefs/${group.sourcePdfPath}.pdf`).catch(() => null);
+    if (!buffer) return new Response("Not found", { status: 404 });
+
+    return new Response(buffer as unknown as BodyInit, {
+      headers: { "Content-Type": "application/pdf", "Content-Disposition": "inline" },
+    });
+  },
+
+  async getPublicGroupAsset(_request: Request, params: Record<string, string>) {
+    const group = await data.findOne<any>(COLLECTIONS.assignmentGroups, [["shareToken", "==", params.token?.trim()]]);
+    if (!group) return new Response("Not found", { status: 404 });
 
     const asset = (group.assets || []).find((a: any) => a.id === params.assetId && a.kind === "file");
     if (!asset || !GROUP_ASSET_EXTS[asset.ext]) return new Response("Not found", { status: 404 });

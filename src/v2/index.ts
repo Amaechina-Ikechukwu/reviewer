@@ -47,6 +47,11 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/assignments/upload-group-asset", handler: assignmentRoutes.uploadGroupAsset, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id/groups/:groupId/brief", handler: assignmentRoutes.getGroupBrief, requiresAuth: true },
   { method: "GET", path: "/v2/api/assignments/:id/groups/:groupId/assets/:assetId", handler: assignmentRoutes.getGroupAsset, requiresAuth: true },
+  { method: "POST", path: "/v2/api/assignments/:id/groups/:groupId/share", handler: assignmentRoutes.shareGroup, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/assignments/:id/groups/:groupId/share", handler: assignmentRoutes.unshareGroup, requiresAuth: true },
+  { method: "GET", path: "/v2/api/public/groups/:token", handler: assignmentRoutes.getPublicGroup, requiresAuth: false },
+  { method: "GET", path: "/v2/api/public/groups/:token/brief", handler: assignmentRoutes.getPublicGroupBrief, requiresAuth: false },
+  { method: "GET", path: "/v2/api/public/groups/:token/assets/:assetId", handler: assignmentRoutes.getPublicGroupAsset, requiresAuth: false },
 
   { method: "POST", path: "/v2/api/submissions", handler: submissionRoutes.create, requiresAuth: true },
   { method: "POST", path: "/v2/api/submissions/import", handler: submissionRoutes.import, requiresAuth: true },

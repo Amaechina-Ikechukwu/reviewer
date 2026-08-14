@@ -110,6 +110,21 @@ export type AssignmentGroup = {
   sourceUrl?: string | null;
   sourcePdfPath?: string | null;
   assets?: GroupAsset[];
+  shareToken?: string | null;
+};
+
+export type PublicGroup = {
+  name: string;
+  description: string | null;
+  rubric: string | null;
+  sourceType: GroupSourceType | null;
+  sourceUrl: string | null;
+  hasBrief: boolean;
+  assets: GroupAsset[];
+  memberNames: string[];
+  assignmentTitle: string | null;
+  closesAt: string | null;
+  maxScore: number | null;
 };
 
 export type Submission = {

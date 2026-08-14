@@ -31,6 +31,7 @@ export default function ManageGroups() {
   const [hoverGroup, setHoverGroup] = useState<string | null>(null);
   const [regenCount, setRegenCount] = useState(0);
   const [unassigned, setUnassigned] = useState<string[]>([]);
+  const [copiedGroup, setCopiedGroup] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -156,6 +157,26 @@ export default function ManageGroups() {
     const name = prompt("Label for this link (optional)") || url.trim();
     const asset: GroupAsset = { id: crypto.randomUUID(), name, kind: "link", ext: null, url: url.trim() };
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, assets: [...(g.assets ?? []), asset] } : g)));
+  }
+
+  async function copyGroupLink(groupId: string) {
+    if (!id) return;
+    if (groupId.startsWith("new-")) {
+      toast().error("Save changes first, then copy this team's link.");
+      return;
+    }
+    try {
+      const g = groups.find((x) => x.id === groupId);
+      const token =
+        g?.shareToken ||
+        (await api<{ shareToken: string }>(`/assignments/${id}/groups/${groupId}/share`, { method: "POST" })).shareToken;
+      updateGroupField(groupId, { shareToken: token });
+      await navigator.clipboard.writeText(`${window.location.origin}/g/${token}`);
+      setCopiedGroup(groupId);
+      setTimeout(() => setCopiedGroup((c) => (c === groupId ? null : c)), 2000);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Could not copy link");
+    }
   }
 
   function removeAsset(groupId: string, assetId: string) {
@@ -340,6 +361,14 @@ export default function ManageGroups() {
                   <span className="text-xs text-[var(--fg-muted)]">{g.memberIds.length}</span>
                   <button
                     type="button"
+                    onClick={() => copyGroupLink(g.id)}
+                    title="Copy this team's shareable link"
+                    className="rounded-md p-1.5 text-[var(--fg-muted)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+                  >
+                    {copiedGroup === g.id ? <Icon.Check className="h-4 w-4" /> : <Icon.Link className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => removeGroup(g.id)}
                     title="Delete group"
                     className="rounded-md p-1.5 text-[var(--fg-muted)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
@@ -347,6 +376,21 @@ export default function ManageGroups() {
                     <Icon.Trash className="h-4 w-4" />
                   </button>
                 </div>
+                {g.shareToken && (
+                  <div className="flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 px-2 py-1.5">
+                    <Icon.Link className="h-3 w-3 shrink-0 text-[var(--fg-muted)]" />
+                    <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-[var(--fg-muted)]">
+                      /g/{g.shareToken}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyGroupLink(g.id)}
+                      className="shrink-0 text-[10px] font-medium text-[var(--accent)] hover:underline"
+                    >
+                      {copiedGroup === g.id ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                )}
                 {assignment?.groupQuestionMode === "per_group" && (
                   <div className="flex flex-col gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-muted)]/40 p-2">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
