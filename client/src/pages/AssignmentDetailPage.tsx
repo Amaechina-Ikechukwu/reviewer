@@ -13,7 +13,8 @@ import { ReviewStatusPill } from "../components/ui/StatusPill";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { api, deleteSubmission } from "../api";
 import { formatDateTime } from "../lib/format";
-import type { Assignment, Review } from "../types";
+import { GroupProjectWorkspace } from "../components/GroupProjectWorkspace";
+import type { Assignment, AssignmentGroup, Review } from "../types";
 
 type SubmissionRow = {
   submission: {
@@ -36,6 +37,10 @@ export default function AssignmentDetailPage() {
   const [pdfBriefUrl, setPdfBriefUrl] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [groups, setGroups] = useState<AssignmentGroup[]>([]);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [copiedGroupId, setCopiedGroupId] = useState<string | null>(null);
+  const [manageOpen, setManageOpen] = useState(false);
 
   function copyPublicLink() {
     if (!assignment) return;
@@ -44,6 +49,19 @@ export default function AssignmentDetailPage() {
     setTimeout(() => setLinkCopied(false), 2000);
   }
 
+  async function copyGroupLink(groupId: string) {
+    if (!id) return;
+    try {
+      const current = groups.find((group) => group.id === groupId);
+      const token = current?.shareToken || (await api<{ shareToken: string }>(`/assignments/${id}/groups/${groupId}/share`, { method: "POST" })).shareToken;
+      await navigator.clipboard.writeText(`${window.location.origin}/g/${token}`);
+      setGroups((previous) => previous.map((group) => group.id === groupId ? { ...group, shareToken: token } : group));
+      setCopiedGroupId(groupId);
+      setTimeout(() => setCopiedGroupId((currentId) => currentId === groupId ? null : currentId), 2000);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Could not create the public team link");
+    }
+  }
   const handleDelete = async (submissionId: string, studentName: string | null) => {
     if (!confirm(`Delete submission from ${studentName || "student"}? They will be able to resubmit.`)) return;
     try {
@@ -95,6 +113,14 @@ export default function AssignmentDetailPage() {
       });
   }, [id, refreshKey]);
 
+  useEffect(() => {
+    if (!id || !assignment?.isGroupAssignment) return;
+    setGroupsLoading(true);
+    api<{ groups: AssignmentGroup[] }>(`/assignments/${id}/groups`)
+      .then((result) => setGroups(result.groups))
+      .catch((err) => toast().error(err instanceof Error ? err.message : "Failed to load teams"))
+      .finally(() => setGroupsLoading(false));
+  }, [id, assignment?.isGroupAssignment]);
   if (error) {
     return (
       <TeacherShell section="assignments">
@@ -115,6 +141,27 @@ export default function AssignmentDetailPage() {
   const isClosed = new Date(assignment.closesAt) <= now;
   const sentCount = submissions.length;
   const reviewedCount = Object.values(reviews).filter((r) => r.status === "completed").length;
+
+  if (assignment.isGroupAssignment) {
+    return (
+      <TeacherShell section="groupProjects">
+        <GroupProjectWorkspace
+          assignment={assignment}
+          groups={groups}
+          groupsLoading={groupsLoading}
+          pdfBriefUrl={pdfBriefUrl}
+          submissionCount={sentCount}
+          reviewedCount={reviewedCount}
+          publicLinkCopied={linkCopied}
+          copiedGroupId={copiedGroupId}
+          manageOpen={manageOpen}
+          onCopyPublicLink={copyPublicLink}
+          onCopyGroupLink={copyGroupLink}
+          onToggleManage={() => setManageOpen((open) => !open)}
+        />
+      </TeacherShell>
+    );
+  }
 
   return (
     <TeacherShell section="assignments">

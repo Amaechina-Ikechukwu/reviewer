@@ -87,6 +87,8 @@ export type PublicAssignmentBrief = {
   maxScore: number;
   closesAt: string;
   track?: Track | null;
+  isGroupAssignment?: boolean;
+  groupCount?: number;
 };
 
 export type GroupSourceType = "markdown" | "link" | "pdf";

@@ -377,6 +377,8 @@ export const assignmentRoutes = {
       maxScore: a.maxScore,
       closesAt: a.closesAt,
       track: a.track,
+      isGroupAssignment: Boolean(a.isGroupAssignment),
+      groupCount: a.groupCount ?? 0,
     });
   },
 
