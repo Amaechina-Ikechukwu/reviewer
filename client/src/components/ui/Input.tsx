@@ -20,10 +20,20 @@ const fieldBase =
   "w-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--fg)] placeholder:text-[var(--fg-subtle)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/25";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input(
-  { className, ...rest },
+  { className, onWheel, ...rest },
   ref,
 ) {
-  return <input ref={ref} className={cn(fieldBase, "h-9", className)} {...rest} />;
+  return (
+    <input
+      ref={ref}
+      className={cn(fieldBase, "h-9", className)}
+      {...rest}
+      onWheel={(event) => {
+        if (rest.type === "number") event.currentTarget.blur();
+        onWheel?.(event);
+      }}
+    />
+  );
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(

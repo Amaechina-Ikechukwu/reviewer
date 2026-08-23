@@ -12,7 +12,7 @@ import { cn } from "../lib/cn";
 import type { Assignment, Cohort, Track } from "../types";
 import { CODE_TRACKS, TRACKS } from "../types";
 
-type SourceMode = "markdown" | "notion" | "pdf" | "docx" | "link";
+type SourceMode = "manual" | "markdown" | "notion" | "pdf" | "docx" | "link";
 
 function toDatetimeLocal(iso: string) {
   const d = new Date(iso);
@@ -32,6 +32,7 @@ export default function EditAssignment() {
   const [sourceMarkdown, setSourceMarkdown] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourcePdfPath, setSourcePdfPath] = useState<string | null>(null);
+  const [sourceDocxPath, setSourceDocxPath] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [closesAt, setClosesAt] = useState("");
@@ -57,12 +58,21 @@ export default function EditAssignment() {
         api<Assignment>(`/assignments/${id}`)
           .then((a) => {
             setTitle(a.title);
-            setSourceMode(a.sourceType === "notion" ? "notion" : a.sourceType === "pdf" ? "pdf" : "markdown");
+            setSourceMode(
+              a.sourceType === "markdown" || a.sourceType === "notion" || a.sourceType === "pdf" ||
+              a.sourceType === "docx" || a.sourceType === "link" || a.sourceType === "manual"
+                ? a.sourceType
+                : "manual",
+            );
             setSourceMarkdown(a.sourceMarkdown ?? "");
             setSourceUrl(a.sourceUrl ?? "");
             if (a.sourceType === "pdf" && a.sourcePdfPath) {
               setSourcePdfPath(a.sourcePdfPath);
               setPdfFileName("existing-brief.pdf");
+            }
+            if (a.sourceType === "docx" && a.sourceDocxPath) {
+              setSourceDocxPath(a.sourceDocxPath);
+              setPdfFileName("existing-brief.docx");
             }
             setClosesAt(toDatetimeLocal(a.closesAt));
             setAllowGithub(a.allowGithub);
@@ -128,18 +138,24 @@ export default function EditAssignment() {
     }
   }
 
-  async function handlePdfBrief(event: ChangeEvent<HTMLInputElement>) {
+  async function handleBriefAsset(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
     setUploadingPdf(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await api<{ briefId: string }>("/assignments/upload-brief", { method: "POST", body: fd });
-      setSourcePdfPath(res.briefId);
+      const res = await api<{ briefId: string; ext?: string }>("/assignments/upload-brief", { method: "POST", body: fd });
+      if (res.ext === "docx") {
+        setSourceDocxPath(res.briefId);
+        setSourcePdfPath(null);
+      } else {
+        setSourcePdfPath(res.briefId);
+        setSourceDocxPath(null);
+      }
       setPdfFileName(file.name);
     } catch (err) {
-      toast().error(err instanceof Error ? err.message : "PDF upload failed.");
+      toast().error(err instanceof Error ? err.message : "Brief upload failed.");
     } finally {
       setUploadingPdf(false);
       event.target.value = "";
@@ -152,6 +168,12 @@ export default function EditAssignment() {
 
     if (sourceMode === "pdf" && !sourcePdfPath) {
       const msg = "Please upload a PDF brief before saving.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
+    if (sourceMode === "docx" && !sourceDocxPath) {
+      const msg = "Please upload a DOCX brief before saving.";
       setError(msg);
       toast().error(msg);
       return;
@@ -169,6 +191,12 @@ export default function EditAssignment() {
       return;
     }
 
+    if (sourceMode === "link" && !sourceUrl.trim()) {
+      const msg = "Please provide a URL for the project brief.";
+      setError(msg);
+      toast().error(msg);
+      return;
+    }
     if (classNotesType === "pdf" && !classNotesPdfPath) {
       const msg = "Please upload a PDF for class notes.";
       setError(msg);
@@ -198,8 +226,9 @@ export default function EditAssignment() {
           maxScore,
           sourceType: sourceMode,
           sourceMarkdown: sourceMode === "markdown" ? sourceMarkdown : null,
-          sourceUrl: sourceMode === "notion" ? sourceUrl : null,
+          sourceUrl: sourceMode === "notion" || sourceMode === "link" ? sourceUrl : null,
           sourcePdfPath: sourceMode === "pdf" ? sourcePdfPath : null,
+          sourceDocxPath: sourceMode === "docx" ? sourceDocxPath : null,
           closesAt: new Date(closesAt).toISOString(),
           allowGithub: isCodeTrack ? allowGithub : false,
           allowFileUpload,
@@ -270,7 +299,7 @@ export default function EditAssignment() {
               <div className="flex flex-col gap-3">
                 <div className="text-sm font-medium">Assignment source</div>
                 <div className="inline-flex w-fit rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-1">
-                  {(["markdown", "notion", "pdf"] as const).map((mode) => (
+                  {(["manual", "markdown", "notion", "link", "pdf", "docx"] as const).map((mode) => (
                     <button
                       key={mode}
                       type="button"
@@ -282,7 +311,7 @@ export default function EditAssignment() {
                           : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                       )}
                     >
-                      {mode === "markdown" ? "Markdown file" : mode === "notion" ? "Notion link" : "PDF"}
+                      {mode === "manual" ? "No brief" : mode === "markdown" ? "Markdown" : mode === "notion" ? "Notion" : mode === "link" ? "Link" : mode.toUpperCase()}
                     </button>
                   ))}
                 </div>
@@ -301,9 +330,13 @@ export default function EditAssignment() {
                   </div>
                 )}
 
-                {sourceMode === "notion" && (
+                {sourceMode === "manual" && (
+                  <p className="text-xs text-[var(--fg-muted)]">This project has no assignment-wide brief. Team-specific briefs can be edited from Manage project, then Re-shuffle & edit teams.</p>
+                )}
+
+                {(sourceMode === "notion" || sourceMode === "link") && (
                   <Label>
-                    Notion page URL
+                    {sourceMode === "notion" ? "Notion page URL" : "Brief URL"}
                     <Input
                       placeholder="https://www.notion.so/..."
                       type="url"
@@ -313,11 +346,11 @@ export default function EditAssignment() {
                   </Label>
                 )}
 
-                {sourceMode === "pdf" && (
+                {(sourceMode === "pdf" || sourceMode === "docx") && (
                   <div className="flex flex-col gap-2">
                     <Label>
-                      Upload PDF brief
-                      <Input accept=".pdf" type="file" disabled={uploadingPdf} onChange={handlePdfBrief} />
+                      Replace {sourceMode.toUpperCase()} brief
+                      <Input accept={sourceMode === "pdf" ? ".pdf" : ".docx"} type="file" disabled={uploadingPdf} onChange={handleBriefAsset} />
                     </Label>
                     {uploadingPdf && (
                       <div className="text-xs text-[var(--fg-muted)]">Uploading…</div>
@@ -325,8 +358,13 @@ export default function EditAssignment() {
                     {pdfFileName && !uploadingPdf && (
                       <div className="inline-flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
                         <Icon.Check className="h-3 w-3 text-[var(--success)]" />
-                        {pdfFileName}
+                        {pdfFileName} ready
                       </div>
+                    )}
+                    {pdfFileName?.startsWith("existing-") && !uploadingPdf && id && (
+                      <a href={`/v2/api/assignments/${id}/brief`} target="_blank" rel="noreferrer" className="w-fit text-xs font-medium text-[var(--accent)] hover:underline">
+                        View current brief
+                      </a>
                     )}
                   </div>
                 )}
