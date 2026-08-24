@@ -4,6 +4,7 @@ import { marked } from "marked";
 import { api } from "../api";
 import { Toaster } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { formatDateTime } from "../lib/format";

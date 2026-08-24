@@ -135,11 +135,11 @@ export function reviewProject(projectId: string, action: "accepted" | "declined"
 
 // In-app notifications
 export function listInAppNotifications() {
-  return api<import("../types").InAppNotification[]>("/notifications/in-app");
+  return api<import("./types").InAppNotification[]>("/notifications/in-app");
 }
 
 export function markNotificationRead(id: string) {
-  return api<import("../types").InAppNotification>(`/notifications/in-app/${id}/read`, { method: "PATCH" });
+  return api<import("./types").InAppNotification>(`/notifications/in-app/${id}/read`, { method: "PATCH" });
 }
 
 export function markAllNotificationsRead() {
