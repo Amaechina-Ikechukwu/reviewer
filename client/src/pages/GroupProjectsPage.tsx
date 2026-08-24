@@ -59,7 +59,7 @@ export default function GroupProjectsPage() {
                   <TR key={a.id}>
                     <TD label="Title">
                       <Link
-                        to={`/teacher/assignments/${a.id}/groups`}
+                        to={`/teacher/assignments/${a.id}`}
                         className="font-medium hover:text-[var(--accent)]"
                       >
                         {a.title}
@@ -77,11 +77,11 @@ export default function GroupProjectsPage() {
                     <TD label="Actions" className="text-right">
                       <Link
                         to={`/teacher/assignments/${a.id}/groups`}
-                        title="Manage teams"
+                        title="Re-shuffle & edit teams"
                         className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
                       >
                         <Icon.Users className="h-3.5 w-3.5" />
-                        Manage
+                        Teams
                       </Link>
                     </TD>
                   </TR>
