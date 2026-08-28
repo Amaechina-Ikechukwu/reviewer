@@ -396,7 +396,7 @@ export default function SubmitAssignment() {
               <div className="max-w-sm text-xs text-[var(--fg-muted)]">
                 {markedByInstructor
                   ? `Your instructor recorded this on ${formatDateTime(alreadySubmitted!.submittedAt)}.`
-                  : "This assignment is handed in outside the platform. Your instructor marks it complete and records your score here."}
+                  : "This one is assessed in person, so there is nothing to upload. Your instructor marks it complete and records your score here."}
               </div>
             </div>
           ) : alreadySubmitted && assignment.isGroupAssignment && alreadySubmitted.submittedByStudentId !== currentUser?.id ? (

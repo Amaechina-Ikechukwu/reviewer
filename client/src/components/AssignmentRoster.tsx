@@ -51,9 +51,9 @@ function StatusCell({ row }: { row: RosterRow }) {
 
 /**
  * The grading surface for an assignment: every student it was set for, whether
- * or not anything was handed in. Work that arrives offline — a design review, a
- * presentation, a printed report — is graded here by ticking a score, and the
- * mark is stored on the same submission record the AI review path uses.
+ * or not anything was handed in. Work assessed in person — handwritten, a
+ * presentation, an oral or practical — is graded here with full marks or a
+ * score, stored on the same submission record the AI review path uses.
  */
 export default function AssignmentRoster({
   assignmentId,
@@ -124,27 +124,20 @@ export default function AssignmentRoster({
     });
   }
 
+  /** An empty score box means "done" — and done is worth full marks. */
   async function submitMark(studentIds: string[], rawScore: string, busyKey: string) {
     const trimmed = rawScore.trim();
-    if (trimmed) {
-      const value = Number(trimmed);
-      if (!Number.isFinite(value) || value < 0 || value > maxScore) {
-        toast().error(`Enter a score between 0 and ${maxScore}.`);
-        return;
-      }
+    const score = trimmed === "" ? maxScore : Number(trimmed);
+    if (!Number.isFinite(score) || score < 0 || score > maxScore) {
+      toast().error(`Enter a score between 0 and ${maxScore}.`);
+      return;
     }
 
     setBusy(busyKey);
     try {
-      await markAssignmentDone(assignmentId, {
-        studentIds,
-        score: trimmed === "" ? null : Number(trimmed),
-      });
-      toast().success(
-        trimmed === ""
-          ? `Marked ${studentIds.length === 1 ? "as done" : `${studentIds.length} students as done`}`
-          : `Scored ${studentIds.length === 1 ? "1 student" : `${studentIds.length} students`} ${trimmed}/${maxScore}`,
-      );
+      await markAssignmentDone(assignmentId, { studentIds, score });
+      const who = studentIds.length === 1 ? "1 student" : `${studentIds.length} students`;
+      toast().success(`Marked ${who} ${score}/${maxScore}`);
       await load();
       onChanged?.();
     } catch (err) {
@@ -244,7 +237,7 @@ export default function AssignmentRoster({
               onClick={() => void submitMark([...selected], bulkScore, "bulk")}
             >
               <Icon.Check className="h-3.5 w-3.5" />
-              {bulkScore.trim() ? "Save score" : "Mark done"}
+              {bulkScore.trim() ? "Save score" : `Full mark (${maxScore})`}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
               Clear
@@ -354,10 +347,10 @@ export default function AssignmentRoster({
                           size="sm"
                           loading={rowBusy}
                           onClick={() => void submitMark([row.studentId], draft, row.studentId)}
-                          title={draft.trim() ? "Save this score" : "Mark as done without a score"}
+                          title={draft.trim() ? "Save this score" : `Mark done — full marks (${maxScore})`}
                         >
                           <Icon.Check className="h-3.5 w-3.5" />
-                          {draft.trim() ? "Save" : "Done"}
+                          {draft.trim() ? "Save" : "Full mark"}
                         </Button>
                         {hasFiles && (
                           <Link to={`/teacher/review/${row.submissionId}`}>

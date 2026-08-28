@@ -77,14 +77,21 @@ function MilestoneHero({ assignment }: { assignment: Assignment | null }) {
               to={`/student/submit/${assignment.id}`}
               className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-[#2f3cb5] shadow-lg transition hover:bg-white/95 hover:shadow-xl"
             >
-              Submit Project
-              <Icon.Upload className="h-4 w-4" />
+              {isOffline(assignment) ? "View details" : "Submit Project"}
+              {isOffline(assignment) ? <Icon.FileText className="h-4 w-4" /> : <Icon.Upload className="h-4 w-4" />}
             </Link>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+/** Some work is evaluated in person — handwritten, a presentation, an oral or
+ * practical — so the student has nothing to hand in and the instructor records
+ * the result instead. */
+function isOffline(assignment: Assignment) {
+  return !assignment.allowGithub && !assignment.allowFileUpload;
 }
 
 function TimeUnit({ value, label }: { value: number; label: string }) {
@@ -138,6 +145,7 @@ function AssignmentRow({ assignment, closed }: { assignment: Assignment; closed?
           {closed ? "Closed" : formatRelative(assignment.closesAt)}
         </span>
         <div className="flex items-center gap-1.5 text-[11px] text-[var(--fg-subtle)]">
+          {isOffline(assignment) && <span>Assessed in person</span>}
           {assignment.allowGithub && <span>GitHub</span>}
           {assignment.allowGithub && assignment.allowFileUpload && <span>•</span>}
           {assignment.allowFileUpload && <span>ZIP</span>}

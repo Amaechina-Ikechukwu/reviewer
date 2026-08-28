@@ -30,6 +30,7 @@ export default function CreateAssignment() {
   const [allowGithub, setAllowGithub] = useState(true);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
+  const offlineOnly = !allowFileUpload && !(isCodeTrack && allowGithub);
   const [maxScore, setMaxScore] = useState(100);
   const [classNotesType, setClassNotesType] = useState<"markdown" | "pdf" | "docx" | "link">("markdown");
   const [classNotes, setClassNotes] = useState("");
@@ -460,11 +461,39 @@ export default function CreateAssignment() {
                     <Icon.Upload className="h-4 w-4" />
                     ZIP / PDF upload
                   </label>
+                  {/* Work assessed away from the platform — handwritten, a
+                      presentation, an oral or practical, anything graded in the
+                      room. None of it reaches us, so the teacher records it. */}
+                  <label
+                    className={cn(
+                      "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                      offlineOnly
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
+                        : "border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:border-[var(--border-strong)]",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={offlineOnly}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setAllowGithub(false);
+                          setAllowFileUpload(false);
+                        } else {
+                          setAllowFileUpload(true);
+                        }
+                      }}
+                      className="h-4 w-4 accent-[var(--accent)]"
+                    />
+                    <Icon.Check className="h-4 w-4" />
+                    Assessed offline
+                  </label>
                 </div>
-                {!allowFileUpload && !(isCodeTrack && allowGithub) && (
+                {offlineOnly && (
                   <p className="text-xs text-[var(--fg-muted)]">
-                    Nothing to hand in online — students see this as handed in offline, and you mark completion and
-                    scores from the assignment page.
+                    For work you evaluate in person — handwritten, a presentation, an oral or practical, a portfolio
+                    review. Students have nothing to hand in; you mark each of them done (full marks) or type a score,
+                    from the assignment page.
                   </p>
                 )}
               </div>

@@ -652,10 +652,9 @@ export const submissionRoutes = {
 
   /**
    * Every student the assignment is set for, with whatever they have so far:
-   * a submission, a grade, or nothing. Assignments that are handed in offline
-   * (a design critique, a presentation, a printed report) never produce a
-   * submission at all, so the roster — not the submissions list — is what a
-   * teacher grades from.
+   * a submission, a grade, or nothing. Assignments assessed in person never
+   * produce a submission at all — nothing was ever handed in — so the roster,
+   * not the submissions list, is what a teacher grades from.
    */
   async roster(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
