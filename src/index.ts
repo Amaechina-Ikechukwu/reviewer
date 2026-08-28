@@ -10,6 +10,9 @@ import { verifyAuth } from "./middleware/auth";
 import { audit } from "./services/audit";
 import { logger } from "./utils/logger";
 import { v2Routes } from "./v2";
+import { resolvePermissions } from "./v2/services/access";
+import type { Permission } from "./utils/permissions";
+import { json } from "./utils/json";
 
 type RouteHandler = (request: Request, params: Record<string, string>) => Promise<Response> | Response;
 
@@ -19,12 +22,14 @@ type Route = {
   paramNames: string[];
   handler: RouteHandler;
   requiresAuth: boolean;
+  /** Access this route needs beyond being signed in. */
+  permission?: Permission;
 };
 
 const routes: Route[] = [];
 const clientDist = resolve(process.cwd(), "client", "dist");
 
-function addRoute(method: string, path: string, handler: RouteHandler, requiresAuth = true) {
+function addRoute(method: string, path: string, handler: RouteHandler, requiresAuth = true, permission?: Permission) {
   const paramNames: string[] = [];
   const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = escaped.replace(/:([A-Za-z0-9_]+)/g, (_match, name) => {
@@ -38,6 +43,7 @@ function addRoute(method: string, path: string, handler: RouteHandler, requiresA
     paramNames,
     handler,
     requiresAuth,
+    permission,
   });
 }
 
@@ -83,7 +89,7 @@ async function serveStatic(pathname: string) {
 }
 
 for (const r of v2Routes) {
-  addRoute(r.method, r.path, r.handler, r.requiresAuth);
+  addRoute(r.method, r.path, r.handler, r.requiresAuth, r.permission);
 }
 
 const port = Number(process.env.PORT || 3000);
@@ -105,9 +111,17 @@ Bun.serve({
           return authResult;
         }
 
+        // Permissions are read per request, so access granted or revoked on the
+        // staff page applies immediately rather than at the next login.
+        const permissions = await resolvePermissions(authResult.userId, authResult.role);
+
         routeRequest = Object.assign(request, {
-          user: authResult,
+          user: { ...authResult, permissions },
         }) as AuthenticatedRequest;
+
+        if (route.permission && !permissions.includes(route.permission)) {
+          return json({ error: "You do not have access to do that." }, 403);
+        }
       }
 
       try {

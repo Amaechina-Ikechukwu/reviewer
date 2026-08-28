@@ -17,11 +17,11 @@ export const TRACKS: { value: Track; label: string }[] = [
 
 export const CODE_TRACKS: Track[] = ["frontend", "backend", "cyber_security"];
 
-export type StaffRole = "teacher" | "owner" | "admin" | "manager" | "instructor";
+export type StaffRole = "teacher" | "owner" | "admin" | "manager" | "instructor" | "assistant";
 export type Role = "student" | StaffRole;
 
 export function isStaffRole(role: Role | string): boolean {
-  return ["teacher", "owner", "admin", "manager", "instructor"].includes(role);
+  return ["teacher", "owner", "admin", "manager", "instructor", "assistant"].includes(role);
 }
 
 export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
@@ -30,6 +30,49 @@ export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   manager: "Manager",
   instructor: "Instructor",
   teacher: "Instructor",
+  assistant: "Teaching assistant",
+};
+
+/** Everything a staff member can be given access to. Mirrors the server's
+ * catalogue in src/utils/permissions.ts — keep the two in step. */
+export const PERMISSIONS = [
+  { key: "assignments.manage", label: "Create & edit assignments", group: "Assignments" },
+  { key: "assignments.delete", label: "Delete assignments", group: "Assignments" },
+  { key: "reviews.run", label: "Run AI reviews", group: "Grading" },
+  { key: "grades.edit", label: "Grade, score & mark students done", group: "Grading" },
+  { key: "submissions.manage", label: "Submit for students, import & delete submissions", group: "Grading" },
+  { key: "students.manage", label: "Add & manage students", group: "People" },
+  { key: "cohorts.manage", label: "Create & manage cohorts", group: "People" },
+  { key: "staff.manage", label: "Invite & manage staff", group: "People" },
+  { key: "quizzes.manage", label: "Create & manage quizzes", group: "Coursework" },
+  { key: "forms.manage", label: "Create & manage forms", group: "Coursework" },
+  { key: "projects.manage", label: "Create & manage projects", group: "Coursework" },
+  { key: "notes.manage", label: "Upload & manage class notes", group: "Coursework" },
+  { key: "notifications.send", label: "Send announcements", group: "Communication" },
+  { key: "changelog.manage", label: "Publish changelog entries", group: "Communication" },
+] as const;
+
+export type Permission = (typeof PERMISSIONS)[number]["key"];
+
+export const PERMISSION_GROUPS = [...new Set(PERMISSIONS.map((entry) => entry.group))];
+
+/** Access is per person; the role only decides where they start. */
+export function hasPermission(
+  user: { permissions?: readonly string[] | null } | null | undefined,
+  permission: Permission,
+) {
+  return !!user?.permissions?.includes(permission);
+}
+
+export type StaffMember = {
+  id: string;
+  email: string;
+  fullName: string;
+  role: StaffRole;
+  permissions: Permission[];
+  /** True once their access has been hand-picked instead of following the role. */
+  customAccess: boolean;
+  pending: boolean;
 };
 
 export type ProviderName = "gemini";
@@ -41,6 +84,7 @@ export type User = {
   fullName: string;
   role: Role;
   cohortId?: string | null;
+  permissions?: Permission[];
 };
 
 export type Assignment = {

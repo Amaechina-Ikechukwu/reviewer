@@ -1,4 +1,4 @@
-import type { Cohort, Project, RosterRow, StudentRecord, Track } from "./types";
+import type { Cohort, Permission, Project, RosterRow, StudentRecord, Track } from "./types";
 
 function getApiBase() {
   return "/v2/api";
@@ -115,6 +115,19 @@ export function deleteProject(id: string) {
 
 export function deleteSubmission(id: string) {
   return api<{ deleted: boolean }>(`/submissions/${id}`, { method: "DELETE" });
+}
+
+// Staff access
+
+/** Sets one member's access. `useRoleDefaults` clears the hand-picked list. */
+export function updateStaffAccess(
+  staffId: string,
+  body: { permissions: Permission[] } | { useRoleDefaults: true },
+) {
+  return api<{ id: string; role: string; permissions: Permission[]; customAccess: boolean }>(
+    `/staff/${staffId}/access`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
 }
 
 // Assignment roster + manual marking

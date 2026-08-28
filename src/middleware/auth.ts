@@ -1,8 +1,10 @@
 import { json } from "../utils/json";
 import { type AuthUser, verifyToken } from "../utils/jwt";
+import type { Permission } from "../utils/permissions";
 
+/** The signed-in caller, with the access resolved for this request. */
 export type AuthenticatedRequest = Request & {
-  user: AuthUser;
+  user: AuthUser & { permissions?: Permission[] };
 };
 
 export function verifyAuth(request: Request): AuthUser | Response {

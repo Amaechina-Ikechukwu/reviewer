@@ -4,6 +4,7 @@ import { deleteSubmission, getAssignmentRoster, markAssignmentDone, unmarkAssign
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
 import { toast } from "./Toast";
+import { useAuth } from "../context/AuthContext";
 import { Avatar } from "./ui/Avatar";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
@@ -11,7 +12,7 @@ import { Card, CardHeader, CardTitle } from "./ui/Card";
 import { Icon } from "./ui/Icons";
 import { Input } from "./ui/Input";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "./ui/Table";
-import type { RosterRow } from "../types";
+import { hasPermission, type RosterRow } from "../types";
 
 type Filter = "all" | "outstanding" | "submitted" | "graded";
 
@@ -72,6 +73,10 @@ export default function AssignmentRoster({
   const [bulkScore, setBulkScore] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const { user } = useAuth();
+  // Someone without grading access still sees the roster, just read-only.
+  const canGrade = hasPermission(user, "grades.edit");
+  const canDeleteSubmissions = hasPermission(user, "submissions.manage");
 
   const load = useCallback(async () => {
     try {
@@ -219,7 +224,7 @@ export default function AssignmentRoster({
           ))}
         </div>
 
-        {selected.size > 0 && (
+        {canGrade && selected.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/50 px-3 py-2">
             <span className="text-xs font-medium">{selected.size} selected</span>
             <Input
@@ -252,7 +257,7 @@ export default function AssignmentRoster({
         <Table>
           <THead>
             <TR>
-              <TH className="w-8">
+              {canGrade && <TH className="w-8">
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
@@ -260,7 +265,7 @@ export default function AssignmentRoster({
                   aria-label="Select all"
                   className="h-3.5 w-3.5 accent-[var(--accent)]"
                 />
-              </TH>
+              </TH>}
               <TH>Student</TH>
               <TH>Status</TH>
               <TH>Submitted</TH>
@@ -285,15 +290,17 @@ export default function AssignmentRoster({
 
                 return (
                   <TR key={row.studentId}>
-                    <TD>
-                      <input
-                        type="checkbox"
-                        checked={selected.has(row.studentId)}
-                        onChange={() => toggle(row.studentId)}
-                        aria-label={`Select ${row.fullName}`}
-                        className="h-3.5 w-3.5 accent-[var(--accent)]"
-                      />
-                    </TD>
+                    {canGrade && (
+                      <TD>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(row.studentId)}
+                          onChange={() => toggle(row.studentId)}
+                          aria-label={`Select ${row.fullName}`}
+                          className="h-3.5 w-3.5 accent-[var(--accent)]"
+                        />
+                      </TD>
+                    )}
                     <TD label="Student">
                       <div className="flex items-center gap-3">
                         <Avatar name={row.fullName} size="sm" />
@@ -322,6 +329,11 @@ export default function AssignmentRoster({
                       )}
                     </TD>
                     <TD label="Score">
+                      {!canGrade ? (
+                        <span className="text-sm tabular-nums">
+                          {row.score === null ? "—" : `${row.score}/${row.maxScore || maxScore}`}
+                        </span>
+                      ) : (
                       <div className="flex items-center gap-1.5">
                         <Input
                           type="number"
@@ -339,19 +351,22 @@ export default function AssignmentRoster({
                         />
                         <span className="text-xs text-[var(--fg-subtle)]">/{row.maxScore || maxScore}</span>
                       </div>
+                      )}
                     </TD>
                     <TD label="Actions" className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant={draft.trim() ? "primary" : "secondary"}
-                          size="sm"
-                          loading={rowBusy}
-                          onClick={() => void submitMark([row.studentId], draft, row.studentId)}
-                          title={draft.trim() ? "Save this score" : `Mark done — full marks (${maxScore})`}
-                        >
-                          <Icon.Check className="h-3.5 w-3.5" />
-                          {draft.trim() ? "Save" : "Full mark"}
-                        </Button>
+                        {canGrade && (
+                          <Button
+                            variant={draft.trim() ? "primary" : "secondary"}
+                            size="sm"
+                            loading={rowBusy}
+                            onClick={() => void submitMark([row.studentId], draft, row.studentId)}
+                            title={draft.trim() ? "Save this score" : `Mark done — full marks (${maxScore})`}
+                          >
+                            <Icon.Check className="h-3.5 w-3.5" />
+                            {draft.trim() ? "Save" : "Full mark"}
+                          </Button>
+                        )}
                         {hasFiles && (
                           <Link to={`/teacher/review/${row.submissionId}`}>
                             <Button variant="ghost" size="sm">
@@ -360,7 +375,7 @@ export default function AssignmentRoster({
                             </Button>
                           </Link>
                         )}
-                        {isMarked(row) && (
+                        {canGrade && isMarked(row) && (
                           <Button
                             variant="ghost"
                             size="sm"

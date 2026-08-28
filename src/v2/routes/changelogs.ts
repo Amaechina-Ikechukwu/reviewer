@@ -93,7 +93,7 @@ export const changelogRoutes = {
     } else if (target === "students") {
       users = allUsers.filter((u: any) => u.role === "student");
     } else if (target === "staff") {
-      users = allUsers.filter((u: any) => ["teacher", "owner", "admin", "manager", "instructor"].includes(u.role));
+      users = allUsers.filter((u: any) => ["teacher", "owner", "admin", "manager", "instructor", "assistant"].includes(u.role));
     } else if (target === "cohort") {
       if (!body.cohortId) return json({ error: "Cohort ID is required." }, 400);
       users = allUsers.filter((u: any) => u.cohortId === body.cohortId);

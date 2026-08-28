@@ -1,3 +1,4 @@
+import { permissionsFor } from "../../utils/permissions";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { json, parseJson } from "../../utils/json";
@@ -43,7 +44,7 @@ async function findAuthToken(token: string, type: string) {
   }
 }
 
-const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
+const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor", "assistant"] as const;
 
 type RegisterBody = { email?: string; password?: string; fullName?: string; role?: UserRole; inviteToken?: string };
 type LoginBody = { email?: string; password?: string };
@@ -112,7 +113,18 @@ export const authRoutes = {
   async me(request: Request) {
     const user = (request as AuthenticatedRequest).user;
     const userDoc = await data.getById<any>(COLLECTIONS.users, user.userId);
-    return json({ user: { id: user.userId, email: user.email, fullName: user.fullName, role: user.role, cohortId: userDoc?.cohortId ?? null } });
+    // Access ships with the profile so the UI can hide what this person cannot
+    // do, rather than offering buttons the server will refuse.
+    return json({
+      user: {
+        id: user.userId,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+        cohortId: userDoc?.cohortId ?? null,
+        permissions: permissionsFor(userDoc ?? { role: user.role }),
+      },
+    });
   },
 
   async acceptInvite(request: Request, params: Record<string, string>) {

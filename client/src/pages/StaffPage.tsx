@@ -10,15 +10,8 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
-import { STAFF_ROLE_LABELS, type StaffRole } from "../types";
-
-type StaffMember = {
-  id: string;
-  email: string;
-  fullName: string;
-  role: StaffRole;
-  pending: boolean;
-};
+import StaffAccessModal from "../components/StaffAccessModal";
+import { PERMISSIONS, STAFF_ROLE_LABELS, type StaffMember, type StaffRole } from "../types";
 
 type InviteResponse = StaffMember & {
   inviteLink?: string;
@@ -34,7 +27,7 @@ type ResendResponse = {
   emailError?: string;
 };
 
-const ROLE_OPTIONS: StaffRole[] = ["owner", "admin", "manager", "instructor"];
+const ROLE_OPTIONS: StaffRole[] = ["owner", "admin", "manager", "instructor", "assistant"];
 
 function RoleDropdown({ member, onChanged }: { member: StaffMember; onChanged: (role: StaffRole) => void }) {
   const [saving, setSaving] = useState(false);
@@ -130,6 +123,7 @@ export default function StaffPage() {
   const [inviting, setInviting] = useState(false);
 
   const [confirmRemove, setConfirmRemove] = useState<StaffMember | null>(null);
+  const [accessFor, setAccessFor] = useState<StaffMember | null>(null);
   const [removing, setRemoving] = useState(false);
 
   const [inviteLinkInfo, setInviteLinkInfo] = useState<
@@ -163,6 +157,9 @@ export default function StaffPage() {
       });
       const member: StaffMember = {
         id: res.id, email: res.email, fullName: res.fullName, role: res.role, pending: res.pending,
+        // A fresh invite follows its role until someone edits the access.
+        permissions: res.permissions ?? [],
+        customAccess: false,
       };
       setStaff((prev) => {
         const existing = prev.find((s) => s.id === member.id);
@@ -260,6 +257,7 @@ export default function StaffPage() {
               <TH>Name</TH>
               <TH>Email</TH>
               <TH>Role</TH>
+              <TH>Access</TH>
               <TH>Status</TH>
               <TH />
             </TR>
@@ -297,6 +295,21 @@ export default function StaffPage() {
                       )}
                     </TD>
                     <TD>
+                      <button
+                        type="button"
+                        onClick={() => setAccessFor(member)}
+                        disabled={isMe}
+                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] transition-colors enabled:hover:bg-[var(--surface-muted)] enabled:hover:text-[var(--fg)] disabled:cursor-default"
+                        title={isMe ? "You cannot change your own access" : "Choose what this person can do"}
+                      >
+                        <Icon.Shield className="h-3.5 w-3.5" />
+                        {member.permissions.length === PERMISSIONS.length
+                          ? "Everything"
+                          : `${member.permissions.length} of ${PERMISSIONS.length}`}
+                        {member.customAccess && <Badge tone="accent">Custom</Badge>}
+                      </button>
+                    </TD>
+                    <TD>
                       {member.pending ? (
                         <Badge tone="warn">Invite pending</Badge>
                       ) : (
@@ -318,6 +331,12 @@ export default function StaffPage() {
             )}
           </TBody>
         </Table>
+
+        <StaffAccessModal
+          member={accessFor}
+          onClose={() => setAccessFor(null)}
+          onSaved={(updated) => setStaff((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))}
+        />
 
         {/* Invite modal */}
         <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Invite staff member">

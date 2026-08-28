@@ -7,8 +7,10 @@ import { sendInvite } from "../../services/email";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
 import { audit } from "../services/audit";
+import { invalidateAccess } from "../services/access";
+import { PERMISSIONS, ROLE_DEFAULTS, permissionsFor, sanitizePermissions } from "../../utils/permissions";
 
-const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor"] as const;
+const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor", "assistant"] as const;
 type StaffRole = typeof VALID_STAFF_ROLES[number];
 
 const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
@@ -69,6 +71,9 @@ export const staffRoutes = {
       email: s.email,
       fullName: s.fullName,
       role: s.role,
+      permissions: permissionsFor(s),
+      /** False while the member still runs on their role's defaults. */
+      customAccess: Array.isArray(s.permissions),
       pending: s.passwordHash === "INVITE_PENDING",
     })));
   },
@@ -77,7 +82,7 @@ export const staffRoutes = {
     const actor = (request as AuthenticatedRequest).user;
     if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
 
-    const body = await parseJson<{ fullName?: string; email?: string; role?: string }>(request);
+    const body = await parseJson<{ fullName?: string; email?: string; role?: string; permissions?: unknown }>(request);
     const email = body.email?.trim().toLowerCase() ?? "";
     const fullName = body.fullName?.trim() ?? "";
     const rawRole = body.role?.trim();
@@ -112,7 +117,7 @@ export const staffRoutes = {
         details: { email, role, reason: "duplicate_invite", emailSent: result.emailSent },
       });
       return json({
-        id: existing.id, email, fullName, role, pending: true,
+        id: existing.id, email, fullName, role, pending: true, permissions: permissionsFor({ ...existing, role }),
         inviteLink: result.inviteLink,
         emailSent: result.emailSent,
         ...(result.emailError ? { emailError: result.emailError } : {}),
@@ -124,6 +129,8 @@ export const staffRoutes = {
     const staff = await data.insert<any>(COLLECTIONS.users, id, {
       email, fullName, passwordHash: "INVITE_PENDING", role,
       joinCode: null, teacherId: null,
+      // Null keeps the member on their role's defaults until access is edited.
+      permissions: Array.isArray(body.permissions) ? sanitizePermissions(body.permissions) : null,
     });
 
     let result;
@@ -150,7 +157,7 @@ export const staffRoutes = {
       details: { email, role, emailSent: result.emailSent },
     });
     return json({
-      id: staff.id, email, fullName, role, pending: true,
+      id: staff.id, email, fullName, role, pending: true, permissions: permissionsFor(staff),
       inviteLink: result.inviteLink,
       emailSent: result.emailSent,
       ...(result.emailError ? { emailError: result.emailError } : {}),
@@ -164,7 +171,7 @@ export const staffRoutes = {
     const { id } = params;
     if (id === actor.userId) return json({ error: "You cannot change your own role." }, 400);
 
-    const body = await parseJson<{ role?: string }>(request);
+    const body = await parseJson<{ role?: string; resetAccess?: boolean }>(request);
     if (!isValidRole(body.role)) {
       return json({ error: `Invalid role. Must be one of: ${VALID_STAFF_ROLES.join(", ")}.` }, 400);
     }
@@ -175,9 +182,62 @@ export const staffRoutes = {
       return json({ error: "Staff member not found." }, 404);
     }
 
-    await data.update(COLLECTIONS.users, id, { role });
+    // A role change only resets access for someone still on their defaults —
+    // hand-picked access is left exactly as the owner set it.
+    const update: Record<string, unknown> = { role };
+    if (Array.isArray(target.permissions) && body.resetAccess) update.permissions = null;
+
+    await data.update(COLLECTIONS.users, id, update);
+    invalidateAccess(id);
     audit({ actorId: actor.userId, action: "staff.role_changed", targetType: "user", targetId: id, details: { from: target.role, to: role } });
-    return json({ id, role });
+    return json({ id, role, permissions: permissionsFor({ ...target, ...update }) });
+  },
+
+  /** The access catalogue plus each role's starting set, for the access editor. */
+  async accessOptions() {
+    return json({ permissions: PERMISSIONS, roleDefaults: ROLE_DEFAULTS });
+  },
+
+  /**
+   * Sets exactly what one staff member can do. An empty list is meaningful —
+   * it means read-only — so it is stored rather than falling back to the role.
+   */
+  async updateAccess(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    const { id } = params;
+    if (id === actor.userId) return json({ error: "You cannot change your own access." }, 400);
+
+    const body = await parseJson<{ permissions?: unknown; useRoleDefaults?: boolean }>(request);
+
+    const target = await data.getById<any>(COLLECTIONS.users, id);
+    if (!target || !(VALID_STAFF_ROLES as readonly string[]).includes(target.role)) {
+      return json({ error: "Staff member not found." }, 404);
+    }
+    if (target.role === "owner" && actor.role !== "owner") {
+      return json({ error: "Only an owner can change an owner's access." }, 403);
+    }
+
+    if (!body.useRoleDefaults && !Array.isArray(body.permissions)) {
+      return json({ error: "Provide the permissions to grant, or ask for the role defaults." }, 400);
+    }
+
+    const permissions = body.useRoleDefaults ? null : sanitizePermissions(body.permissions);
+    await data.update(COLLECTIONS.users, id, { permissions });
+    invalidateAccess(id);
+
+    audit({
+      actorId: actor.userId,
+      action: "staff.access_changed",
+      targetType: "user",
+      targetId: id,
+      details: { permissions, role: target.role },
+    });
+    return json({
+      id,
+      role: target.role,
+      permissions: permissionsFor({ ...target, permissions }),
+      customAccess: permissions !== null,
+    });
   },
 
   async resendInvite(request: Request, params: Record<string, string>) {
@@ -224,6 +284,7 @@ export const staffRoutes = {
 
     await data.delMany(COLLECTIONS.authTokens, [["userId", "==", id]]);
     await data.del(COLLECTIONS.users, id);
+    invalidateAccess(id);
 
     audit({ actorId: actor.userId, action: "staff.removed", targetType: "user", targetId: id, details: { email: target.email, role: target.role } });
     return json({ removed: true });

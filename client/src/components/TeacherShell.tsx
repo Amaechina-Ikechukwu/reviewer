@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { AppShell, type NavSection } from "./AppShell";
 import { Icon } from "./ui/Icons";
+import { useAuth } from "../context/AuthContext";
+import { hasPermission } from "../types";
 
 export type TeacherSection =
   | "dashboard" | "assignments" | "submissions" | "students" | "cohorts"
@@ -38,12 +40,16 @@ export default function TeacherShell({
   section: TeacherSection;
   children: ReactNode;
 }) {
+  const { user } = useAuth();
+  // No point offering an action the server will refuse.
+  const canCreate = hasPermission(user, "assignments.manage");
+
   return (
     <AppShell
       sections={SECTIONS}
       portalLabel="Teacher Portal"
       activeKey={section}
-      primaryAction={{ label: "New assignment", to: "/teacher/assignments/new" }}
+      primaryAction={canCreate ? { label: "New assignment", to: "/teacher/assignments/new" } : undefined}
     >
       {children}
     </AppShell>
