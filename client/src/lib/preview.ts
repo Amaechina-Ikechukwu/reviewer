@@ -86,6 +86,24 @@ function tailwindVersion(files: CodeFile[]): 0 | 3 | 4 {
   return 0;
 }
 
+/** Hooks that only exist in React 19 — a submission using one of these against
+ * the 18 bundle dies on "does not provide an export named useOptimistic". */
+const REACT_19_API = /\buseOptimistic\b|\buseActionState\b|\buseFormStatus\b/;
+
+/**
+ * Which React the preview should load. Current Vite scaffolds ship 19, older
+ * submissions expect 18, and the two are not interchangeable — pinning one for
+ * everyone breaks the other half of the class.
+ */
+function reactVersion(files: CodeFile[]): string {
+  const pkg = files.find((file) => /(^|\/)package\.json$/i.test(file.filename));
+  const declared = pkg?.content.match(/"react"\s*:\s*"[^\d"]*(\d+)/);
+  if (declared) return Number(declared[1]) >= 19 ? "19" : "18.3.1";
+
+  // No package.json to go on: let the code say which React it needs.
+  return files.some((file) => REACT_19_API.test(file.content)) ? "19" : "18.3.1";
+}
+
 function tailwindScript(version: 0 | 3 | 4) {
   if (version === 4) return '<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>';
   if (version === 3) return '<script src="https://cdn.tailwindcss.com"></script>';
@@ -557,6 +575,7 @@ export function buildReactPreviewDocument(files: CodeFile[]): string | null {
   if (!entry) return null;
 
   const tailwind = tailwindVersion(files);
+  const react = reactVersion(files);
   const encode = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c");
 
   return `<!DOCTYPE html>
@@ -568,11 +587,11 @@ ${STORAGE_SHIM}
 <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.3.1",
-    "react-dom": "https://esm.sh/react-dom@18.3.1?external=react",
-    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client?external=react",
-    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-    "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime"
+    "react": "https://esm.sh/react@${react}",
+    "react-dom": "https://esm.sh/react-dom@${react}?external=react",
+    "react-dom/client": "https://esm.sh/react-dom@${react}/client?external=react",
+    "react/jsx-runtime": "https://esm.sh/react@${react}/jsx-runtime",
+    "react/jsx-dev-runtime": "https://esm.sh/react@${react}/jsx-dev-runtime"
   }
 }
 </script>
