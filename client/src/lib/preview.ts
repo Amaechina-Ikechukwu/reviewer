@@ -74,6 +74,15 @@ function tailwindVersion(files: CodeFile[]): 0 | 3 | 4 {
   if (stylesheets.some((file) => /@tailwind\b/.test(file.content))) return 3;
   if (files.some((file) => /(^|\/)tailwind\.config\.(js|cjs|mjs|ts)$/i.test(file.filename))) return 3;
 
+  // Plenty of submissions never install Tailwind at all — they drop the CDN
+  // into index.html. A React preview builds its own document and would
+  // otherwise never look at that file, so the whole app renders unstyled.
+  for (const file of files) {
+    if (!/\.html?$/i.test(file.filename)) continue;
+    const cdn = cdnTailwindVersion(file.content);
+    if (cdn) return cdn;
+  }
+
   return 0;
 }
 
@@ -136,6 +145,25 @@ function styleTag(css: string, version: 0 | 3 | 4) {
   if (!cleaned.trim()) return "";
   const type = version > 0 && TAILWIND_SYNTAX.test(css) ? ' type="text/tailwindcss"' : "";
   return `<style${type}>${cleaned}</style>`;
+}
+
+/**
+ * A CDN submission puts its theme in an inline `tailwind.config = {...}` next
+ * to the script tag. The React preview never renders their index.html, so that
+ * block has to be carried across or every custom colour disappears.
+ */
+function inlineTailwindConfigScript(files: CodeFile[]) {
+  for (const file of files) {
+    if (!/\.html?$/i.test(file.filename)) continue;
+    // Skip `<script src=…>` outright, and never let the body run past its own
+    // closing tag — otherwise the match swallows the CDN tag sitting above it
+    // and the preview loads Tailwind twice.
+    const found = file.content.match(
+      /<script\b(?![^>]*\bsrc\s*=)[^>]*>(?:(?!<\/script>)[\s\S])*?tailwind\s*\.\s*config(?:(?!<\/script>)[\s\S])*<\/script>/i,
+    );
+    if (found) return found[0];
+  }
+  return "";
 }
 
 /**
@@ -550,7 +578,7 @@ ${STORAGE_SHIM}
 </script>
 <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
 ${tailwindScript(tailwind)}
-${tailwindConfigScript(files, tailwind)}
+${tailwindConfigScript(files, tailwind) || (tailwind === 3 ? inlineTailwindConfigScript(files) : "")}
 <style>
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
