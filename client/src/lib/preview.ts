@@ -110,6 +110,19 @@ function tailwindScript(version: 0 | 3 | 4) {
   return "";
 }
 
+/** Element ids the submission's own index.html mounts into, so the preview can
+ * provide them even when they are not called "root". */
+function mountIds(files: CodeFile[]): string[] {
+  const ids = new Set<string>();
+  for (const file of files) {
+    if (!/\.html?$/i.test(file.filename)) continue;
+    const scanner = /<div\b[^>]*\bid\s*=\s*["']([^"']+)["']/gi;
+    let match: RegExpExecArray | null;
+    while ((match = scanner.exec(file.content)) !== null) ids.add(match[1]);
+  }
+  return [...ids];
+}
+
 /** The Tailwind build a page already pulls in for itself, if any. */
 function cdnTailwindVersion(html: string): 0 | 3 | 4 {
   if (/@tailwindcss\/browser/i.test(html)) return 4;
@@ -421,6 +434,18 @@ function previewLoader() {
 
       let code = FILES[found];
 
+      // The preview runs at about:srcdoc, where location.pathname is "srcdoc":
+      // BrowserRouter matches no route and renders nothing, with no error to
+      // explain it, and HashRouter throws building a URL from an about: page.
+      // A memory router ignores the address bar entirely and starts at "/".
+      // This must run before bare specifiers become esm.sh URLs, while the
+      // react-router import is still recognisable.
+      if (/react-router/.test(code)) {
+        code = code
+          .replace(/\bcreate(?:Browser|Hash)Router\b/g, "createMemoryRouter")
+          .replace(/\b(?:Browser|Hash)Router\b/g, "MemoryRouter");
+      }
+
       // Side-effect stylesheet imports (`import './index.css'`) have no
       // binding, so inject the CSS and drop the statement.
       code = code.replace(/import\s+["']([^"']+\.css)["']\s*;?/g, function (_match, spec) {
@@ -478,6 +503,17 @@ function previewLoader() {
 
   (async function () {
     try {
+      // Not every submission mounts into #root — plenty rename it to #app or
+      // #main in their own index.html. Without the node, createRoot is handed
+      // null and the whole preview dies on a minified React error.
+      const MOUNTS: string[] = w.__MOUNTS__ || [];
+      for (let i = 0; i < MOUNTS.length; i++) {
+        if (document.getElementById(MOUNTS[i])) continue;
+        const node = document.createElement("div");
+        node.id = MOUNTS[i];
+        document.body.appendChild(node);
+      }
+
       const url = await loadModule(ENTRY, []);
       const entryCode = FILES[ENTRY] || "";
       const mountsItself = /createRoot\s*\(|ReactDOM\.render\s*\(/.test(entryCode);
@@ -504,17 +540,21 @@ function previewLoader() {
       // when this function is serialized into the preview document.
       await import(/* @vite-ignore */ target);
 
-      // A silently blank pane is the least debuggable outcome there is.
+      // A silently blank pane is the least debuggable outcome there is. Check
+      // every mount point the submission could have used, not just #root, and
+      // give the app time to finish its first data fetch before complaining.
       setTimeout(function () {
-        const root = document.getElementById("root");
-        if (failed || !root) return;
-        if (root.children.length === 0 && !(root.textContent || "").trim()) {
-          showErr(
-            "The preview loaded but nothing was rendered into #root.\n" +
-            "Check that " + ENTRY + " mounts a component, and look for errors above.",
-          );
+        if (failed) return;
+        const ids = ["root"].concat(MOUNTS);
+        for (let i = 0; i < ids.length; i++) {
+          const node = document.getElementById(ids[i]);
+          if (node && (node.children.length > 0 || (node.textContent || "").trim())) return;
         }
-      }, 1500);
+        showErr(
+          "The preview loaded but nothing was rendered.\n" +
+          "Check that " + ENTRY + " mounts a component, and look for errors above.",
+        );
+      }, 4000);
     } catch (err: any) {
       showErr(
         "Preview error: " + (err && err.message ? err.message : String(err)) +
@@ -614,6 +654,7 @@ window.__FILES__ = ${encode(textFiles)};
 window.__IMAGES__ = ${encode(imageFiles)};
 window.__ENTRY__ = ${encode(entry)};
 window.__TAILWIND__ = ${tailwind};
+window.__MOUNTS__ = ${encode(mountIds(files))};
 </script>
 <script>(${previewLoader.toString()})();<\/script>
 </body>
