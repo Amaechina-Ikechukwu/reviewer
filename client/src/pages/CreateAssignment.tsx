@@ -461,6 +461,12 @@ export default function CreateAssignment() {
                     ZIP / PDF upload
                   </label>
                 </div>
+                {!allowFileUpload && !(isCodeTrack && allowGithub) && (
+                  <p className="text-xs text-[var(--fg-muted)]">
+                    Nothing to hand in online — students see this as handed in offline, and you mark completion and
+                    scores from the assignment page.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/40 p-3">

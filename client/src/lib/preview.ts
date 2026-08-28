@@ -83,6 +83,97 @@ function tailwindScript(version: 0 | 3 | 4) {
   return "";
 }
 
+/** The Tailwind build a page already pulls in for itself, if any. */
+function cdnTailwindVersion(html: string): 0 | 3 | 4 {
+  if (/@tailwindcss\/browser/i.test(html)) return 4;
+  if (/cdn\.tailwindcss\.com/i.test(html)) return 3;
+  return 0;
+}
+
+/** CSS that only means something once Tailwind compiles it. */
+const TAILWIND_SYNTAX = /@tailwind\b|@apply\b|@import\s+["']tailwindcss|@theme\b|@plugin\s+["']|@variant\b/;
+
+/** Already-compiled Tailwind output — the build ran, so no CDN is needed. */
+const COMPILED_TAILWIND = /--tw-[a-z-]+\s*:|tailwindcss\s+v\d/i;
+
+/** Tailwind utility classes, used to spot a page whose stylesheet is missing. */
+const TAILWIND_UTILITY =
+  /^(?:flex|grid|block|inline-block|hidden|container|relative|absolute|sticky|mx-auto|antialiased|rounded(?:-[a-z0-9]+)?|shadow(?:-[a-z0-9]+)?|font-(?:thin|light|normal|medium|semibold|bold|extrabold|black)|text-(?:xs|sm|base|lg|xl|[2-9]xl)|(?:bg|text|border|ring|fill|stroke|from|via|to)-(?:white|black|transparent|current|(?:slate|gray|grey|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})|(?:p|m|w|h|gap|top|left|right|bottom|space-x|space-y)[trblxy]?-(?:\d+(?:\.5)?|px|full|screen|auto)|(?:min|max)-[wh]-[a-z0-9]+|items-(?:center|start|end|stretch|baseline)|justify-(?:center|between|around|evenly|start|end))$/;
+
+/**
+ * A Tailwind page whose compiled stylesheet never made it into the repo looks
+ * like plain unstyled HTML, so fall back to reading the markup: three or more
+ * utility classes is far more than a hand-written stylesheet would use.
+ */
+function usesTailwindClasses(html: string) {
+  let hits = 0;
+  const scanner = /class\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scanner.exec(html)) !== null) {
+    for (const token of (match[1] ?? match[2] ?? "").split(/\s+/)) {
+      // Strip variants (`md:`, `hover:`) and a leading `!` or `-`.
+      const base = token.slice(token.lastIndexOf(":") + 1).replace(/^[!-]/, "");
+      if (TAILWIND_UTILITY.test(base) && ++hits >= 3) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * v3's CDN ships base and utilities already, so its `@tailwind` directives are
+ * dropped; v4's build needs the `@import "tailwindcss"` line kept so it knows
+ * what to generate. With no Tailwind at all, both are inert noise.
+ */
+function cleanTailwindCss(css: string, version: 0 | 3 | 4) {
+  if (version === 4) return css;
+  if (version === 3) return css.replace(/@tailwind[^;]*;/g, "");
+  return css.replace(/@tailwind[^;]*;/g, "").replace(/@import\s+["']tailwindcss[^"']*["']\s*;?/g, "");
+}
+
+/** A `<style>` tag the browser build will compile when the CSS needs it. */
+function styleTag(css: string, version: 0 | 3 | 4) {
+  const cleaned = cleanTailwindCss(css, version);
+  if (!cleaned.trim()) return "";
+  const type = version > 0 && TAILWIND_SYNTAX.test(css) ? ' type="text/tailwindcss"' : "";
+  return `<style${type}>${cleaned}</style>`;
+}
+
+/**
+ * Tailwind v3 keeps its theme in `tailwind.config.js`, which the CDN build
+ * never reads. Without this, every custom colour, font and spacing token in
+ * the submission resolves to nothing and the page renders half-styled.
+ */
+function tailwindConfigScript(files: CodeFile[], version: 0 | 3 | 4) {
+  if (version !== 3) return "";
+  const config = files.find((file) => /(^|\/)tailwind\.config\.(js|cjs|mjs|ts)$/i.test(file.filename));
+  if (!config) return "";
+
+  // Evaluated as CommonJS with a stubbed `require`, so plugin imports and
+  // `export default` both survive the trip into the iframe.
+  const source = config.content
+    .replace(/^\s*import\s+[^;]*?from\s*["'][^"']+["']\s*;?/gm, "")
+    .replace(/export\s+default/, "module.exports =")
+    .replace(/\s+satisfies\s+[A-Za-z_$][\w$]*/g, "");
+
+  return `<script>
+(function () {
+  try {
+    var factory = new Function("module", "exports", "require", ${JSON.stringify(source).replace(/</g, "\\u003c")});
+    var mod = { exports: {} };
+    factory(mod, mod.exports, function () { return {}; });
+    var config = mod.exports.default || mod.exports;
+    if (config && typeof config === "object" && window.tailwind) {
+      delete config.plugins; // real plugins cannot be required in the browser
+      delete config.content; // the CDN build scans the live DOM instead
+      window.tailwind.config = config;
+    }
+  } catch (err) {
+    console.warn("Preview: could not apply tailwind.config -", err);
+  }
+})();
+<\/script>`;
+}
+
 function pickEntry(textFiles: Record<string, string>): string | null {
   const keys = Object.keys(textFiles);
   const isModule = (key: string) => MODULE_EXT.includes(extname(key));
@@ -459,6 +550,7 @@ ${STORAGE_SHIM}
 </script>
 <script src="https://unpkg.com/@babel/standalone@7.26.2/babel.min.js"></script>
 ${tailwindScript(tailwind)}
+${tailwindConfigScript(files, tailwind)}
 <style>
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -520,18 +612,36 @@ export function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile): str
       ? file.content
       : `data:image/svg+xml,${encodeURIComponent(file.content)}`;
 
+  // A page that loads Tailwind from a CDN itself needs no second build, but
+  // its own stylesheet still has to be handed to that build — plain `<style>`
+  // leaves `@apply` and `@theme` uncompiled, which is most of a design system.
+  const cdnVersion = cdnTailwindVersion(htmlFile.content);
+  const loadsTailwind = cdnVersion > 0;
+  const tailwind = cdnVersion || tailwindVersion(files);
+  let compiledTailwind = false;
+  let hasCss = false;
+
   let html = htmlFile.content;
   let inlinedStyles = 0;
   let inlinedScripts = 0;
+
+  function inlineCss(css: string) {
+    if (COMPILED_TAILWIND.test(css) && !TAILWIND_SYNTAX.test(css)) compiledTailwind = true;
+    const tag = styleTag(css, tailwind);
+    if (tag) hasCss = true;
+    return tag;
+  }
 
   html = html.replace(/<link\b[^>]*>/gi, (tag) => {
     if (!/stylesheet/i.test(tag)) return tag;
     const href = tag.match(/href\s*=\s*["']([^"']+)["']/i)?.[1];
     if (!href) return tag;
     const file = resolveRef(href);
+    // Tailwind's compiled stylesheet is normally git-ignored, so a GitHub
+    // import arrives linking a `dist/output.css` that was never committed.
     if (!file) return isRemote(href) ? tag : "";
     inlinedStyles += 1;
-    return `<style>${file.content}</style>`;
+    return inlineCss(file.content);
   });
 
   html = html.replace(/<script\b([^>]*)>\s*<\/script>/gi, (tag, attrs: string) => {
@@ -551,15 +661,11 @@ export function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile): str
     return `${pre}${quote}${asDataUri(file)}${quote}`;
   });
 
-  html = html.includes("<head>")
-    ? html.replace("<head>", `<head>${STORAGE_SHIM}`)
-    : `${STORAGE_SHIM}${html}`;
-
   // Fall back to the old behaviour for pages that never linked their assets.
   if (inlinedStyles === 0) {
     const css = files
       .filter((f) => f.filename.toLowerCase().endsWith(".css") && f.filename.startsWith(dir))
-      .map((f) => `<style>${f.content}</style>`)
+      .map((f) => inlineCss(f.content))
       .join("\n");
     html = html.includes("</head>") ? html.replace("</head>", `${css}</head>`) : `${css}${html}`;
   }
@@ -570,6 +676,19 @@ export function buildPreviewDocument(files: CodeFile[], htmlFile: CodeFile): str
       .join("\n");
     html = html.includes("</body>") ? html.replace("</body>", `${js}</body>`) : `${html}${js}`;
   }
+
+  // Tailwind utilities exist only once something compiles them. A static
+  // submission ships its CSS as source (`@tailwind`/`@theme`) or not at all,
+  // so without the browser build the page renders completely unstyled.
+  const version: 0 | 3 | 4 = tailwind || 3;
+  const needsTailwind =
+    !loadsTailwind && !compiledTailwind && (tailwind > 0 || (!hasCss && usesTailwindClasses(html)));
+  const head = needsTailwind ? `${tailwindScript(version)}\n${tailwindConfigScript(files, version)}` : "";
+
+  const headTag = html.match(/<head[^>]*>/i)?.[0];
+  html = headTag
+    ? html.replace(headTag, `${headTag}${head}${STORAGE_SHIM}`)
+    : `${head}${STORAGE_SHIM}${html}`;
 
   return html;
 }

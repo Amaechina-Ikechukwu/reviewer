@@ -129,16 +129,37 @@ export type PublicGroup = {
   maxScore: number | null;
 };
 
+export type SubmissionType = "github" | "file_upload" | "manual";
+
 export type Submission = {
   id: string;
   assignmentId: string;
   studentId: string;
   groupId?: string | null;
-  submissionType: "github" | "file_upload";
+  submissionType: SubmissionType;
   githubUrl: string | null;
   filePath: string | null;
   submittedAt: string;
   isLate: boolean;
+};
+
+/** One student's standing on an assignment, submitted or not. */
+export type RosterRow = {
+  studentId: string;
+  fullName: string;
+  email: string;
+  groupId: string | null;
+  groupName: string | null;
+  submissionId: string | null;
+  submissionType: SubmissionType | null;
+  submittedAt: string | null;
+  isLate: boolean;
+  viaGroup: boolean;
+  reviewStatus: Review["status"] | "not_started";
+  score: number | null;
+  scoredByTeacher: boolean;
+  markedDone: boolean;
+  maxScore: number;
 };
 
 export type CodeFile = {
@@ -150,7 +171,7 @@ export type CodeFile = {
 export type PublicSubmission = {
   id: string;
   submittedAt: string;
-  submissionType: "github" | "file_upload";
+  submissionType: SubmissionType;
   githubUrl: string | null;
   assignmentTitle: string | null;
   studentName: string | null;
