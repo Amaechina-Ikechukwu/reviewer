@@ -59,7 +59,7 @@ export default function PublicSubmission() {
                     ) : (
                       <Icon.Upload className="h-3 w-3" />
                     )}
-                    {submission.submissionType === "github" ? "GitHub" : "Upload"}
+                    {submission.submissionType === "github" ? "GitHub" : submission.submissionType === "manual" ? "Marked by instructor" : "Upload"}
                   </span>
                 </Badge>
               </div>

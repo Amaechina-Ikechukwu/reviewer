@@ -12,13 +12,13 @@ import { ReviewStatusPill } from "../components/ui/StatusPill";
 import { api } from "../api";
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
-import type { CodeFile, Review } from "../types";
+import type { CodeFile, Review, SubmissionType } from "../types";
 
   type SubmissionResponse = {
     submission: {
       id: string;
       submittedAt: string;
-      submissionType: "github" | "file_upload";
+      submissionType: SubmissionType;
       githubUrl: string | null;
       isLate: boolean;
       shareToken?: string | null;

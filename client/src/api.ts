@@ -1,4 +1,4 @@
-import type { Cohort, Project, StudentRecord, Track } from "./types";
+import type { Cohort, Project, RosterRow, StudentRecord, Track } from "./types";
 
 function getApiBase() {
   return "/v2/api";
@@ -115,6 +115,27 @@ export function deleteProject(id: string) {
 
 export function deleteSubmission(id: string) {
   return api<{ deleted: boolean }>(`/submissions/${id}`, { method: "DELETE" });
+}
+
+// Assignment roster + manual marking
+
+export function getAssignmentRoster(assignmentId: string) {
+  return api<{ maxScore: number; students: RosterRow[] }>(`/assignments/${assignmentId}/roster`);
+}
+
+/** Marks students complete. Omit `score` to record completion only. */
+export function markAssignmentDone(
+  assignmentId: string,
+  body: { studentIds: string[]; score?: number | null; note?: string; notify?: boolean },
+) {
+  return api<{ marked: { studentId: string; submissionId: string; score: number | null }[]; skipped: { studentId: string; reason: string }[] }>(
+    `/assignments/${assignmentId}/mark`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export function unmarkAssignment(assignmentId: string, studentId: string) {
+  return api<{ removed: boolean }>(`/assignments/${assignmentId}/mark/${studentId}`, { method: "DELETE" });
 }
 
 export function assignStudentsToProject(projectId: string, studentIds: string[]) {

@@ -12,7 +12,7 @@ import { Input, Label, Textarea } from "../components/ui/Input";
 import { api } from "../api";
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
-import type { Assignment, AssignmentGroup } from "../types";
+import type { Assignment, AssignmentGroup, SubmissionType } from "../types";
 
 type GroupMember = { id: string; fullName: string; email: string };
 
@@ -27,7 +27,7 @@ export default function SubmitAssignment() {
   const [classNotesAssetError, setClassNotesAssetError] = useState<string | null>(null);
   const [briefError, setBriefError] = useState<string | null>(null);
   const [hasOverride, setHasOverride] = useState(false);
-  const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string; submittedByStudentId?: string; submittedByName?: string } | null>(null);
+  const [alreadySubmitted, setAlreadySubmitted] = useState<{ submittedAt: string; submittedByStudentId?: string; submittedByName?: string; submissionType?: SubmissionType } | null>(null);
   const [myGroup, setMyGroup] = useState<AssignmentGroup | null>(null);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [groupBriefUrl, setGroupBriefUrl] = useState<string | null>(null);
@@ -102,7 +102,7 @@ export default function SubmitAssignment() {
       .then((r) => setHasOverride(r.assignmentIds.includes(assignmentId!)))
       .catch(() => setHasOverride(false));
 
-    api<Array<{ submission: { id: string; submittedAt: string; studentId: string; groupId?: string | null }; studentName?: string | null }>>(`/submissions?assignment_id=${assignmentId}`)
+    api<Array<{ submission: { id: string; submittedAt: string; studentId: string; groupId?: string | null; submissionType: SubmissionType }; studentName?: string | null }>>(`/submissions?assignment_id=${assignmentId}`)
       .then((rows) => {
         if (rows.length > 0) {
           const row = rows[0];
@@ -110,6 +110,7 @@ export default function SubmitAssignment() {
             submittedAt: row.submission.submittedAt,
             submittedByStudentId: row.submission.studentId,
             submittedByName: row.studentName ?? undefined,
+            submissionType: row.submission.submissionType,
           });
         }
       })
@@ -154,6 +155,7 @@ export default function SubmitAssignment() {
 
   const now = new Date();
   const isPast = new Date(assignment.closesAt) <= now && !hasOverride;
+  const markedByInstructor = alreadySubmitted?.submissionType === "manual";
   const dueDate = formatDateTime(assignment.closesAt);
 
   // Brief and resources live in the wide main column — a PDF or screenshot is
@@ -382,7 +384,22 @@ export default function SubmitAssignment() {
           <CardTitle>Your submission</CardTitle>
         </CardHeader>
         <CardContent>
-          {alreadySubmitted && assignment.isGroupAssignment && alreadySubmitted.submittedByStudentId !== currentUser?.id ? (
+          {!assignment.allowGithub && !assignment.allowFileUpload ? (
+            /* Handed in offline — the instructor records the result */
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/40 px-4 py-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent)]">
+                <Icon.Check className="h-6 w-6" />
+              </div>
+              <div className="text-base font-semibold">
+                {markedByInstructor ? "Marked complete" : "Nothing to upload here"}
+              </div>
+              <div className="max-w-sm text-xs text-[var(--fg-muted)]">
+                {markedByInstructor
+                  ? `Your instructor recorded this on ${formatDateTime(alreadySubmitted!.submittedAt)}.`
+                  : "This assignment is handed in outside the platform. Your instructor marks it complete and records your score here."}
+              </div>
+            </div>
+          ) : alreadySubmitted && assignment.isGroupAssignment && alreadySubmitted.submittedByStudentId !== currentUser?.id ? (
             /* Another group member submitted — read-only */
             <div className="flex flex-col items-center gap-3 rounded-lg border border-[var(--success)]/30 bg-[var(--success-soft)] px-4 py-8 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success)]/20 text-[var(--success)]">
@@ -402,9 +419,10 @@ export default function SubmitAssignment() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--success)]/20 text-[var(--success)]">
                 <Icon.Check className="h-6 w-6" />
               </div>
-              <div className="text-base font-semibold">Already submitted</div>
+              <div className="text-base font-semibold">{markedByInstructor ? "Marked complete" : "Already submitted"}</div>
               <div className="text-xs text-[var(--fg-muted)]">
-                Submitted on {formatDateTime(alreadySubmitted.submittedAt)}
+                {markedByInstructor ? "Recorded by your instructor on " : "Submitted on "}
+                {formatDateTime(alreadySubmitted.submittedAt)}
               </div>
             </div>
           ) : isPast ? (

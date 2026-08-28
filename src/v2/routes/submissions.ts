@@ -6,7 +6,7 @@ import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../../services/code-reader";
-import { sendSubmissionNotification, sendResubmissionNotification } from "../../services/email";
+import { sendGradeRelease, sendSubmissionNotification, sendResubmissionNotification } from "../../services/email";
 import { extractZipBuffer, savePdfBuffer } from "../../services/file-extractor";
 import { cloneGithubRepo } from "../../services/github";
 import { isWithinDeadline } from "../../utils/deadline";
@@ -92,10 +92,30 @@ async function canReadSubmission(user: { userId: string; role: string }, submiss
 }
 
 /**
+ * The students an assignment is set for: its cohort, or everyone when the
+ * assignment is global, minus anyone the teacher excluded. Students with a
+ * pending invite stay on the list — they are still expected to do the work.
+ */
+async function assignmentAudience(assignment: any) {
+  const where: any[] = [["role", "==", "student"]];
+  if (assignment.cohortId) where.push(["cohortId", "==", assignment.cohortId]);
+  const students = await data.findMany<any>(COLLECTIONS.users, { where });
+  const excluded = new Set<string>(assignment.excludedStudentIds ?? []);
+  return students.filter((student) => !excluded.has(student.id));
+}
+
+const byFullName = (a: any, b: any) => String(a.fullName || "").localeCompare(String(b.fullName || ""));
+
+/**
  * Reads the submission's files, restoring them from object storage or
  * re-cloning the repo when the ephemeral /tmp copy is gone.
  */
 async function resolveSubmissionFiles(submission: any): Promise<{ files: any[]; warning?: string }> {
+  // Nothing was ever uploaded when a teacher marked the work complete.
+  if (submission.submissionType === "manual") {
+    return { files: [], warning: "Marked complete by an instructor — no files were submitted." };
+  }
+
   let filePath = submission.filePath;
 
   if (!filePath || !existsSync(filePath)) {
@@ -176,6 +196,16 @@ export const submissionRoutes = {
       if (ov.closesAt && new Date() > new Date(ov.closesAt)) return json({ error: "Your extended deadline has also passed." }, 400);
     }
 
+    // A teacher's completion tick stands in for a submission that was never
+    // made, so it must not block the student from handing real work in later.
+    // The grade already given moves across to the real submission.
+    let carriedReview: any = null;
+    async function replaceStandIn(previous: any) {
+      carriedReview = await data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", previous.id]]);
+      await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", previous.id]]);
+      await data.del(COLLECTIONS.submissions, previous.id);
+    }
+
     let groupId: string | null = null;
     if (assignment.isGroupAssignment) {
       const groups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
@@ -190,20 +220,29 @@ export const submissionRoutes = {
         ["groupId", "==", groupId],
       ]);
       if (previousGroup) {
-        if (previousGroup.studentId !== user.userId) {
-          return json({ error: "Your group has already submitted. Only the original submitter can update it." }, 409);
+        if (previousGroup.submissionType === "manual") {
+          await replaceStandIn(previousGroup);
+        } else {
+          if (previousGroup.studentId !== user.userId) {
+            return json({ error: "Your group has already submitted. Only the original submitter can update it." }, 409);
+          }
+          await removeFiles(previousGroup.filePath);
+          if (previousGroup.storageKey) await storageDelete(previousGroup.storageKey).catch(() => {});
+          await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", previousGroup.id]]);
+          await data.del(COLLECTIONS.submissions, previousGroup.id);
         }
-        await removeFiles(previousGroup.filePath);
-        if (previousGroup.storageKey) await storageDelete(previousGroup.storageKey).catch(() => {});
-        await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", previousGroup.id]]);
-        await data.del(COLLECTIONS.submissions, previousGroup.id);
       }
     } else {
-      const previous = await data.findOne(COLLECTIONS.submissions, [
+      const previous = await data.findOne<any>(COLLECTIONS.submissions, [
         ["assignmentId", "==", assignmentId],
         ["studentId", "==", user.userId],
       ]);
-      if (previous) return json({ error: "You have already submitted for this assignment." }, 409);
+      if (previous) {
+        if (previous.submissionType !== "manual") {
+          return json({ error: "You have already submitted for this assignment." }, 409);
+        }
+        await replaceStandIn(previous);
+      }
     }
 
     const submissionId = randomUUID();
@@ -239,6 +278,21 @@ export const submissionRoutes = {
       submittedAt: new Date(),
       isLate: false,
     });
+
+    if (carriedReview) {
+      await data.insert<any>(COLLECTIONS.reviews, randomUUID(), {
+        submissionId,
+        status: "completed",
+        maxScore: carriedReview.maxScore ?? assignment.maxScore,
+        aiScore: null,
+        teacherOverrideScore: carriedReview.teacherOverrideScore ?? null,
+        feedback: carriedReview.feedback ?? null,
+        rawAiResponse: null,
+        reviewedAt: carriedReview.reviewedAt ?? null,
+        markedDoneAt: carriedReview.markedDoneAt ?? null,
+        markedDoneBy: carriedReview.markedDoneBy ?? null,
+      });
+    }
 
     const teacher = await data.getById<any>(COLLECTIONS.users, assignment.createdBy);
     if (teacher) {
@@ -594,6 +648,263 @@ export const submissionRoutes = {
     }
 
     return json({ imported: results }, 201);
+  },
+
+  /**
+   * Every student the assignment is set for, with whatever they have so far:
+   * a submission, a grade, or nothing. Assignments that are handed in offline
+   * (a design critique, a presentation, a printed report) never produce a
+   * submission at all, so the roster — not the submissions list — is what a
+   * teacher grades from.
+   */
+  async roster(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    const [audience, submissions, groups] = await Promise.all([
+      assignmentAudience(assignment),
+      data.findMany<any>(COLLECTIONS.submissions, { where: [["assignmentId", "==", params.id]] }),
+      assignment.isGroupAssignment
+        ? data.findMany<any>(COLLECTIONS.assignmentGroups, { where: [["assignmentId", "==", params.id]] })
+        : Promise.resolve([] as any[]),
+    ]);
+
+    // Someone who submitted and has since moved cohort still belongs here —
+    // dropping them would hide a grade that has already been given.
+    const students = new Map<string, any>(audience.map((student) => [student.id, student]));
+    const strays = [...new Set(submissions.map((s) => s.studentId).filter((id) => id && !students.has(id)))];
+    for (const extra of await Promise.all(strays.map((id) => data.getById<any>(COLLECTIONS.users, id)))) {
+      if (extra) students.set(extra.id, extra);
+    }
+
+    const reviews = await Promise.all(
+      submissions.map((s) => data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", s.id]])),
+    );
+    const reviewFor = new Map<string, any>(submissions.map((s, index) => [s.id, reviews[index]]));
+    const groupOf = new Map<string, any>();
+    for (const group of groups) for (const memberId of group.memberIds || []) groupOf.set(memberId, group);
+
+    const rows = [...students.values()].sort(byFullName).map((student) => {
+      const group = groupOf.get(student.id) || null;
+      const submission =
+        submissions.find((s) => s.studentId === student.id) ||
+        (group ? submissions.find((s) => s.groupId === group.id) : null) ||
+        null;
+      const review = submission ? reviewFor.get(submission.id) : null;
+      const score = review ? review.teacherOverrideScore ?? review.aiScore : null;
+
+      return {
+        studentId: student.id,
+        fullName: student.fullName,
+        email: student.email,
+        groupId: group?.id ?? null,
+        groupName: group?.name ?? null,
+        submissionId: submission?.id ?? null,
+        submissionType: submission?.submissionType ?? null,
+        submittedAt: submission?.submittedAt ?? null,
+        isLate: submission?.isLate ?? false,
+        /** The grade comes from a teammate's upload, not this student's own. */
+        viaGroup: !!(submission && group && submission.studentId !== student.id),
+        reviewStatus: review?.status ?? "not_started",
+        score: typeof score === "number" ? score : null,
+        scoredByTeacher: typeof review?.teacherOverrideScore === "number",
+        markedDone: !!review?.markedDoneAt,
+        maxScore: review?.maxScore ?? assignment.maxScore,
+      };
+    });
+
+    return json({ maxScore: assignment.maxScore, students: rows });
+  },
+
+  /**
+   * Marks students' work complete, with or without a score. Where nothing was
+   * submitted this stands in a `manual` submission so the grade hangs off the
+   * same record every other part of the app already reads.
+   */
+  async mark(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+
+    const body = (await request.json().catch(() => ({}))) as {
+      studentIds?: string[];
+      studentId?: string;
+      score?: number | string | null;
+      note?: string;
+      notify?: boolean;
+    };
+
+    const studentIds = [...new Set((body.studentIds ?? (body.studentId ? [body.studentId] : [])).filter(Boolean))];
+    if (studentIds.length === 0) return json({ error: "Select at least one student to mark." }, 400);
+
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
+    if (!assignment) return json({ error: "Assignment not found." }, 404);
+
+    const maxScore = assignment.maxScore ?? 100;
+    const rawScore = body.score;
+    const hasScore = rawScore !== undefined && rawScore !== null && String(rawScore).trim() !== "";
+    const score = hasScore ? Number(rawScore) : null;
+    if (hasScore && (!Number.isFinite(score) || score! < 0)) return json({ error: "Please provide a valid score." }, 400);
+    if (hasScore && score! > maxScore) return json({ error: `Score cannot exceed the max score of ${maxScore}.` }, 400);
+
+    const note = body.note?.trim() || null;
+    const groups = assignment.isGroupAssignment
+      ? await data.findMany<any>(COLLECTIONS.assignmentGroups, { where: [["assignmentId", "==", params.id]] })
+      : [];
+
+    const marked: any[] = [];
+    const skipped: { studentId: string; reason: string }[] = [];
+
+    for (const studentId of studentIds) {
+      const student = await data.getById<any>(COLLECTIONS.users, studentId);
+      if (!student || student.role !== "student") {
+        skipped.push({ studentId, reason: "Student not found." });
+        continue;
+      }
+
+      const group = groups.find((g) => (g.memberIds || []).includes(studentId)) || null;
+      let submission =
+        (await data.findOne<any>(COLLECTIONS.submissions, [
+          ["assignmentId", "==", params.id],
+          ["studentId", "==", studentId],
+        ])) ||
+        (group
+          ? await data.findOne<any>(COLLECTIONS.submissions, [
+              ["assignmentId", "==", params.id],
+              ["groupId", "==", group.id],
+            ])
+          : null);
+
+      if (!submission) {
+        submission = await data.insert<any>(COLLECTIONS.submissions, randomUUID(), {
+          assignmentId: params.id,
+          studentId,
+          groupId: group?.id ?? null,
+          submissionType: "manual",
+          githubUrl: null,
+          filePath: null,
+          storageKey: null,
+          submittedAt: new Date(),
+          isLate: false,
+          markedBy: actor.userId,
+        });
+      }
+
+      let review = await data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", submission.id]]);
+      if (!review) {
+        review = await data.insert<any>(COLLECTIONS.reviews, randomUUID(), {
+          submissionId: submission.id,
+          status: "completed",
+          maxScore,
+          aiScore: null,
+          teacherOverrideScore: null,
+          feedback: null,
+          rawAiResponse: null,
+          reviewedAt: null,
+        });
+      }
+
+      await data.update(COLLECTIONS.reviews, review.id, {
+        status: "completed",
+        maxScore,
+        markedDoneAt: new Date(),
+        markedDoneBy: actor.userId,
+        reviewedAt: new Date(),
+        ...(hasScore ? { teacherOverrideScore: Math.round(score!) } : {}),
+        ...(note ? { feedback: { ...(review.feedback ?? {}), summary: note } } : {}),
+      });
+
+      // A completion tick is not news worth emailing about; a grade is.
+      if (hasScore && body.notify !== false && !String(student.email).endsWith("@historical.reviewai.local")) {
+        sendGradeRelease(
+          { email: student.email, fullName: student.fullName },
+          { title: assignment.title ?? "Assignment", id: params.id },
+          {
+            score: Math.round(score!),
+            maxScore,
+            feedback: note || (review.feedback?.summary ?? null),
+            suggestions: review.feedback?.suggestions ?? [],
+          },
+        ).catch(console.error);
+      }
+
+      marked.push({ studentId, submissionId: submission.id, score: hasScore ? Math.round(score!) : null });
+    }
+
+    audit({
+      actorId: actor.userId,
+      action: hasScore ? "submission.marked_scored" : "submission.marked_done",
+      targetType: "assignment",
+      targetId: params.id,
+      details: { studentIds, score: hasScore ? Math.round(score!) : null, count: marked.length },
+    });
+
+    return json({ marked, skipped });
+  },
+
+  /**
+   * Undoes a mark. A stand-in submission goes away entirely; a real one keeps
+   * its files and only loses the grade the teacher put on top of it.
+   */
+  async unmark(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+
+    const groups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
+      where: [["assignmentId", "==", params.id]],
+    });
+    const group = groups.find((g) => (g.memberIds || []).includes(params.studentId)) || null;
+    const submission =
+      (await data.findOne<any>(COLLECTIONS.submissions, [
+        ["assignmentId", "==", params.id],
+        ["studentId", "==", params.studentId],
+      ])) ||
+      (group
+        ? await data.findOne<any>(COLLECTIONS.submissions, [
+            ["assignmentId", "==", params.id],
+            ["groupId", "==", group.id],
+          ])
+        : null);
+
+    if (!submission) return json({ error: "Nothing to undo for this student." }, 404);
+
+    if (submission.submissionType === "manual") {
+      await data.delMany(COLLECTIONS.reviews, [["submissionId", "==", submission.id]]);
+      await data.del(COLLECTIONS.submissions, submission.id);
+      audit({
+        actorId: actor.userId,
+        action: "submission.unmarked",
+        targetType: "assignment",
+        targetId: params.id,
+        details: { studentId: params.studentId, removedSubmission: true },
+      });
+      return json({ removed: true });
+    }
+
+    const review = await data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", submission.id]]);
+    if (review) {
+      // With no AI result underneath, the whole review was the teacher's mark.
+      if (typeof review.aiScore === "number") {
+        await data.update(COLLECTIONS.reviews, review.id, {
+          teacherOverrideScore: null,
+          markedDoneAt: null,
+          markedDoneBy: null,
+        });
+      } else {
+        await data.del(COLLECTIONS.reviews, review.id);
+      }
+    }
+
+    audit({
+      actorId: actor.userId,
+      action: "submission.unmarked",
+      targetType: "assignment",
+      targetId: params.id,
+      details: { studentId: params.studentId, removedSubmission: false },
+    });
+    return json({ removed: false });
   },
 
   async delete(request: Request, params: Record<string, string>) {

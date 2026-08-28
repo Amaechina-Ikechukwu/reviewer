@@ -3,17 +3,15 @@ import { Link, useParams } from "react-router-dom";
 import { marked } from "marked";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
-import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Icon } from "../components/ui/Icons";
 import { PageHeader } from "../components/ui/PageHeader";
-import { ReviewStatusPill } from "../components/ui/StatusPill";
-import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
-import { api, deleteSubmission } from "../api";
+import { api } from "../api";
 import { formatDateTime } from "../lib/format";
 import { GroupProjectWorkspace } from "../components/GroupProjectWorkspace";
+import AssignmentRoster from "../components/AssignmentRoster";
 import type { Assignment, AssignmentGroup, Review } from "../types";
 
 type SubmissionRow = {
@@ -62,16 +60,6 @@ export default function AssignmentDetailPage() {
       toast().error(err instanceof Error ? err.message : "Could not create the public team link");
     }
   }
-  const handleDelete = async (submissionId: string, studentName: string | null) => {
-    if (!confirm(`Delete submission from ${studentName || "student"}? They will be able to resubmit.`)) return;
-    try {
-      await deleteSubmission(submissionId);
-      toast().success("Submission deleted");
-      setRefreshKey((k) => k + 1);
-    } catch (err) {
-      toast().error(err instanceof Error ? err.message : "Failed to delete submission");
-    }
-  };
 
   useEffect(() => {
     if (!id) return;
@@ -381,67 +369,7 @@ export default function AssignmentDetailPage() {
           </Card>
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Submissions ({sentCount})</CardTitle>
-          </CardHeader>
-          <Table>
-            <THead>
-              <TR>
-                <TH>Student</TH>
-                <TH>Submitted</TH>
-                <TH>Type</TH>
-                <TH>Status</TH>
-                <TH className="text-right">Review</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {submissions.length === 0 && (
-                <EmptyRow cols={5}>No submissions yet for this assignment.</EmptyRow>
-              )}
-              {submissions.map((row) => {
-                const review = reviews[row.submission.id];
-                return (
-                  <TR key={row.submission.id}>
-                    <TD>
-                      <div className="flex items-center gap-3">
-                        <Avatar name={row.studentName || "Student"} size="sm" />
-                        <div>
-                          <div className="truncate font-medium">{row.studentName || "Student"}</div>
-                          <div className="truncate text-xs text-[var(--fg-muted)]">{row.studentEmail}</div>
-                        </div>
-                      </div>
-                    </TD>
-                    <TD className="text-xs text-[var(--fg-muted)]">
-                      {formatDateTime(row.submission.submittedAt)}
-                      {row.submission.isLate && <Badge tone="warn" className="ml-2">Late</Badge>}
-                    </TD>
-                    <TD className="text-xs capitalize">{row.submission.submissionType === "github" ? "GitHub" : "File"}</TD>
-                    <TD><ReviewStatusPill status={review?.status} /></TD>
-                    <TD className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Link to={`/teacher/review/${row.submission.id}`}>
-                          <Button variant="ghost" size="sm">
-                            {review?.status === "completed" ? "View" : "Review"}
-                            <Icon.ChevronRight className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(row.submission.id, row.studentName)}
-                          className="text-[var(--danger)] hover:text-[var(--danger)]"
-                        >
-                          <Icon.Trash className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TD>
-                  </TR>
-                );
-              })}
-            </TBody>
-          </Table>
-        </Card>
+        <AssignmentRoster assignmentId={assignment.id} onChanged={() => setRefreshKey((k) => k + 1)} />
       </div>
     </TeacherShell>
   );
