@@ -175,15 +175,20 @@ export async function sendInvite(email: string, fullName: string, token: string,
   `);
 }
 
-export async function sendPasswordReset(email: string, fullName: string, token: string) {
+export async function sendPasswordReset(
+  email: string,
+  fullName: string,
+  token: string,
+  opts: { selfService?: boolean } = {},
+) {
   const link = `${APP_URL}/reset/${encodeURIComponent(token)}`;
   const first = escapeHtml(fullName.split(" ")[0]);
   await sendOne(email, "Reset your Reviewer password", `
     ${shellOpen()}
       <h2 style="margin:0 0 8px">Password reset</h2>
-      <p style="margin:0 0 24px;color:#64748b">Hi ${first}, your teacher requested a password reset for your account.</p>
+      <p style="margin:0 0 24px;color:#64748b">Hi ${first}, ${opts.selfService ? "you asked to reset your password." : "your teacher requested a password reset for your account."}</p>
       <a href="${link}" style="display:inline-block;background:#0d56d8;color:#fff;padding:12px 24px;border-radius:10px;text-decoration:none;font-weight:700">Set new password</a>
-      <p style="margin:24px 0 0;font-size:0.85rem;color:#94a3b8">Link expires in 2 hours. If this wasn't expected, contact your teacher.</p>
+      <p style="margin:24px 0 0;font-size:0.85rem;color:#94a3b8">Link expires in 15 minutes. ${opts.selfService ? "If you didn't ask for this, you can ignore this email." : "If this wasn't expected, contact your teacher."}</p>
     ${shellClose()}
   `);
 }

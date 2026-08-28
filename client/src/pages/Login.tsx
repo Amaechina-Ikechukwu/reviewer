@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { AuthLayout } from "../components/AuthLayout";
 import { Button } from "../components/ui/Button";
@@ -104,6 +104,15 @@ export default function Login() {
         <Label required>Password
           <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
         </Label>
+
+        {mode === "login" && (
+          <Link
+            to="/forgot-password"
+            className="-mt-2 self-end text-xs font-medium text-[var(--fg-muted)] transition-colors hover:text-[var(--accent)]"
+          >
+            Forgot your password?
+          </Link>
+        )}
 
         {error && (
           <div className="rounded-md border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">

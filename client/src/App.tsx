@@ -30,6 +30,7 @@ import CreateGroupProject from "./pages/CreateGroupProject";
 import ImportSubmissions from "./pages/ImportSubmissions";
 import JoinClass from "./pages/JoinClass";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import SetupAccount from "./pages/SetupAccount";
 import ReviewSubmission from "./pages/ReviewSubmission";
@@ -131,6 +132,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
       <Route path="/join/:code" element={<JoinClass />} />
       <Route path="/setup/:token" element={<SetupAccount />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset/:token" element={<ResetPassword />} />
       <Route path="/changelog" element={<ChangelogPage />} />
       <Route path="/assignments/:id/brief" element={<PublicAssignmentBrief />} />

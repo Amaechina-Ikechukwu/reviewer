@@ -49,6 +49,26 @@ const VALID_STAFF_ROLES = ["teacher", "owner", "admin", "manager", "instructor",
 type RegisterBody = { email?: string; password?: string; fullName?: string; role?: UserRole; inviteToken?: string };
 type LoginBody = { email?: string; password?: string };
 
+/** Last self-service reset per email address, for light throttling. */
+const resetRequests = new Map<string, number>();
+
+/** Mints a reset token with its OTP and emails the link. */
+async function issueReset(target: { id: string; email: string; fullName: string }, opts: { selfService?: boolean } = {}) {
+  const token = randomBytes(32).toString("hex");
+  await data.insert<any>(COLLECTIONS.authTokens, token, {
+    userId: target.id,
+    token,
+    type: "reset",
+    otp: generateOtp(),
+    otpUsed: false,
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    usedAt: null,
+  });
+
+  await sendPasswordReset(target.email, target.fullName, token, opts);
+  return token;
+}
+
 function userResponse(u: { id: string; email: string; fullName: string; role: UserRole }) {
   const token = signToken({ userId: u.id, email: u.email, fullName: u.fullName, role: u.role });
   return { token, user: { id: u.id, email: u.email, fullName: u.fullName, role: u.role } };
@@ -163,6 +183,53 @@ export const authRoutes = {
     return json(userResponse(user));
   },
 
+  /**
+   * Self-service reset from the login page. Someone locked out cannot use
+   * requestReset, which needs a session. The reply never says whether the
+   * address exists — that would turn this into an account checker.
+   */
+  async forgotPassword(request: Request) {
+    const body = await parseJson<{ email?: string }>(request);
+    const email = body.email?.trim().toLowerCase() || "";
+    const reply = json({
+      sent: true,
+      message: "If that email has an account, a reset link is on its way.",
+    });
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json({ error: "Please enter a valid email address." }, 400);
+    }
+
+    // One live request per address per minute, so the endpoint cannot be used
+    // to bombard someone's inbox.
+    const last = resetRequests.get(email);
+    if (last && Date.now() - last < 60_000) return reply;
+    resetRequests.set(email, Date.now());
+
+    const target = await data.findOne<any>(COLLECTIONS.users, [["email", "==", email]]);
+    if (!target) {
+      logger.info("forgotPassword: no account", { email });
+      return reply;
+    }
+    if (target.passwordHash === "INVITE_PENDING") {
+      // Their invite link is the way in; a reset would strand them.
+      logger.info("forgotPassword: account still pending setup", { email });
+      return reply;
+    }
+
+    try {
+      await issueReset(target, { selfService: true });
+    } catch (err) {
+      logger.error("forgotPassword: could not send reset", {
+        email,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    audit({ actorId: target.id, actorEmail: email, action: "auth.forgot_password" });
+    return reply;
+  },
+
   async requestReset(request: Request) {
     const user = (request as AuthenticatedRequest).user;
     const body = await parseJson<{ email?: string }>(request);
@@ -172,18 +239,8 @@ export const authRoutes = {
     const target = await data.findOne<any>(COLLECTIONS.users, [["email", "==", email]]);
     if (!target) return json({ error: "No account found with that email." }, 404);
 
-    const token = randomBytes(32).toString("hex");
-    const otp = generateOtp();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-    await data.insert<any>(COLLECTIONS.authTokens, token, {
-      userId: target.id, token, type: "reset",
-      otp, otpUsed: false,
-      expiresAt, usedAt: null,
-    });
-
     try {
-      await sendPasswordReset(email, target.fullName, token);
+      await issueReset(target);
     } catch (err) {
       logger.error("Failed to send reset email", { email, error: err instanceof Error ? err.message : String(err) });
     }
