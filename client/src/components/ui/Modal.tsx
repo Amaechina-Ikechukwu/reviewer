@@ -46,12 +46,12 @@ export function Modal({ open, onClose, title, description, size = "md", children
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] animate-slide-up",
+          "relative flex max-h-[85vh] w-full flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] animate-slide-up",
           sizes[size],
         )}
       >
         {(title || description) && (
-          <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-[var(--border)]">
+          <div className="flex shrink-0 items-start justify-between gap-4 px-5 py-4 border-b border-[var(--border)]">
             <div className="min-w-0">
               {title && <h2 className="text-base font-semibold text-[var(--fg)]">{title}</h2>}
               {description && (
@@ -70,9 +70,9 @@ export function Modal({ open, onClose, title, description, size = "md", children
             </button>
           </div>
         )}
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--border)] bg-[var(--surface-muted)]/50 rounded-b-xl">
+          <div className="flex shrink-0 items-center justify-end gap-2 px-5 py-3 border-t border-[var(--border)] bg-[var(--surface-muted)]/50 rounded-b-xl">
             {footer}
           </div>
         )}

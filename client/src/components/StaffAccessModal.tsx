@@ -61,7 +61,26 @@ export default function StaffAccessModal({
   }
 
   return (
-    <Modal open onClose={onClose} title={`Access for ${member.fullName}`}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Access for ${member.fullName}`}
+      footer={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" disabled={saving || !member.customAccess} onClick={() => void save(true)}>
+            Reset to role defaults
+          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button size="sm" loading={saving} disabled={!changed && member.customAccess} onClick={() => void save()}>
+              Save access
+            </Button>
+          </div>
+        </div>
+      }
+    >
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--fg-muted)]">
           <Badge tone="accent">{STAFF_ROLE_LABELS[member.role] ?? member.role}</Badge>
@@ -94,20 +113,6 @@ export default function StaffAccessModal({
               </div>
             </div>
           ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
-          <Button variant="ghost" size="sm" disabled={saving || !member.customAccess} onClick={() => void save(true)}>
-            Reset to role defaults
-          </Button>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
-              Cancel
-            </Button>
-            <Button size="sm" loading={saving} disabled={!changed && member.customAccess} onClick={() => void save()}>
-              Save access
-            </Button>
-          </div>
         </div>
       </div>
     </Modal>

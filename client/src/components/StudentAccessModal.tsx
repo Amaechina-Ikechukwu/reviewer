@@ -63,7 +63,26 @@ export default function StudentAccessModal({
   }
 
   return (
-    <Modal open onClose={onClose} title={`Access for ${student.fullName}`}>
+    <Modal
+      open
+      onClose={onClose}
+      title={`Access for ${student.fullName}`}
+      footer={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <Button variant="ghost" size="sm" disabled={saving || granted.size === 0} onClick={() => void save([])}>
+            Clear access
+          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button size="sm" loading={saving} disabled={!changed} onClick={() => void save([...granted])}>
+              Save access
+            </Button>
+          </div>
+        </div>
+      }
+    >
       <div className="flex flex-col gap-4">
         <p className="text-xs text-[var(--fg-muted)]">
           They stay a student — same dashboard, same submissions. Ticking anything below just adds it on top.
@@ -95,20 +114,6 @@ export default function StudentAccessModal({
               </div>
             );
           })}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
-          <Button variant="ghost" size="sm" disabled={saving || granted.size === 0} onClick={() => void save([])}>
-            Clear access
-          </Button>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
-              Cancel
-            </Button>
-            <Button size="sm" loading={saving} disabled={!changed} onClick={() => void save([...granted])}>
-              Save access
-            </Button>
-          </div>
         </div>
       </div>
     </Modal>

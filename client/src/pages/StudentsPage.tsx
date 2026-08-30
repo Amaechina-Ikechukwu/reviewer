@@ -426,7 +426,7 @@ export default function StudentsPage() {
                     <button
                       type="button"
                       onClick={() => setAccessFor(student)}
-                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--accent)] underline decoration-dotted underline-offset-2 transition-colors hover:bg-[var(--surface-muted)] hover:decoration-solid"
                       title="Grant this student extra responsibilities"
                     >
                       <Icon.Shield className="h-3.5 w-3.5" />
