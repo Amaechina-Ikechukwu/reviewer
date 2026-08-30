@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { isStaff } from "../../utils/jwt";
+import { isStaffOrGranted } from "../../utils/permissions";
 import { audit } from "../services/audit";
 import { getAvailableProviders, reviewCode, type ProviderName } from "../../services/ai/reviewer";
 import type { ReviewAttachment } from "../../services/ai/provider";
@@ -23,7 +23,7 @@ export const reviewRoutes = {
 
   async run(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "reviews.run")) return json({ error: "Access denied." }, 403);
 
     const body = await request.json().catch(() => ({})) as { provider?: string; model?: string };
 
@@ -164,7 +164,7 @@ export const reviewRoutes = {
     const review = await data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", params.submissionId]]);
     if (!review) return json({ error: "Review not found." }, 404);
 
-    if (user.role === "student") {
+    if (!isStaffOrGranted(user, "grades.edit")) {
       const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
       if (!submission) return json({ error: "Forbidden" }, 403);
       let allowed = submission.studentId === user.userId;
@@ -179,7 +179,7 @@ export const reviewRoutes = {
 
   async override(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "grades.edit")) return json({ error: "Access denied." }, 403);
 
     const body = await request.json().catch(() => ({})) as { score?: number; feedback?: string };
     const score = Number(body.score);

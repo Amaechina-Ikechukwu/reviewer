@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { AppShell, type NavSection } from "./AppShell";
 import { Icon } from "./ui/Icons";
 import { useAuth } from "../context/AuthContext";
-import { hasPermission } from "../types";
+import { hasPermission, isStaffRole } from "../types";
 
 export type TeacherSection =
   | "dashboard" | "assignments" | "submissions" | "students" | "cohorts"
@@ -43,10 +43,23 @@ export default function TeacherShell({
   const { user } = useAuth();
   // No point offering an action the server will refuse.
   const canCreate = hasPermission(user, "assignments.manage");
+  // A student here on individually granted responsibilities, not a role —
+  // give them a way back to where they actually live.
+  const sections = user && !isStaffRole(user.role)
+    ? [
+        ...SECTIONS,
+        {
+          title: "Your Account",
+          items: [
+            { key: "student-home", label: "Back to My Dashboard", to: "/student", icon: <Icon.Dashboard className="h-4 w-4" />, matches: () => false },
+          ],
+        },
+      ]
+    : SECTIONS;
 
   return (
     <AppShell
-      sections={SECTIONS}
+      sections={sections}
       portalLabel="Teacher Portal"
       activeKey={section}
       primaryAction={canCreate ? { label: "New assignment", to: "/teacher/assignments/new" } : undefined}

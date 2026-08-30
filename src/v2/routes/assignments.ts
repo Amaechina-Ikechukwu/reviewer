@@ -5,6 +5,7 @@ import { enqueueEmailJob } from "../services/emailJobs";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS, storageUpload, storageDownload } from "../firebase";
+import { isStaffOrGranted } from "../../utils/permissions";
 
 type Track = "frontend" | "backend" | "data_analytics" | "product_design" | "digital_marketing" | "cyber_security";
 const CODE_TRACKS: Track[] = ["frontend", "backend", "cyber_security"];
@@ -205,7 +206,7 @@ async function notifyGroupMembers(
 export const assignmentRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can create assignments." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can create assignments." }, 403);
 
     const body = await parseJson<AssignmentBody>(request);
     if (!body.title || !body.closesAt) return json({ error: "Missing required assignment fields." }, 400);
@@ -384,7 +385,7 @@ export const assignmentRoutes = {
 
   async update(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can edit assignments." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can edit assignments." }, 403);
 
     const existing = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!existing || existing.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
@@ -448,7 +449,7 @@ export const assignmentRoutes = {
 
   async remove(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can delete assignments." }, 403);
+    if (!isStaffOrGranted(user, "assignments.delete")) return json({ error: "Only staff can delete assignments." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
@@ -565,7 +566,7 @@ export const assignmentRoutes = {
 
   async updateGroups(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can edit groups." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can edit groups." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);
@@ -647,7 +648,7 @@ export const assignmentRoutes = {
 
   async uploadBrief(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can upload assignment files." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can upload assignment files." }, 403);
 
     const ct = request.headers.get("content-type") || "";
     if (!ct.includes("multipart/form-data")) return json({ error: "Multipart form data required." }, 400);
@@ -671,7 +672,7 @@ export const assignmentRoutes = {
 
   async uploadGroupAsset(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can upload group assets." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can upload group assets." }, 403);
 
     const ct = request.headers.get("content-type") || "";
     if (!ct.includes("multipart/form-data")) return json({ error: "Multipart form data required." }, 400);
@@ -713,7 +714,7 @@ export const assignmentRoutes = {
 
   async shareGroup(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can share groups." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can share groups." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
@@ -732,7 +733,7 @@ export const assignmentRoutes = {
 
   async unshareGroup(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can unshare groups." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can unshare groups." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
@@ -870,7 +871,7 @@ export const assignmentRoutes = {
 
   async regenerateGroups(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Only staff can regenerate groups." }, 403);
+    if (!isStaffOrGranted(user, "assignments.manage")) return json({ error: "Only staff can regenerate groups." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment || assignment.createdBy !== user.userId) return json({ error: "Assignment not found." }, 404);

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { isStaff } from "../../utils/jwt";
+import { isStaffOrGranted } from "../../utils/permissions";
 import { json } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS, storageUpload, storageDownload, storageDelete } from "../firebase";
@@ -19,7 +19,7 @@ function getFileType(filename: string): string {
 export const classNoteRoutes = {
   async upload(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "notes.manage")) return json({ error: "Access denied." }, 403);
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -93,7 +93,7 @@ export const classNoteRoutes = {
 
   async remove(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "notes.manage")) return json({ error: "Access denied." }, 403);
 
     const note = await data.getById<any>(COLLECTIONS.classNoteFiles, params.id);
     if (!note) return json({ error: "Note not found." }, 404);

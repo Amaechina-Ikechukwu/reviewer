@@ -12,8 +12,9 @@ import { Modal } from "../components/ui/Modal";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { api } from "../api";
+import StudentAccessModal from "../components/StudentAccessModal";
 import { formatDate } from "../lib/format";
-import type { Assignment, StudentRecord } from "../types";
+import { PERMISSIONS, type Assignment, type StudentRecord } from "../types";
 
 type StudentWithPending = StudentRecord & { pending?: boolean };
 
@@ -132,6 +133,8 @@ export default function StudentsPage() {
 
   const [confirmDelete, setConfirmDelete] = useState<StudentWithPending | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [accessFor, setAccessFor] = useState<StudentWithPending | null>(null);
 
   const [showMerge, setShowMerge] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState("");
@@ -394,6 +397,7 @@ export default function StudentsPage() {
                 <TH>Student</TH>
                 <TH>Email</TH>
                 <TH>Joined</TH>
+                <TH>Access</TH>
                 <TH className="text-right">Actions</TH>
               </TR>
             </THead>
@@ -418,12 +422,24 @@ export default function StudentsPage() {
                     {isPlaceholderEmail(student.email) ? "—" : student.email}
                   </TD>
                   <TD label="Joined" className="text-xs text-[var(--fg-muted)]">{formatDate(student.createdAt)}</TD>
+                  <TD label="Access">
+                    <button
+                      type="button"
+                      onClick={() => setAccessFor(student)}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-[var(--fg-muted)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                      title="Grant this student extra responsibilities"
+                    >
+                      <Icon.Shield className="h-3.5 w-3.5" />
+                      {student.permissions?.length ? `${student.permissions.length} of ${PERMISSIONS.length}` : "Student only"}
+                      {student.customAccess && <Badge tone="accent">Custom</Badge>}
+                    </button>
+                  </TD>
                   <TD label="Actions" className="text-right">
                     <RowMenu student={student} onAction={(a) => handleRowAction(a, student)} />
                   </TD>
                 </TR>
               ))}
-              {sortedStudents.length === 0 && <EmptyRow cols={4}>No students match your search.</EmptyRow>}
+              {sortedStudents.length === 0 && <EmptyRow cols={5}>No students match your search.</EmptyRow>}
             </TBody>
           </Table>
         </Card>
@@ -558,6 +574,12 @@ export default function StudentsPage() {
           )}
         </form>
       </Modal>
+
+      <StudentAccessModal
+        student={accessFor}
+        onClose={() => setAccessFor(null)}
+        onSaved={(updated) => setStudents((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)))}
+      />
 
       {/* Submit for student */}
       <Modal

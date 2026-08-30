@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
+import { isStaffOrGranted } from "../../utils/permissions";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
@@ -180,7 +181,7 @@ async function ensureCohort(cohortId: string | undefined): Promise<{ ok: true; c
 export const quizRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "quizzes.manage")) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<CreateBody>(request);
     const title = body.title?.trim();
@@ -301,7 +302,7 @@ export const quizRoutes = {
 
   async update(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "quizzes.manage")) return json({ error: "Access denied." }, 403);
 
     const existing = await data.getById<QuizDoc>(COLLECTIONS.quizzes, params.id);
     if (!existing || existing.createdBy !== user.userId) return json({ error: "Quiz not found." }, 404);
@@ -365,7 +366,7 @@ export const quizRoutes = {
 
   async remove(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "quizzes.manage")) return json({ error: "Access denied." }, 403);
 
     const quiz = await data.getById<QuizDoc>(COLLECTIONS.quizzes, params.id);
     if (!quiz || quiz.createdBy !== user.userId) return json({ error: "Quiz not found." }, 404);
@@ -540,7 +541,7 @@ export const quizRoutes = {
 
   async releaseResults(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "quizzes.manage")) return json({ error: "Access denied." }, 403);
 
     const quiz = await data.getById<QuizDoc>(COLLECTIONS.quizzes, params.id);
     if (!quiz || quiz.createdBy !== user.userId) return json({ error: "Quiz not found." }, 404);
@@ -597,7 +598,7 @@ export const quizRoutes = {
 
   async releaseAttempt(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "quizzes.manage")) return json({ error: "Access denied." }, 403);
 
     const quiz = await data.getById<QuizDoc>(COLLECTIONS.quizzes, params.id);
     if (!quiz || quiz.createdBy !== user.userId) return json({ error: "Quiz not found." }, 404);
@@ -649,7 +650,7 @@ export const quizRoutes = {
 
   async listAttempts(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "quizzes.manage")) return json({ error: "Access denied." }, 403);
 
     const quiz = await data.getById<QuizDoc>(COLLECTIONS.quizzes, params.id);
     if (!quiz || quiz.createdBy !== user.userId) return json({ error: "Quiz not found." }, 404);

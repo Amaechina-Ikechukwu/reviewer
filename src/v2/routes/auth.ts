@@ -69,9 +69,11 @@ async function issueReset(target: { id: string; email: string; fullName: string 
   return token;
 }
 
-function userResponse(u: { id: string; email: string; fullName: string; role: UserRole }) {
+function userResponse(u: { id: string; email: string; fullName: string; role: UserRole; permissions?: unknown }) {
   const token = signToken({ userId: u.id, email: u.email, fullName: u.fullName, role: u.role });
-  return { token, user: { id: u.id, email: u.email, fullName: u.fullName, role: u.role } };
+  // Access ships with the profile so the UI can hide what this person cannot
+  // do from the moment they sign in, not just after the next /auth/me refetch.
+  return { token, user: { id: u.id, email: u.email, fullName: u.fullName, role: u.role, permissions: permissionsFor(u) } };
 }
 
 export const authRoutes = {

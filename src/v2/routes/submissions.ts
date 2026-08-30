@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { isStaff } from "../../utils/jwt";
+import { isStaffOrGranted } from "../../utils/permissions";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../../services/code-reader";
 import { sendGradeRelease, sendSubmissionNotification, sendResubmissionNotification } from "../../services/email";
@@ -82,9 +82,10 @@ async function removeFiles(filePath?: string | null) {
 }
 
 /** Students may read their own submission, and any submission belonging to a
- * group they are a member of. Staff may read all of them. */
-async function canReadSubmission(user: { userId: string; role: string }, submission: any) {
-  if (isStaff(user.role)) return true;
+ * group they are a member of. Staff — or a student individually granted
+ * grading access — may read all of them. */
+async function canReadSubmission(user: { userId: string; role: string; permissions?: readonly string[] | null }, submission: any) {
+  if (isStaffOrGranted(user, "grades.edit")) return true;
   if (submission.studentId === user.userId) return true;
   if (!submission.groupId) return false;
   const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
@@ -306,7 +307,7 @@ export const submissionRoutes = {
 
   async submitForStudent(request: Request) {
     const actor = (request as AuthenticatedRequest).user;
-    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(actor, "submissions.manage")) return json({ error: "Access denied." }, 403);
 
     const ct = request.headers.get("content-type") || "";
     let assignmentId = "";
@@ -549,7 +550,7 @@ export const submissionRoutes = {
 
   async import(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "submissions.manage")) return json({ error: "Access denied." }, 403);
 
     const body = await request.json().catch(() => ({})) as {
       assignmentId?: string; assignmentTitle?: string; entries?: ImportEntry[];
@@ -658,7 +659,7 @@ export const submissionRoutes = {
    */
   async roster(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "grades.edit")) return json({ error: "Access denied." }, 403);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
@@ -725,7 +726,7 @@ export const submissionRoutes = {
    */
   async mark(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(actor, "grades.edit")) return json({ error: "Access denied." }, 403);
 
     const body = (await request.json().catch(() => ({}))) as {
       studentIds?: string[];
@@ -849,7 +850,7 @@ export const submissionRoutes = {
    */
   async unmark(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(actor, "grades.edit")) return json({ error: "Access denied." }, 403);
 
     const groups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
       where: [["assignmentId", "==", params.id]],
@@ -908,7 +909,7 @@ export const submissionRoutes = {
 
   async delete(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(actor, "submissions.manage")) return json({ error: "Access denied." }, 403);
 
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.id);
     if (!submission) return json({ error: "Submission not found." }, 404);

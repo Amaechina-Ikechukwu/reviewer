@@ -1,5 +1,5 @@
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { isStaff } from "../../utils/jwt";
+import { isStaffOrGranted } from "../../utils/permissions";
 import { json } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
@@ -7,7 +7,7 @@ import { COLLECTIONS } from "../firebase";
 export const gradebookRoutes = {
   async get(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "grades.edit")) return json({ error: "Access denied." }, 403);
 
     const [allStudents, allAssignments, allSubmissions, allReviews, allGroups] = await Promise.all([
       data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] }),

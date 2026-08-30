@@ -93,6 +93,7 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "PATCH", path: "/v2/api/students/:studentId", handler: studentRoutes.update, requiresAuth: true, permission: "students.manage" },
   { method: "DELETE", path: "/v2/api/students/:studentId", handler: studentRoutes.delete, requiresAuth: true, permission: "students.manage" },
   { method: "POST", path: "/v2/api/students/:studentId/open-submission", handler: studentRoutes.openSubmission, requiresAuth: true, permission: "students.manage" },
+  { method: "PATCH", path: "/v2/api/students/:studentId/access", handler: studentRoutes.updateAccess, requiresAuth: true, permission: "staff.manage" },
 
   { method: "GET", path: "/v2/api/audit-logs", handler: auditLogRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/gradebook", handler: gradebookRoutes.get, requiresAuth: true },

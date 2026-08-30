@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { isStaff } from "../../utils/jwt";
+import { isStaffOrGranted } from "../../utils/permissions";
 import { enqueueEmailJob } from "../services/emailJobs";
 import { json, parseJson } from "../../utils/json";
 import { audit } from "../services/audit";
@@ -140,7 +140,7 @@ async function getFormRecipients(form: any): Promise<{ email: string; fullName: 
 export const customFormRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<FormBody>(request);
     const title = body.title?.trim();
@@ -265,7 +265,7 @@ export const customFormRoutes = {
 
   async update(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const existing = await data.getById<any>(COLLECTIONS.customForms, params.id);
     if (!existing || existing.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
@@ -349,7 +349,7 @@ export const customFormRoutes = {
 
   async remove(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const form = await data.getById<any>(COLLECTIONS.customForms, params.id);
     if (!form || form.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
@@ -418,7 +418,7 @@ export const customFormRoutes = {
 
   async listResponses(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const form = await data.getById<any>(COLLECTIONS.customForms, params.id);
     if (!form || form.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
@@ -448,7 +448,7 @@ export const customFormRoutes = {
 
   async decideResponse(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const response = await data.getById<any>(COLLECTIONS.customFormResponses, params.responseId);
     if (!response) return json({ error: "Response not found." }, 404);

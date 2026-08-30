@@ -3,6 +3,7 @@ import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
 import { enqueueEmailJob } from "../services/emailJobs";
+import { isStaffOrGranted } from "../../utils/permissions";
 
 const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 const STAFF_ROLES = new Set(["teacher", "owner", "admin", "manager", "instructor"]);
@@ -23,7 +24,7 @@ const VALID_TARGETS = new Set<Target>(["all", "students", "staff", "cohort", "in
 export const notificationRoutes = {
   async send(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!STAFF_ROLES.has(user.role)) {
+    if (!isStaffOrGranted(user, "notifications.send")) {
       return json({ error: "Only staff can send notifications." }, 403);
     }
     const isManager = MANAGER_ROLES.has(user.role);

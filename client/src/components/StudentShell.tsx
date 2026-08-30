@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell, type NavSection } from "./AppShell";
 import { Icon } from "./ui/Icons";
+import { useAuth } from "../context/AuthContext";
 
 type StudentSection = "dashboard" | "submissions" | "notes" | "forms" | "quizzes" | "projects";
 
@@ -19,8 +20,23 @@ const SECTIONS: NavSection[] = [
 ];
 
 export default function StudentShell({ section, children }: { section: StudentSection; children: ReactNode }) {
+  const { user } = useAuth();
+  // A student individually granted responsibilities gets a way back to the
+  // teacher portal for those — everyone else never sees the door.
+  const sections = user?.permissions?.length
+    ? [
+        ...SECTIONS,
+        {
+          title: "Responsibilities",
+          items: [
+            { key: "staff-tools", label: "Staff Tools", to: "/teacher", icon: <Icon.Shield className="h-4 w-4" />, matches: () => false },
+          ],
+        },
+      ]
+    : SECTIONS;
+
   return (
-    <AppShell sections={SECTIONS} portalLabel="Student Portal" activeKey={section}>
+    <AppShell sections={sections} portalLabel="Student Portal" activeKey={section}>
       {children}
     </AppShell>
   );

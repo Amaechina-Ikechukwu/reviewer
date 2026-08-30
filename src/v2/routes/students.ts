@@ -2,17 +2,19 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { audit } from "../services/audit";
+import { invalidateAccess } from "../services/access";
 import { sendInvite, sendPasswordReset } from "../../services/email";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
+import { isStaffOrGranted, permissionsFor, sanitizePermissions, STUDENT_GRANTABLE_PERMISSIONS } from "../../utils/permissions";
 
 const generateToken = () => randomBytes(32).toString("hex");
 
 export const studentRoutes = {
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const rows = await data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] });
     rows.sort((a, b) => String(a.fullName).localeCompare(String(b.fullName)));
@@ -22,12 +24,14 @@ export const studentRoutes = {
       teacherId: r.teacherId ?? null,
       createdAt: r.createdAt,
       pending: passwordHash === "INVITE_PENDING",
+      permissions: permissionsFor(r),
+      customAccess: Array.isArray(r.permissions) && r.permissions.length > 0,
     })));
   },
 
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<{ email?: string; fullName?: string }>(request);
     const email = body.email?.trim().toLowerCase();
@@ -66,7 +70,7 @@ export const studentRoutes = {
 
   async openSubmission(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const { studentId } = params;
     const { assignmentId, closesAt: closesAtStr } = await parseJson<{ assignmentId?: string; closesAt?: string }>(request);
@@ -94,7 +98,7 @@ export const studentRoutes = {
 
   async merge(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const { sourceId, targetId } = await parseJson<{ sourceId?: string; targetId?: string }>(request);
     if (!sourceId || !targetId) return json({ error: "sourceId and targetId required." }, 400);
@@ -149,7 +153,7 @@ export const studentRoutes = {
 
   async resetPassword(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const { studentId } = await parseJson<{ studentId?: string }>(request);
     if (!studentId) return json({ error: "studentId required." }, 400);
@@ -172,7 +176,7 @@ export const studentRoutes = {
 
   async delete(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(actor, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const { studentId } = params;
     const existing = await data.getById<any>(COLLECTIONS.users, studentId);
@@ -194,7 +198,7 @@ export const studentRoutes = {
 
   async update(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
-    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(actor, "students.manage")) return json({ error: "Access denied." }, 403);
 
     const { studentId } = params;
     const body = await parseJson<{ fullName?: string; email?: string }>(request);
@@ -221,5 +225,48 @@ export const studentRoutes = {
       details: { before: { fullName: existing.fullName, email: existing.email }, after: patch },
     });
     return json({ id: updated!.id, email: updated!.email, fullName: updated!.fullName, role: updated!.role, createdAt: updated!.createdAt });
+  },
+
+  /**
+   * Gives a student extra responsibilities (grading, creating assignments,
+   * etc.) without making them staff — they stay `role: "student"`, keep their
+   * student dashboard and submission flow, and just gain the picked actions
+   * on top. Reuses the same per-person permission list staff accounts use.
+   */
+  async updateAccess(request: Request, params: Record<string, string>) {
+    const actor = (request as AuthenticatedRequest).user;
+    if (!isStaff(actor.role)) return json({ error: "Access denied." }, 403);
+
+    const { studentId } = params;
+    const student = await data.getById<any>(COLLECTIONS.users, studentId);
+    if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
+
+    const body = await parseJson<{ permissions?: unknown }>(request);
+    if (!Array.isArray(body.permissions)) {
+      return json({ error: "Provide the permissions to grant." }, 400);
+    }
+    // An empty array is meaningful — it clears any access this student had.
+    const permissions = sanitizePermissions(body.permissions).filter((p) => STUDENT_GRANTABLE_PERMISSIONS.includes(p));
+
+    await data.update(COLLECTIONS.users, studentId, { permissions });
+    invalidateAccess(studentId);
+
+    audit({
+      actorId: actor.userId,
+      action: "student.access_changed",
+      targetType: "user",
+      targetId: studentId,
+      details: { permissions },
+    });
+
+    return json({
+      id: studentId,
+      email: student.email,
+      fullName: student.fullName,
+      role: "student",
+      permissions: permissionsFor({ role: "student", permissions }),
+      customAccess: permissions.length > 0,
+      pending: student.passwordHash === "INVITE_PENDING",
+    });
   },
 };

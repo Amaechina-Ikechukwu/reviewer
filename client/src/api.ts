@@ -130,6 +130,14 @@ export function updateStaffAccess(
   );
 }
 
+/** Grants a student extra responsibilities without making them staff — they stay `role: "student"`. */
+export function updateStudentAccess(studentId: string, permissions: Permission[]) {
+  return api<{ id: string; role: "student"; permissions: Permission[]; customAccess: boolean }>(
+    `/students/${studentId}/access`,
+    { method: "PATCH", body: JSON.stringify({ permissions }) },
+  );
+}
+
 // Assignment roster + manual marking
 
 export function getAssignmentRoster(assignmentId: string) {

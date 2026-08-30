@@ -95,7 +95,10 @@ function ProtectedRoute({ role, children }: { role?: Role; children: ReactNode }
     return <Navigate to="/login" replace />;
   }
 
-  if (role === "teacher" && !isStaffRole(user.role)) {
+  // A student individually granted responsibilities (see StudentAccessModal)
+  // gets into the teacher portal too — they just find fewer doors unlocked
+  // once inside, same as a staff member with restricted custom access.
+  if (role === "teacher" && !isStaffRole(user.role) && !user.permissions?.length) {
     return <Navigate to="/student" replace />;
   }
 

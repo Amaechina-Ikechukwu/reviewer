@@ -5,6 +5,8 @@
  * assignment or invite staff.
  */
 
+import { isStaff } from "./jwt";
+
 export const PERMISSIONS = [
   { key: "assignments.manage", label: "Create & edit assignments", group: "Assignments" },
   { key: "assignments.delete", label: "Delete assignments", group: "Assignments" },
@@ -44,6 +46,14 @@ export const ROLE_DEFAULTS: Record<string, Permission[]> = {
   student: [],
 };
 
+/**
+ * What a student can be handed on top of being a student — everything except
+ * the permissions that are really about controlling other staff or the
+ * public changelog, and project management, whose ownership/visibility rules
+ * assume the actor is staff.
+ */
+export const STUDENT_GRANTABLE_PERMISSIONS: Permission[] = EXCEPT("staff.manage", "changelog.manage", "projects.manage");
+
 export function isPermission(value: unknown): value is Permission {
   return typeof value === "string" && (PERMISSION_KEYS as string[]).includes(value);
 }
@@ -65,4 +75,21 @@ export function permissionsFor(user: { role?: string | null; permissions?: unkno
 
 export function can(user: { role?: string | null; permissions?: unknown }, permission: Permission): boolean {
   return permissionsFor(user).includes(permission);
+}
+
+/**
+ * The gate every handler that maps to one catalog permission should use in
+ * place of a bare staff check. `route.permission` in v2/index.ts already
+ * enforces this before the handler runs — for a `Permission`-gated route,
+ * getting this far means the caller already has it, staff or not. This
+ * exists mainly for handlers that don't have a `route.permission` (a plain
+ * "isStaff" read like the gradebook or roster) but should still open up to a
+ * student who was individually granted the matching permission, without
+ * touching the behavior for everyone already relying on the old check.
+ */
+export function isStaffOrGranted(
+  user: { role?: string | null; permissions?: readonly string[] | null },
+  permission: Permission,
+): boolean {
+  return isStaff(user.role ?? "") || !!user.permissions?.includes(permission);
 }

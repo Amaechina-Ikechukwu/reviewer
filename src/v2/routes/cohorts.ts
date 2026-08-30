@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
-import { isStaff } from "../../utils/jwt";
 import { json, parseJson } from "../../utils/json";
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
 import { audit } from "../services/audit";
+import { isStaffOrGranted } from "../../utils/permissions";
 
 type Track = "frontend" | "backend" | "data_analytics" | "product_design" | "digital_marketing" | "cyber_security";
 
@@ -19,7 +19,7 @@ type CohortBody = {
 export const cohortRoutes = {
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const cohorts = await data.findMany<any>(COLLECTIONS.cohorts, { orderBy: ["createdAt", "desc"] });
 
@@ -35,7 +35,7 @@ export const cohortRoutes = {
 
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<CohortBody>(request);
     const name = body.name?.trim();
@@ -60,7 +60,7 @@ export const cohortRoutes = {
 
   async get(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const cohort = await data.getById<any>(COLLECTIONS.cohorts, params.id);
     if (!cohort) return json({ error: "Cohort not found." }, 404);
@@ -80,7 +80,7 @@ export const cohortRoutes = {
 
   async update(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const cohort = await data.getById<any>(COLLECTIONS.cohorts, params.id);
     if (!cohort) return json({ error: "Cohort not found." }, 404);
@@ -102,7 +102,7 @@ export const cohortRoutes = {
 
   async remove(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const cohort = await data.getById<any>(COLLECTIONS.cohorts, params.id);
     if (!cohort) return json({ error: "Cohort not found." }, 404);
@@ -120,7 +120,7 @@ export const cohortRoutes = {
 
   async addStudent(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const cohort = await data.getById<any>(COLLECTIONS.cohorts, params.id);
     if (!cohort) return json({ error: "Cohort not found." }, 404);
@@ -140,7 +140,7 @@ export const cohortRoutes = {
 
   async removeStudent(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "cohorts.manage")) return json({ error: "Access denied." }, 403);
 
     const cohort = await data.getById<any>(COLLECTIONS.cohorts, params.id);
     if (!cohort) return json({ error: "Cohort not found." }, 404);

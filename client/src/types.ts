@@ -56,6 +56,16 @@ export type Permission = (typeof PERMISSIONS)[number]["key"];
 
 export const PERMISSION_GROUPS = [...new Set(PERMISSIONS.map((entry) => entry.group))];
 
+/**
+ * What a student can be handed on top of being a student. Excludes access
+ * that's really about controlling other staff, the public changelog, or
+ * project management, whose ownership/visibility rules assume the actor is
+ * staff. Mirrors STUDENT_GRANTABLE_PERMISSIONS in src/utils/permissions.ts.
+ */
+export const STUDENT_GRANTABLE_PERMISSIONS: Permission[] = PERMISSIONS
+  .map((entry) => entry.key)
+  .filter((key) => key !== "staff.manage" && key !== "changelog.manage" && key !== "projects.manage");
+
 /** Access is per person; the role only decides where they start. */
 export function hasPermission(
   user: { permissions?: readonly string[] | null } | null | undefined,
@@ -290,6 +300,9 @@ export type StudentRecord = {
   cohortId?: string | null;
   track?: Track | null;
   createdAt: string;
+  /** Extra responsibilities granted on top of being a student — see STUDENT_GRANTABLE_PERMISSIONS. */
+  permissions?: Permission[];
+  customAccess?: boolean;
 };
 
 export type Cohort = {
