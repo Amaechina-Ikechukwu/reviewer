@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Select } from "../components/ui/Input";
+import { Input, Select } from "../components/ui/Input";
 import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
@@ -102,6 +102,8 @@ export default function GradebookPage() {
   const [data, setData] = useState<GradebookData | null>(null);
   const [cohorts, setCohorts] = useState<import("../types").Cohort[]>([]);
   const [selectedCohortId, setSelectedCohortId] = useState("all");
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState("all");
+  const [studentQuery, setStudentQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("student");
@@ -139,13 +141,18 @@ export default function GradebookPage() {
   const assignments = data?.assignments ?? [];
   const rows = data?.rows ?? [];
 
-  const displayRows = selectedCohortId === "all"
-    ? rows
-    : rows.filter((r) => r.student.cohortId === selectedCohortId);
-
-  const displayAssignments = assignments.filter((a) => {
-    return displayRows.some((row) => row.scores[a.id] !== undefined);
+  const needle = studentQuery.trim().toLowerCase();
+  const displayRows = rows.filter((r) => {
+    if (selectedCohortId !== "all" && r.student.cohortId !== selectedCohortId) return false;
+    if (needle && !r.student.fullName.toLowerCase().includes(needle) && !r.student.email.toLowerCase().includes(needle)) {
+      return false;
+    }
+    return true;
   });
+
+  const displayAssignments = assignments
+    .filter((a) => displayRows.some((row) => row.scores[a.id] !== undefined))
+    .filter((a) => selectedAssignmentId === "all" || a.id === selectedAssignmentId);
 
   const sortedRows = useMemo(() => {
     const withRank = [...displayRows];
@@ -180,18 +187,6 @@ export default function GradebookPage() {
                   Read-only view
                 </Badge>
               )}
-              <Select
-                value={selectedCohortId}
-                onChange={(e) => setSelectedCohortId(e.target.value)}
-                className="w-48"
-              >
-                <option value="all">All cohorts ({rows.length} students)</option>
-                {cohorts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </Select>
               <Button variant="secondary" size="sm" onClick={() => setRefreshKey((k) => k + 1)}>
                 <Icon.Refresh className="h-3.5 w-3.5" />
                 Refresh
@@ -200,11 +195,67 @@ export default function GradebookPage() {
           }
         />
 
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-56">
+            <Icon.Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--fg-subtle)]" />
+            <Input
+              value={studentQuery}
+              onChange={(e) => setStudentQuery(e.target.value)}
+              placeholder="Find a student..."
+              className="h-9 pl-8 text-sm"
+            />
+          </div>
+          <Select
+            value={selectedAssignmentId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setSelectedAssignmentId(id);
+              if (id !== "all") {
+                setSortKey(id);
+                setSortDir("desc");
+              }
+            }}
+            className="w-56"
+          >
+            <option value="all">All assignments</option>
+            {assignments.map((a) => (
+              <option key={a.id} value={a.id}>{a.title}</option>
+            ))}
+          </Select>
+          <Select
+            value={selectedCohortId}
+            onChange={(e) => setSelectedCohortId(e.target.value)}
+            className="w-48"
+          >
+            <option value="all">All cohorts ({rows.length} students)</option>
+            {cohorts.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          {(studentQuery || selectedAssignmentId !== "all" || selectedCohortId !== "all") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStudentQuery("");
+                setSelectedAssignmentId("all");
+                setSelectedCohortId("all");
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+
         {loading && <div className="text-sm text-[var(--fg-muted)]">Loading gradebook...</div>}
 
         {!loading && displayAssignments.length === 0 && (
           <Card className="p-10 text-center text-sm text-[var(--fg-muted)]">
-            No assignments or submissions found for this cohort.
+            {studentQuery || selectedAssignmentId !== "all" || selectedCohortId !== "all"
+              ? "No scores match these filters."
+              : "No assignments or submissions found for this cohort."}
           </Card>
         )}
 
