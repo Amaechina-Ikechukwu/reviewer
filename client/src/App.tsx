@@ -54,6 +54,7 @@ import StudentProjectsPage from "./pages/StudentProjectsPage";
 import StudentProjectDetailPage from "./pages/StudentProjectDetailPage";
 import type { Role } from "./types";
 import { isStaffRole } from "./types";
+import { firstTeacherRoute } from "./components/TeacherShell";
 import CohortsPage from "./pages/CohortsPage";
 import CohortDetailPage from "./pages/CohortDetailPage";
 import V2Wrapper from "./v2/V2Wrapper";
@@ -109,6 +110,19 @@ function ProtectedRoute({ role, children }: { role?: Role; children: ReactNode }
   return <>{children}</>;
 }
 
+/**
+ * The Dashboard is a platform-wide overview, not a permission of its own —
+ * a student granted one narrow capability (e.g. scores.view) has no reason
+ * to see it. Real staff still land on it as before.
+ */
+function TeacherHome() {
+  const { user } = useAuth();
+  if (user && !isStaffRole(user.role)) {
+    return <Navigate to={firstTeacherRoute(user)} replace />;
+  }
+  return <TeacherDashboard />;
+}
+
 function HomeRedirect() {
   const { ready, user } = useAuth();
 
@@ -147,7 +161,7 @@ export default function App() {
         path="/teacher"
         element={(
           <ProtectedRoute role="teacher">
-            <TeacherDashboard />
+            <TeacherHome />
           </ProtectedRoute>
         )}
       />

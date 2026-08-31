@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { AppShell, type NavSection } from "./AppShell";
 import { Icon } from "./ui/Icons";
 import { useAuth } from "../context/AuthContext";
+import { firstTeacherRoute } from "./TeacherShell";
 
 type StudentSection = "dashboard" | "submissions" | "notes" | "forms" | "quizzes" | "projects";
 
@@ -29,7 +30,7 @@ export default function StudentShell({ section, children }: { section: StudentSe
         {
           title: "Responsibilities",
           items: [
-            { key: "staff-tools", label: "Staff Tools", to: "/teacher", icon: <Icon.Shield className="h-4 w-4" />, matches: () => false },
+            { key: "staff-tools", label: "Staff Tools", to: firstTeacherRoute(user), icon: <Icon.Shield className="h-4 w-4" />, matches: () => false },
           ],
         },
       ]

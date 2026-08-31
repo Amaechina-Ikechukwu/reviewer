@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Select } from "../components/ui/Input";
 import TeacherShell from "../components/TeacherShell";
@@ -42,6 +42,46 @@ function scoreTone(score: number, maxScore: number) {
   return "text-[var(--danger)]";
 }
 
+type SortKey = "student" | "total" | string;
+
+function SortHeader({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+  className,
+}: {
+  label: ReactNode;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  dir: "asc" | "desc";
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const active = activeKey === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={cn(
+        "inline-flex w-full items-center gap-1 text-left transition-colors hover:text-[var(--fg)]",
+        active ? "text-[var(--fg)]" : "text-[var(--fg-muted)]",
+        className,
+      )}
+    >
+      {label}
+      <Icon.ChevronDown
+        className={cn(
+          "h-3 w-3 shrink-0 transition-transform",
+          active ? "opacity-100" : "opacity-30",
+          active && dir === "asc" ? "rotate-180" : "",
+        )}
+      />
+    </button>
+  );
+}
+
 function Cell({ cell }: { cell: ScoreCell }) {
   if (!cell) return <span className="text-[var(--fg-subtle)]">—</span>;
   if (cell.score === null) {
@@ -64,8 +104,20 @@ export default function GradebookPage() {
   const [selectedCohortId, setSelectedCohortId] = useState("all");
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("student");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const canEditGrades = hasPermission(user, "grades.edit");
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // Names read naturally A-Z; scores read naturally highest-first.
+      setSortDir(key === "student" ? "asc" : "desc");
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -94,6 +146,26 @@ export default function GradebookPage() {
   const displayAssignments = assignments.filter((a) => {
     return displayRows.some((row) => row.scores[a.id] !== undefined);
   });
+
+  const sortedRows = useMemo(() => {
+    const withRank = [...displayRows];
+    withRank.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "student") {
+        cmp = a.student.fullName.localeCompare(b.student.fullName);
+      } else if (sortKey === "total") {
+        const pa = a.grandMaxTotal > 0 ? a.grandTotal / a.grandMaxTotal : -1;
+        const pb = b.grandMaxTotal > 0 ? b.grandTotal / b.grandMaxTotal : -1;
+        cmp = pa - pb;
+      } else {
+        const sa = a.scores[sortKey]?.score;
+        const sb = b.scores[sortKey]?.score;
+        cmp = (typeof sa === "number" ? sa : -1) - (typeof sb === "number" ? sb : -1);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return withRank;
+  }, [displayRows, sortKey, sortDir]);
 
   return (
     <TeacherShell section="gradebook">
@@ -138,26 +210,37 @@ export default function GradebookPage() {
 
         {!loading && displayAssignments.length > 0 && (
           <Card className="overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="max-h-[70vh] overflow-auto">
               <table className="w-full text-sm">
-                <thead className="bg-[var(--surface-muted)]">
+                <thead>
                   <tr className="border-b border-[var(--border)]">
-                    <th className="sticky left-0 z-10 bg-[var(--surface-muted)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
-                      Student
+                    <th className="sticky left-0 top-0 z-30 bg-[var(--surface-muted)] px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider">
+                      <SortHeader label="Student" sortKey="student" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     </th>
                     {displayAssignments.map((a) => (
-                      <th key={a.id} className="min-w-[120px] px-3 py-3 text-center font-medium">
-                        <div className="truncate text-xs text-[var(--fg)]" title={a.title}>{a.title}</div>
-                        <div className="text-[10px] font-normal text-[var(--fg-subtle)]">/{a.maxScore}</div>
+                      <th key={a.id} className="sticky top-0 z-20 min-w-[120px] bg-[var(--surface-muted)] px-3 py-3 text-center font-medium">
+                        <SortHeader
+                          label={
+                            <span className="min-w-0 flex-1">
+                              <div className="truncate text-xs text-[var(--fg)]" title={a.title}>{a.title}</div>
+                              <div className="text-[10px] font-normal text-[var(--fg-subtle)]">/{a.maxScore}</div>
+                            </span>
+                          }
+                          sortKey={a.id}
+                          activeKey={sortKey}
+                          dir={sortDir}
+                          onSort={toggleSort}
+                          className="justify-center"
+                        />
                       </th>
                     ))}
-                    <th className="border-l-2 border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wider text-[var(--fg)]">
-                      Total
+                    <th className="sticky top-0 z-20 border-l-2 border-[var(--border)] bg-[var(--surface-muted)] px-3 py-3 text-center text-[11px] font-semibold uppercase tracking-wider text-[var(--fg)]">
+                      <SortHeader label="Total" sortKey="total" activeKey={sortKey} dir={sortDir} onSort={toggleSort} className="justify-center" />
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
-                  {displayRows.map((row) => (
+                  {sortedRows.map((row) => (
                     <tr key={row.student.id} className="transition-colors hover:bg-[var(--surface-muted)]/40">
                       <td className="sticky left-0 z-10 bg-[var(--surface)] px-4 py-3">
                         <div className="font-medium text-[var(--fg)]">{row.student.fullName}</div>

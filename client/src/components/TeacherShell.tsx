@@ -23,7 +23,14 @@ const ALL_SECTIONS: NavSectionWithPerm[] = [
   {
     title: "Workspace",
     items: [
-      { key: "dashboard", label: "Dashboard", to: "/teacher", icon: <Icon.Dashboard className="h-4 w-4" />, matches: (p) => p === "/teacher" },
+      {
+        key: "dashboard",
+        label: "Dashboard",
+        to: "/teacher",
+        icon: <Icon.Dashboard className="h-4 w-4" />,
+        matches: (p) => p === "/teacher",
+        staffOnly: true,
+      },
       {
         key: "assignments",
         label: "Assignments",
@@ -114,6 +121,31 @@ const ALL_SECTIONS: NavSectionWithPerm[] = [
   },
 ];
 
+type ShellUser = { role?: string | null; permissions?: readonly string[] | null } | null | undefined;
+
+function isNavItemVisible(item: NavItemWithPerm, user: ShellUser, isStaff: boolean): boolean {
+  if (item.staffOnly && !isStaff) return false;
+  if (!item.requiredPerms) return isStaff;
+  return item.requiredPerms.some((p) => hasPermission(user, p));
+}
+
+/**
+ * Where a signed-in user should land on `/teacher` — the Dashboard for real
+ * staff, otherwise the first section their granted permissions actually
+ * unlock. A granted student has no business seeing the platform-wide
+ * Dashboard overview just because they can reach the teacher portal at all.
+ */
+export function firstTeacherRoute(user: ShellUser): string {
+  const isStaff = !!user && isStaffRole(user.role ?? "");
+  if (isStaff) return "/teacher";
+  for (const sec of ALL_SECTIONS) {
+    for (const item of sec.items) {
+      if (isNavItemVisible(item, user, isStaff)) return item.to;
+    }
+  }
+  return "/student";
+}
+
 export default function TeacherShell({
   section,
   children,
@@ -131,14 +163,7 @@ export default function TeacherShell({
     const visibleSections: NavSection[] = [];
 
     for (const sec of ALL_SECTIONS) {
-      const visibleItems = sec.items.filter((item) => {
-        if (item.staffOnly && !isStaff) return false;
-        if (!item.requiredPerms) return true;
-        if (isStaff) {
-          return item.requiredPerms.some((p) => hasPermission(user, p));
-        }
-        return item.requiredPerms.some((p) => hasPermission(user, p));
-      });
+      const visibleItems = sec.items.filter((item) => isNavItemVisible(item, user, !!isStaff));
 
       if (visibleItems.length > 0) {
         visibleSections.push({
