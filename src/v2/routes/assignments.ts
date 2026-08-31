@@ -311,16 +311,19 @@ export const assignmentRoutes = {
     }
 
     // Student: only show assignments for their cohort + global assignments (no cohortId)
+    // Note: sorting is done in JS below rather than via Firestore orderBy,
+    // since combining a cohortId equality filter with an orderBy on a
+    // different field (createdAt) requires a composite index that doesn't
+    // exist — that combination was silently 500-ing this endpoint for every
+    // student, hiding all of their assignments.
     const student = await data.getById<any>(COLLECTIONS.users, user.userId);
     if (student?.cohortId) {
       const [cohortRows, globalRows] = await Promise.all([
         data.findMany<any>(COLLECTIONS.assignments, {
           where: [["cohortId", "==", student.cohortId]],
-          orderBy: ["createdAt", "desc"],
         }),
         data.findMany<any>(COLLECTIONS.assignments, {
           where: [["cohortId", "==", null]],
-          orderBy: ["createdAt", "desc"],
         }),
       ]);
       const seen = new Set<string>();
@@ -334,8 +337,8 @@ export const assignmentRoutes = {
     // No cohort: show only global assignments
     const rows = await data.findMany<any>(COLLECTIONS.assignments, {
       where: [["cohortId", "==", null]],
-      orderBy: ["createdAt", "desc"],
     });
+    rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return json(rows);
   },
 
