@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createProject, listCohorts, listStudents } from "../api";
 import TeacherShell from "../components/TeacherShell";
+import { ProjectBriefField } from "../components/ProjectBriefField";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -79,10 +80,12 @@ export default function CreateProjectPage() {
   const [description, setDescription] = useState("");
   const [deadline, setDeadline] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [briefPdfPath, setBriefPdfPath] = useState<string | null>(null);
 
   /* ── Bulk mode ── */
   const [bulkData, setBulkData] = useState("");
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
+  const [bulkBriefPdfPath, setBulkBriefPdfPath] = useState<string | null>(null);
 
   /* ── Shared ── */
   const [students, setStudents] = useState<StudentRecord[]>([]);
@@ -161,6 +164,7 @@ export default function CreateProjectPage() {
         description: description.trim() || null,
         studentIds: selectedIds,
         deadline: deadline || null,
+        briefPdfPath,
       });
       navigate(`/teacher/projects/${project.id}`);
     } catch (err) {
@@ -192,6 +196,7 @@ export default function CreateProjectPage() {
           description: bulkDescription,
           studentIds: bulkSelectedIds,
           deadline: bulkDeadline,
+          briefPdfPath: bulkBriefPdfPath,
         });
         created++;
       } catch {
@@ -260,6 +265,8 @@ export default function CreateProjectPage() {
               <Input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
             </div>
 
+            <ProjectBriefField briefPdfPath={briefPdfPath} onChange={setBriefPdfPath} />
+
             {/* Student multi-select */}
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Assign Students</label>
@@ -317,6 +324,8 @@ export default function CreateProjectPage() {
                 </code>
               </div>
             </Card>
+
+            <ProjectBriefField briefPdfPath={bulkBriefPdfPath} onChange={setBulkBriefPdfPath} />
 
             {/* Student multi-select (bulk) */}
             <div>

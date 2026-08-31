@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { json, parseJson } from "../../utils/json";
+import { data } from "../data";
+import { COLLECTIONS, storageDownload, storageUpload } from "../firebase";
+import { audit } from "../services/audit";
+import { enqueueEmailJob } from "../services/emailJobs";
 
 /**
  * A plain student may always create/edit/delete their own solo project (no
@@ -14,10 +18,6 @@ function canManageProjects(user: { role: string; permissions?: readonly string[]
   if (!isStaff(user.role)) return true;
   return !!user.permissions?.includes("projects.manage");
 }
-import { data } from "../data";
-import { COLLECTIONS } from "../firebase";
-import { audit } from "../services/audit";
-import { enqueueEmailJob } from "../services/emailJobs";
 
 function normalizeUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -29,6 +29,7 @@ function normalizeUrl(raw: string): string {
 type ProjectStatus = "active" | "completed" | "archived";
 
 const VALID_STATUSES: ProjectStatus[] = ["active", "completed", "archived"];
+const MAX_BRIEF_SIZE = 100 * 1024 * 1024; // 100 MB
 
 type ProjectBody = {
   title?: string;
@@ -37,6 +38,7 @@ type ProjectBody = {
   status?: ProjectStatus;
   deadline?: string | null;
   deployedUrl?: string | null;
+  briefPdfPath?: string | null;
 };
 
 export const projectRoutes = {
@@ -65,6 +67,7 @@ export const projectRoutes = {
       studentIds,
       status: "active",
       deadline: body.deadline ?? null,
+      briefPdfPath: body.briefPdfPath || null,
       createdBy: user.userId,
       createdByName: user.fullName,
     });
@@ -163,6 +166,7 @@ export const projectRoutes = {
     if (body.title !== undefined) update.title = body.title.trim();
     if (body.description !== undefined) update.description = body.description?.trim() ?? null;
     if (body.deadline !== undefined) update.deadline = body.deadline ?? null;
+    if (body.briefPdfPath !== undefined) update.briefPdfPath = body.briefPdfPath || null;
     if (body.status !== undefined) {
       if (!isStaff(user.role)) return json({ error: "Only staff can change project status." }, 403);
       if (!VALID_STATUSES.includes(body.status)) return json({ error: "Invalid status." }, 400);
@@ -193,6 +197,50 @@ export const projectRoutes = {
     await data.del(COLLECTIONS.projects, project.id);
     audit({ actorId: user.userId, actorEmail: user.email, action: "project.delete", targetType: "project", targetId: project.id });
     return json({ deleted: true });
+  },
+
+  /** Anyone signed in can stage a PDF before a project exists yet (or before
+   * editing one) — same self-service model as creating the project itself.
+   * The returned briefId is only wired to a real project once create/update
+   * stores it, so an abandoned upload just sits unreferenced in storage. */
+  async uploadBrief(request: Request) {
+    const ct = request.headers.get("content-type") || "";
+    if (!ct.includes("multipart/form-data")) return json({ error: "Multipart form data required." }, 400);
+
+    const fd = await request.formData();
+    const file = fd.get("file") as File | null;
+    if (!file) return json({ error: "No file provided." }, 400);
+
+    if (!file.name.toLowerCase().endsWith(".pdf")) return json({ error: "Only PDF files are accepted." }, 400);
+    if (file.size > MAX_BRIEF_SIZE) return json({ error: "File must be under 100 MB." }, 400);
+
+    const briefId = randomUUID();
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await storageUpload(`briefs/${briefId}.pdf`, buffer, "application/pdf");
+
+    return json({ briefId });
+  },
+
+  async getBrief(request: Request, params: Record<string, string>) {
+    const user = (request as AuthenticatedRequest).user;
+    const project = await data.getById<any>(COLLECTIONS.projects, params.id);
+    if (!project) return new Response("Not found", { status: 404 });
+
+    if (!isStaff(user.role) && !project.studentIds?.includes(user.userId)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    if (!project.briefPdfPath) return new Response("Brief not found", { status: 404 });
+
+    const buffer = await storageDownload(`briefs/${project.briefPdfPath}.pdf`).catch(() => null);
+    if (!buffer) return new Response("Brief not found", { status: 404 });
+
+    return new Response(buffer as unknown as BodyInit, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": "inline",
+      },
+    });
   },
 
   async assignStudents(request: Request, params: Record<string, string>) {

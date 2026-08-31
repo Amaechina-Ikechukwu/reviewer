@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProject, updateProject, deleteProject, assignStudentsToProject, removeStudentFromProject, reviewProject } from "../api";
 import TeacherShell from "../components/TeacherShell";
+import { ProjectBriefField } from "../components/ProjectBriefField";
+import { ProjectBriefViewer } from "../components/ProjectBriefViewer";
 import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -33,6 +35,7 @@ export default function ProjectDetailPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editDeadline, setEditDeadline] = useState("");
   const [editStatus, setEditStatus] = useState<ProjectStatus>("active");
+  const [editBriefPdfPath, setEditBriefPdfPath] = useState<string | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignInput, setAssignInput] = useState("");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -55,6 +58,7 @@ export default function ProjectDetailPage() {
         setEditDescription(p.description ?? "");
         setEditDeadline(p.deadline ?? "");
         setEditStatus(p.status);
+        setEditBriefPdfPath(p.briefPdfPath ?? null);
       })
       .finally(() => setLoading(false));
   }, [id]);
@@ -93,6 +97,7 @@ export default function ProjectDetailPage() {
       description: editDescription || null,
       deadline: editDeadline || null,
       status: editStatus,
+      briefPdfPath: editBriefPdfPath,
     });
     setProject(updated);
     setEditOpen(false);
@@ -334,6 +339,8 @@ export default function ProjectDetailPage() {
               )}
             </Card>
 
+            <ProjectBriefViewer projectId={project.id} briefPdfPath={project.briefPdfPath} />
+
             {/* Deadline */}
             {project.deadline && (
               <Card className="flex items-center gap-3 px-5 py-4">
@@ -418,6 +425,7 @@ export default function ProjectDetailPage() {
               <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Deadline</label>
               <Input type="datetime-local" value={editDeadline} onChange={(e) => setEditDeadline(e.target.value)} />
             </div>
+            <ProjectBriefField briefPdfPath={editBriefPdfPath} onChange={setEditBriefPdfPath} />
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Status</label>
               <select

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listProjects, createProject, submitProject } from "../api";
 import StudentShell from "../components/StudentShell";
+import { ProjectBriefField } from "../components/ProjectBriefField";
 import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -18,6 +19,7 @@ export default function StudentProjectsPage() {
   const [createTitle, setCreateTitle] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createDeadline, setCreateDeadline] = useState("");
+  const [createBriefPdfPath, setCreateBriefPdfPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [submitTarget, setSubmitTarget] = useState<Project | null>(null);
@@ -46,11 +48,13 @@ export default function StudentProjectsPage() {
         title: createTitle.trim(),
         description: createDescription.trim() || null,
         deadline: createDeadline || null,
+        briefPdfPath: createBriefPdfPath,
       });
       setCreateOpen(false);
       setCreateTitle("");
       setCreateDescription("");
       setCreateDeadline("");
+      setCreateBriefPdfPath(null);
       await load();
     } catch (err) {
       toast().error(err instanceof Error ? err.message : "Failed to create project");
@@ -181,7 +185,17 @@ export default function StudentProjectsPage() {
         </div>
       </Modal>
 
-      <Modal open={createOpen} onClose={() => { setCreateOpen(false); setCreateTitle(""); setCreateDescription(""); setCreateDeadline(""); }} title="New Project">
+      <Modal
+        open={createOpen}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateTitle("");
+          setCreateDescription("");
+          setCreateDeadline("");
+          setCreateBriefPdfPath(null);
+        }}
+        title="New Project"
+      >
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Title *</label>
@@ -201,6 +215,7 @@ export default function StudentProjectsPage() {
             <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Deadline</label>
             <Input type="datetime-local" value={createDeadline} onChange={(e) => setCreateDeadline(e.target.value)} />
           </div>
+          <ProjectBriefField briefPdfPath={createBriefPdfPath} onChange={setCreateBriefPdfPath} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" type="button" onClick={() => setCreateOpen(false)}>Cancel</Button>
             <Button type="submit" disabled={saving || !createTitle.trim()}>{saving ? "Creating..." : "Create"}</Button>

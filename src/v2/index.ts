@@ -154,8 +154,10 @@ export const v2Routes: V2RouteSpec[] = [
   // can never be granted that permission. Staff-vs-others enforcement for
   // these three happens inside the handlers instead.
   { method: "POST", path: "/v2/api/projects", handler: projectRoutes.create, requiresAuth: true },
+  { method: "POST", path: "/v2/api/projects/upload-brief", handler: projectRoutes.uploadBrief, requiresAuth: true },
   { method: "GET", path: "/v2/api/projects", handler: projectRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/projects/:id", handler: projectRoutes.get, requiresAuth: true },
+  { method: "GET", path: "/v2/api/projects/:id/brief", handler: projectRoutes.getBrief, requiresAuth: true },
   { method: "PATCH", path: "/v2/api/projects/:id", handler: projectRoutes.update, requiresAuth: true },
   { method: "DELETE", path: "/v2/api/projects/:id", handler: projectRoutes.remove, requiresAuth: true },
   { method: "POST", path: "/v2/api/projects/:id/students", handler: projectRoutes.assignStudents, requiresAuth: true, permission: "projects.manage" },

@@ -101,12 +101,18 @@ export function getProject(id: string) {
   return api<Project>(`/projects/${id}`);
 }
 
-export function createProject(body: { title: string; description?: string | null; studentIds?: string[]; deadline?: string | null }) {
+export function createProject(body: { title: string; description?: string | null; studentIds?: string[]; deadline?: string | null; briefPdfPath?: string | null }) {
   return api<Project>("/projects", { method: "POST", body: JSON.stringify(body) });
 }
 
-export function updateProject(id: string, body: { title?: string; description?: string | null; studentIds?: string[]; status?: string; deadline?: string | null }) {
+export function updateProject(id: string, body: { title?: string; description?: string | null; studentIds?: string[]; status?: string; deadline?: string | null; briefPdfPath?: string | null }) {
   return api<Project>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export async function uploadProjectBrief(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  return api<{ briefId: string }>("/projects/upload-brief", { method: "POST", body: fd });
 }
 
 export function deleteProject(id: string) {

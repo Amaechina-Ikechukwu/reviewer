@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getProject, updateProject, deleteProject } from "../api";
 import { useAuth } from "../context/AuthContext";
 import StudentShell from "../components/StudentShell";
+import { ProjectBriefField } from "../components/ProjectBriefField";
+import { ProjectBriefViewer } from "../components/ProjectBriefViewer";
 import { Avatar } from "../components/ui/Avatar";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -35,6 +37,7 @@ export default function StudentProjectDetailPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editDeadline, setEditDeadline] = useState("");
+  const [editBriefPdfPath, setEditBriefPdfPath] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -52,6 +55,7 @@ export default function StudentProjectDetailPage() {
         setEditTitle(p.title);
         setEditDescription(p.description ?? "");
         setEditDeadline(p.deadline ?? "");
+        setEditBriefPdfPath(p.briefPdfPath ?? null);
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Could not load this project"))
       .finally(() => setLoading(false));
@@ -94,6 +98,7 @@ export default function StudentProjectDetailPage() {
         title: editTitle,
         description: editDescription || null,
         deadline: editDeadline || null,
+        briefPdfPath: editBriefPdfPath,
       });
       setProject(updated);
       setEditOpen(false);
@@ -294,6 +299,8 @@ export default function StudentProjectDetailPage() {
               </Card>
             )}
 
+            <ProjectBriefViewer projectId={project.id} briefPdfPath={project.briefPdfPath} />
+
             {project.deadline && (
               <Card className="flex items-center gap-3 px-5 py-4">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--surface-muted)]">
@@ -356,6 +363,7 @@ export default function StudentProjectDetailPage() {
             <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Deadline</label>
             <Input type="datetime-local" value={editDeadline} onChange={(e) => setEditDeadline(e.target.value)} />
           </div>
+          <ProjectBriefField briefPdfPath={editBriefPdfPath} onChange={setEditBriefPdfPath} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>

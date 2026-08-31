@@ -410,6 +410,7 @@ export type Project = {
   id: string;
   title: string;
   description: string | null;
+  briefPdfPath?: string | null;
   studentIds: string[];
   students?: { id: string; email: string; fullName: string }[];
   status: ProjectStatus;
