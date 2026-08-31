@@ -25,7 +25,8 @@ export const studentRoutes = {
       createdAt: r.createdAt,
       pending: passwordHash === "INVITE_PENDING",
       permissions: permissionsFor(r),
-      customAccess: Array.isArray(r.permissions) && r.permissions.length > 0,
+      allowedAssignmentIds: Array.isArray(r.allowedAssignmentIds) ? r.allowedAssignmentIds : null,
+      customAccess: (Array.isArray(r.permissions) && r.permissions.length > 0) || (Array.isArray(r.allowedAssignmentIds) && r.allowedAssignmentIds.length > 0),
     })));
   },
 
@@ -241,14 +242,17 @@ export const studentRoutes = {
     const student = await data.getById<any>(COLLECTIONS.users, studentId);
     if (!student || student.role !== "student") return json({ error: "Student not found." }, 404);
 
-    const body = await parseJson<{ permissions?: unknown }>(request);
+    const body = await parseJson<{ permissions?: unknown; allowedAssignmentIds?: unknown }>(request);
     if (!Array.isArray(body.permissions)) {
       return json({ error: "Provide the permissions to grant." }, 400);
     }
     // An empty array is meaningful — it clears any access this student had.
     const permissions = sanitizePermissions(body.permissions).filter((p) => STUDENT_GRANTABLE_PERMISSIONS.includes(p));
+    const allowedAssignmentIds = Array.isArray(body.allowedAssignmentIds)
+      ? body.allowedAssignmentIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+      : null;
 
-    await data.update(COLLECTIONS.users, studentId, { permissions });
+    await data.update(COLLECTIONS.users, studentId, { permissions, allowedAssignmentIds });
     invalidateAccess(studentId);
 
     audit({
@@ -256,7 +260,7 @@ export const studentRoutes = {
       action: "student.access_changed",
       targetType: "user",
       targetId: studentId,
-      details: { permissions },
+      details: { permissions, allowedAssignmentIds },
     });
 
     return json({
@@ -265,7 +269,8 @@ export const studentRoutes = {
       fullName: student.fullName,
       role: "student",
       permissions: permissionsFor({ role: "student", permissions }),
-      customAccess: permissions.length > 0,
+      allowedAssignmentIds,
+      customAccess: permissions.length > 0 || (allowedAssignmentIds !== null && allowedAssignmentIds.length > 0),
       pending: student.passwordHash === "INVITE_PENDING",
     });
   },

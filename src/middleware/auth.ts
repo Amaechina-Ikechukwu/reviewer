@@ -4,7 +4,7 @@ import type { Permission } from "../utils/permissions";
 
 /** The signed-in caller, with the access resolved for this request. */
 export type AuthenticatedRequest = Request & {
-  user: AuthUser & { permissions?: Permission[] };
+  user: AuthUser & { permissions?: Permission[]; allowedAssignmentIds?: string[] | null };
 };
 
 export function verifyAuth(request: Request): AuthUser | Response {

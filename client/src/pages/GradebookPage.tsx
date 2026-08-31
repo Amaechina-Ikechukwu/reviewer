@@ -5,10 +5,13 @@ import TeacherShell from "../components/TeacherShell";
 import { toast } from "../components/Toast";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { Badge } from "../components/ui/Badge";
 import { Icon } from "../components/ui/Icons";
 import { PageHeader } from "../components/ui/PageHeader";
 import { api } from "../api";
 import { cn } from "../lib/cn";
+import { useAuth } from "../context/AuthContext";
+import { hasPermission } from "../types";
 
 type GradebookAssignment = { id: string; title: string; maxScore: number };
 
@@ -29,6 +32,7 @@ type GradebookRow = {
 type GradebookData = {
   assignments: GradebookAssignment[];
   rows: GradebookRow[];
+  cohorts?: import("../types").Cohort[];
 };
 
 function scoreTone(score: number, maxScore: number) {
@@ -54,11 +58,14 @@ function Cell({ cell }: { cell: ScoreCell }) {
 }
 
 export default function GradebookPage() {
+  const { user } = useAuth();
   const [data, setData] = useState<GradebookData | null>(null);
   const [cohorts, setCohorts] = useState<import("../types").Cohort[]>([]);
   const [selectedCohortId, setSelectedCohortId] = useState("all");
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const canEditGrades = hasPermission(user, "grades.edit");
 
   useEffect(() => {
     setLoading(true);
@@ -68,11 +75,10 @@ export default function GradebookPage() {
     ])
       .then(([gradebookData, cohortsData]) => {
         setData(gradebookData);
-        setCohorts(cohortsData);
-        setSelectedCohortId((prev) => {
-          if (prev === "all" && cohortsData.length > 0) return cohortsData[0].id;
-          return prev;
-        });
+        const combinedCohorts = (gradebookData.cohorts && gradebookData.cohorts.length > 0)
+          ? gradebookData.cohorts
+          : cohortsData;
+        setCohorts(combinedCohorts);
       })
       .catch(() => toast().error("Failed to load gradebook"))
       .finally(() => setLoading(false));
@@ -81,7 +87,9 @@ export default function GradebookPage() {
   const assignments = data?.assignments ?? [];
   const rows = data?.rows ?? [];
 
-  const displayRows = rows.filter((r) => r.student.cohortId === selectedCohortId);
+  const displayRows = selectedCohortId === "all"
+    ? rows
+    : rows.filter((r) => r.student.cohortId === selectedCohortId);
 
   const displayAssignments = assignments.filter((a) => {
     return displayRows.some((row) => row.scores[a.id] !== undefined);
@@ -95,11 +103,17 @@ export default function GradebookPage() {
           description="Scores across every student and assignment."
           actions={
             <div className="flex items-center gap-3">
+              {!canEditGrades && (
+                <Badge tone="neutral" className="px-2.5 py-1 text-xs">
+                  Read-only view
+                </Badge>
+              )}
               <Select
                 value={selectedCohortId}
                 onChange={(e) => setSelectedCohortId(e.target.value)}
                 className="w-48"
               >
+                <option value="all">All cohorts ({rows.length} students)</option>
                 {cohorts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}

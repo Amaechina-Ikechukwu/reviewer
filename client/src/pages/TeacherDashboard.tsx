@@ -14,6 +14,8 @@ import { Label, Select, Input } from "../components/ui/Input";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { api } from "../api";
 import { formatRelative, formatDateTime } from "../lib/format";
+import { useAuth } from "../context/AuthContext";
+import { hasPermission } from "../types";
 import type { Assignment, Review } from "../types";
 
 type SubmissionRow = {
@@ -62,6 +64,7 @@ function StatCard({
 }
 
 export default function TeacherDashboard() {
+  const { user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
@@ -72,6 +75,12 @@ export default function TeacherDashboard() {
   const [moveNewTitle, setMoveNewTitle] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+
+  const canManageAssignments = hasPermission(user, "assignments.manage");
+  const canDeleteAssignments = hasPermission(user, "assignments.delete");
+  const canManageSubmissions = hasPermission(user, "submissions.manage");
+  const canManageStudents = hasPermission(user, "students.manage");
+  const canViewGradebook = hasPermission(user, "grades.edit") || hasPermission(user, "scores.view");
 
   useEffect(() => {
     api<Assignment[]>("/assignments").then(setAssignments).catch(() => setAssignments([]));
@@ -143,20 +152,26 @@ export default function TeacherDashboard() {
           title="Dashboard"
           description="Overview of assignments, submissions, and recent activity."
           actions={
-            <>
-              <Link to="/teacher/import">
-                <Button variant="secondary" size="sm">
-                  <Icon.Upload className="h-3.5 w-3.5" />
-                  Import
-                </Button>
-              </Link>
-              <Link to="/teacher/assignments/new">
-                <Button size="sm">
-                  <Icon.Plus className="h-3.5 w-3.5" />
-                  New assignment
-                </Button>
-              </Link>
-            </>
+            (canManageSubmissions || canManageAssignments) ? (
+              <>
+                {canManageSubmissions && (
+                  <Link to="/teacher/import">
+                    <Button variant="secondary" size="sm">
+                      <Icon.Upload className="h-3.5 w-3.5" />
+                      Import
+                    </Button>
+                  </Link>
+                )}
+                {canManageAssignments && (
+                  <Link to="/teacher/assignments/new">
+                    <Button size="sm">
+                      <Icon.Plus className="h-3.5 w-3.5" />
+                      New assignment
+                    </Button>
+                  </Link>
+                )}
+              </>
+            ) : undefined
           }
         />
 
@@ -266,38 +281,44 @@ export default function TeacherDashboard() {
                         {formatDateTime(assignment.closesAt)}
                       </div>
                     </Link>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {assignment.isGroupAssignment && (
-                        <Link
-                          to={`/teacher/assignments/${assignment.id}/groups`}
-                          title="Manage groups"
-                          className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
-                        >
-                          <Icon.Users className="h-3.5 w-3.5" />
-                        </Link>
-                      )}
-                      <Link
-                        to={`/teacher/assignments/${assignment.id}/edit`}
-                        title="Edit assignment"
-                        className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
-                      >
-                        <Icon.Edit className="h-3.5 w-3.5" />
-                      </Link>
-                      <button
-                        type="button"
-                        title="Delete assignment"
-                        onClick={() => {
-                          setDeleteTarget(assignment);
-                          setDeleteAction("delete_all");
-                          setMoveTargetId("");
-                          setMoveNewTitle("");
-                          setDeleteError("");
-                        }}
-                        className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                      >
-                        <Icon.Trash className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    {(canManageAssignments || canDeleteAssignments) && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        {assignment.isGroupAssignment && canManageAssignments && (
+                          <Link
+                            to={`/teacher/assignments/${assignment.id}/groups`}
+                            title="Manage groups"
+                            className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                          >
+                            <Icon.Users className="h-3.5 w-3.5" />
+                          </Link>
+                        )}
+                        {canManageAssignments && (
+                          <Link
+                            to={`/teacher/assignments/${assignment.id}/edit`}
+                            title="Edit assignment"
+                            className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                          >
+                            <Icon.Edit className="h-3.5 w-3.5" />
+                          </Link>
+                        )}
+                        {canDeleteAssignments && (
+                          <button
+                            type="button"
+                            title="Delete assignment"
+                            onClick={() => {
+                              setDeleteTarget(assignment);
+                              setDeleteAction("delete_all");
+                              setMoveTargetId("");
+                              setMoveNewTitle("");
+                              setDeleteError("");
+                            }}
+                            className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                          >
+                            <Icon.Trash className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </CardContent>
@@ -322,29 +343,35 @@ export default function TeacherDashboard() {
                           Closed {formatDateTime(assignment.closesAt)}
                         </div>
                       </Link>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Link
-                          to={`/teacher/assignments/${assignment.id}/edit`}
-                          title="Edit assignment"
-                          className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
-                        >
-                          <Icon.Edit className="h-3.5 w-3.5" />
-                        </Link>
-                        <button
-                          type="button"
-                          title="Delete assignment"
-                          onClick={() => {
-                            setDeleteTarget(assignment);
-                            setDeleteAction("delete_all");
-                            setMoveTargetId("");
-                            setMoveNewTitle("");
-                            setDeleteError("");
-                          }}
-                          className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                        >
-                          <Icon.Trash className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {(canManageAssignments || canDeleteAssignments) && (
+                        <div className="flex shrink-0 items-center gap-1">
+                          {canManageAssignments && (
+                            <Link
+                              to={`/teacher/assignments/${assignment.id}/edit`}
+                              title="Edit assignment"
+                              className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
+                            >
+                              <Icon.Edit className="h-3.5 w-3.5" />
+                            </Link>
+                          )}
+                          {canDeleteAssignments && (
+                            <button
+                              type="button"
+                              title="Delete assignment"
+                              onClick={() => {
+                                setDeleteTarget(assignment);
+                                setDeleteAction("delete_all");
+                                setMoveTargetId("");
+                                setMoveNewTitle("");
+                                setDeleteError("");
+                              }}
+                              className="rounded-md p-1 text-[var(--fg-subtle)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                            >
+                              <Icon.Trash className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </CardContent>
@@ -356,24 +383,38 @@ export default function TeacherDashboard() {
                 <CardTitle>Quick actions</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-2">
-                <Link to="/teacher/assignments/new">
-                  <Button variant="secondary" className="w-full justify-start">
-                    <Icon.Plus className="h-4 w-4" />
-                    Create new assignment
-                  </Button>
-                </Link>
-                <Link to="/teacher/students">
-                  <Button variant="secondary" className="w-full justify-start">
-                    <Icon.Users className="h-4 w-4" />
-                    Manage students
-                  </Button>
-                </Link>
-                <Link to="/teacher/gradebook">
-                  <Button variant="secondary" className="w-full justify-start">
-                    <Icon.Book className="h-4 w-4" />
-                    Open gradebook
-                  </Button>
-                </Link>
+                {canManageAssignments && (
+                  <Link to="/teacher/assignments/new">
+                    <Button variant="secondary" className="w-full justify-start">
+                      <Icon.Plus className="h-4 w-4" />
+                      Create new assignment
+                    </Button>
+                  </Link>
+                )}
+                {canManageStudents && (
+                  <Link to="/teacher/students">
+                    <Button variant="secondary" className="w-full justify-start">
+                      <Icon.Users className="h-4 w-4" />
+                      Manage students
+                    </Button>
+                  </Link>
+                )}
+                {canViewGradebook && (
+                  <Link to="/teacher/gradebook">
+                    <Button variant="secondary" className="w-full justify-start">
+                      <Icon.Book className="h-4 w-4" />
+                      Open gradebook
+                    </Button>
+                  </Link>
+                )}
+                {canManageSubmissions && (
+                  <Link to="/teacher/submissions">
+                    <Button variant="secondary" className="w-full justify-start">
+                      <Icon.Inbox className="h-4 w-4" />
+                      View submissions
+                    </Button>
+                  </Link>
+                )}
               </CardContent>
             </Card>
           </div>

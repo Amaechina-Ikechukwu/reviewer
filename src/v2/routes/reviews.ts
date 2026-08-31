@@ -30,6 +30,12 @@ export const reviewRoutes = {
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
     if (!submission) return json({ error: "Submission not found." }, 404);
 
+    if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+      if (!user.allowedAssignmentIds.includes(submission.assignmentId)) {
+        return json({ error: "Access denied." }, 403);
+      }
+    }
+
     const assignment = await data.getById<any>(COLLECTIONS.assignments, submission.assignmentId);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
 
@@ -164,16 +170,27 @@ export const reviewRoutes = {
     const review = await data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", params.submissionId]]);
     if (!review) return json({ error: "Review not found." }, 404);
 
-    if (!isStaffOrGranted(user, "grades.edit")) {
-      const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
-      if (!submission) return json({ error: "Forbidden" }, 403);
-      let allowed = submission.studentId === user.userId;
-      if (!allowed && submission.groupId) {
-        const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
-        if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
+    if (!submission) return json({ error: "Forbidden" }, 403);
+
+    const hasGradingOrViewing = isStaffOrGranted(user, "grades.edit") || isStaffOrGranted(user, "scores.view") || isStaffOrGranted(user, "reviews.run");
+
+    if (hasGradingOrViewing) {
+      if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+        if (!user.allowedAssignmentIds.includes(submission.assignmentId)) {
+          return json({ error: "Forbidden" }, 403);
+        }
       }
-      if (!allowed) return json({ error: "Forbidden" }, 403);
+      return json(review);
     }
+
+    let allowed = submission.studentId === user.userId;
+    if (!allowed && submission.groupId) {
+      const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
+      if (group && (group.memberIds || []).includes(user.userId)) allowed = true;
+    }
+    if (!allowed) return json({ error: "Forbidden" }, 403);
+
     return json(review);
   },
 
@@ -181,13 +198,19 @@ export const reviewRoutes = {
     const user = (request as AuthenticatedRequest).user;
     if (!isStaffOrGranted(user, "grades.edit")) return json({ error: "Access denied." }, 403);
 
+    const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
+    if (!submission) return json({ error: "Submission not found." }, 404);
+
+    if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+      if (!user.allowedAssignmentIds.includes(submission.assignmentId)) {
+        return json({ error: "Access denied." }, 403);
+      }
+    }
+
     const body = await request.json().catch(() => ({})) as { score?: number; feedback?: string };
     const score = Number(body.score);
     const feedbackText = body.feedback?.trim() || null;
     if (!Number.isFinite(score) || score < 0) return json({ error: "Please provide a valid override score." }, 400);
-
-    const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
-    if (!submission) return json({ error: "Submission not found." }, 404);
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, submission.assignmentId);
     if (score > (assignment?.maxScore ?? 100)) return json({ error: "Override score cannot exceed the assignment max score." }, 400);

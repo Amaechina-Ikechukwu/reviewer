@@ -40,6 +40,7 @@ export const PERMISSIONS = [
   { key: "assignments.delete", label: "Delete assignments", group: "Assignments" },
   { key: "reviews.run", label: "Run AI reviews", group: "Grading" },
   { key: "grades.edit", label: "Grade, score & mark students done", group: "Grading" },
+  { key: "scores.view", label: "View gradebook & student scores", group: "Grading" },
   { key: "submissions.manage", label: "Submit for students, import & delete submissions", group: "Grading" },
   { key: "students.manage", label: "Add & manage students", group: "People" },
   { key: "cohorts.manage", label: "Create & manage cohorts", group: "People" },
@@ -71,7 +72,10 @@ export function hasPermission(
   user: { permissions?: readonly string[] | null } | null | undefined,
   permission: Permission,
 ) {
-  return !!user?.permissions?.includes(permission);
+  if (!user?.permissions) return false;
+  if (user.permissions.includes(permission)) return true;
+  if (permission === "scores.view" && user.permissions.includes("grades.edit")) return true;
+  return false;
 }
 
 export type StaffMember = {
@@ -95,6 +99,7 @@ export type User = {
   role: Role;
   cohortId?: string | null;
   permissions?: Permission[];
+  allowedAssignmentIds?: string[] | null;
 };
 
 export type Assignment = {
@@ -302,6 +307,8 @@ export type StudentRecord = {
   createdAt: string;
   /** Extra responsibilities granted on top of being a student — see STUDENT_GRANTABLE_PERMISSIONS. */
   permissions?: Permission[];
+  /** Scoped assignments this student is permitted to grade/review/view (null = all). */
+  allowedAssignmentIds?: string[] | null;
   customAccess?: boolean;
 };
 

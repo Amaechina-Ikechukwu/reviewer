@@ -430,7 +430,10 @@ export default function StudentsPage() {
                       title="Grant this student extra responsibilities"
                     >
                       <Icon.Shield className="h-3.5 w-3.5" />
-                      {student.permissions?.length ? `${student.permissions.length} of ${PERMISSIONS.length}` : "Student only"}
+                      {student.permissions?.length ? `${student.permissions.length} perms` : "Student only"}
+                      {student.allowedAssignmentIds && student.allowedAssignmentIds.length > 0 && (
+                        <Badge tone="neutral">{student.allowedAssignmentIds.length} assign.</Badge>
+                      )}
                       {student.customAccess && <Badge tone="accent">Custom</Badge>}
                     </button>
                   </TD>

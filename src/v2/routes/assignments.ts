@@ -301,12 +301,17 @@ export const assignmentRoutes = {
 
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (isStaff(user.role)) {
+    const hasStaffAccess = isStaff(user.role) || (user.permissions && user.permissions.length > 0);
+
+    if (hasStaffAccess) {
       let where: any = undefined;
       if (["instructor", "teacher", "manager"].includes(user.role)) {
         where = [["createdBy", "==", user.userId]];
       }
-      const rows = await data.findMany<any>(COLLECTIONS.assignments, { where, orderBy: ["createdAt", "desc"] });
+      let rows = await data.findMany<any>(COLLECTIONS.assignments, { where, orderBy: ["createdAt", "desc"] });
+      if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+        rows = rows.filter((r) => user.allowedAssignmentIds!.includes(r.id));
+      }
       return json(rows);
     }
 
@@ -346,11 +351,22 @@ export const assignmentRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const a = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!a) return json({ error: "Assignment not found." }, 404);
-    if (["instructor", "teacher", "manager"].includes(user.role) && a.createdBy !== user.userId) {
-      return json({ error: "Assignment not found." }, 404);
+
+    const hasStaffAccess = isStaff(user.role) || (user.permissions && user.permissions.length > 0);
+    if (hasStaffAccess) {
+      if (["instructor", "teacher", "manager"].includes(user.role) && a.createdBy !== user.userId) {
+        return json({ error: "Assignment not found." }, 404);
+      }
+      if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+        if (!user.allowedAssignmentIds.includes(a.id)) {
+          return json({ error: "Assignment not found." }, 404);
+        }
+      }
+      return json(a);
     }
+
     // Student: ensure the assignment belongs to their cohort or is global (no cohort)
-    if (!isStaff(user.role) && a.cohortId) {
+    if (a.cohortId) {
       const student = await data.getById<any>(COLLECTIONS.users, user.userId);
       if (student?.cohortId !== a.cohortId) {
         return json({ error: "Assignment not found." }, 404);

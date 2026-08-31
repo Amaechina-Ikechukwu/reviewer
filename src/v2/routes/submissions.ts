@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { AuthenticatedRequest } from "../../middleware/auth";
+import { isStaff } from "../../utils/jwt";
 import { isStaffOrGranted } from "../../utils/permissions";
 import { audit } from "../services/audit";
 import { readSubmissionFiles } from "../../services/code-reader";
@@ -84,8 +85,13 @@ async function removeFiles(filePath?: string | null) {
 /** Students may read their own submission, and any submission belonging to a
  * group they are a member of. Staff — or a student individually granted
  * grading access — may read all of them. */
-async function canReadSubmission(user: { userId: string; role: string; permissions?: readonly string[] | null }, submission: any) {
-  if (isStaffOrGranted(user, "grades.edit")) return true;
+async function canReadSubmission(user: { userId: string; role: string; permissions?: readonly string[] | null; allowedAssignmentIds?: readonly string[] | null }, submission: any) {
+  if (isStaffOrGranted(user, "grades.edit") || isStaffOrGranted(user, "scores.view") || isStaffOrGranted(user, "reviews.run") || isStaffOrGranted(user, "submissions.manage")) {
+    if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+      return user.allowedAssignmentIds.includes(submission.assignmentId);
+    }
+    return true;
+  }
   if (submission.studentId === user.userId) return true;
   if (!submission.groupId) return false;
   const group = await data.getById<any>(COLLECTIONS.assignmentGroups, submission.groupId);
@@ -430,12 +436,20 @@ export const submissionRoutes = {
       orderBy: ["submittedAt", "desc"],
     });
 
-    if (user.role === "student") {
+    const hasGradingOrStaffAccess = isStaff(user.role) ||
+      isStaffOrGranted(user, "grades.edit") ||
+      isStaffOrGranted(user, "scores.view") ||
+      isStaffOrGranted(user, "reviews.run") ||
+      isStaffOrGranted(user, "submissions.manage");
+
+    if (!hasGradingOrStaffAccess && user.role === "student") {
       const myGroups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
         where: [["memberIds", "array-contains", user.userId]],
       });
       const myGroupIds = new Set(myGroups.map((g) => g.id));
       subs = subs.filter((s) => s.studentId === user.userId || (s.groupId && myGroupIds.has(s.groupId)));
+    } else if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+      subs = subs.filter((s) => user.allowedAssignmentIds!.includes(s.assignmentId));
     }
 
     // Hydrate student + assignment fields (mirror the LEFT JOIN result shape)
@@ -659,7 +673,14 @@ export const submissionRoutes = {
    */
   async roster(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaffOrGranted(user, "grades.edit")) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "grades.edit") && !isStaffOrGranted(user, "scores.view") && !isStaffOrGranted(user, "reviews.run")) {
+      return json({ error: "Access denied." }, 403);
+    }
+    if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+      if (!user.allowedAssignmentIds.includes(params.id)) {
+        return json({ error: "Access denied." }, 403);
+      }
+    }
 
     const assignment = await data.getById<any>(COLLECTIONS.assignments, params.id);
     if (!assignment) return json({ error: "Assignment not found." }, 404);
@@ -727,6 +748,11 @@ export const submissionRoutes = {
   async mark(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
     if (!isStaffOrGranted(actor, "grades.edit")) return json({ error: "Access denied." }, 403);
+    if (actor.role === "student" && actor.allowedAssignmentIds && actor.allowedAssignmentIds.length > 0) {
+      if (!actor.allowedAssignmentIds.includes(params.id)) {
+        return json({ error: "Access denied." }, 403);
+      }
+    }
 
     const body = (await request.json().catch(() => ({}))) as {
       studentIds?: string[];
@@ -799,33 +825,32 @@ export const submissionRoutes = {
           status: "completed",
           maxScore,
           aiScore: null,
-          teacherOverrideScore: null,
-          feedback: null,
+          teacherOverrideScore: hasScore ? Math.round(score!) : maxScore,
+          feedback: note ? { summary: note } : null,
           rawAiResponse: null,
-          reviewedAt: null,
+          reviewedAt: new Date(),
+          markedDoneAt: new Date(),
+          markedDoneBy: actor.userId,
+        });
+      } else {
+        await data.update(COLLECTIONS.reviews, review.id, {
+          status: "completed",
+          teacherOverrideScore: hasScore ? Math.round(score!) : (review.teacherOverrideScore ?? review.aiScore ?? maxScore),
+          markedDoneAt: new Date(),
+          markedDoneBy: actor.userId,
+          ...(note ? { feedback: { ...(review.feedback ?? {}), summary: note } } : {}),
         });
       }
 
-      await data.update(COLLECTIONS.reviews, review.id, {
-        status: "completed",
-        maxScore,
-        markedDoneAt: new Date(),
-        markedDoneBy: actor.userId,
-        reviewedAt: new Date(),
-        ...(hasScore ? { teacherOverrideScore: Math.round(score!) } : {}),
-        ...(note ? { feedback: { ...(review.feedback ?? {}), summary: note } } : {}),
-      });
-
-      // A completion tick is not news worth emailing about; a grade is.
-      if (hasScore && body.notify !== false && !String(student.email).endsWith("@historical.reviewai.local")) {
+      if (body.notify) {
         sendGradeRelease(
           { email: student.email, fullName: student.fullName },
-          { title: assignment.title ?? "Assignment", id: params.id },
+          { title: assignment.title ?? "Assignment", id: assignment.id },
           {
-            score: Math.round(score!),
+            score: hasScore ? Math.round(score!) : maxScore,
             maxScore,
-            feedback: note || (review.feedback?.summary ?? null),
-            suggestions: review.feedback?.suggestions ?? [],
+            feedback: note || "Work completed and marked by your instructor.",
+            suggestions: [],
           },
         ).catch(console.error);
       }
@@ -851,6 +876,11 @@ export const submissionRoutes = {
   async unmark(request: Request, params: Record<string, string>) {
     const actor = (request as AuthenticatedRequest).user;
     if (!isStaffOrGranted(actor, "grades.edit")) return json({ error: "Access denied." }, 403);
+    if (actor.role === "student" && actor.allowedAssignmentIds && actor.allowedAssignmentIds.length > 0) {
+      if (!actor.allowedAssignmentIds.includes(params.id)) {
+        return json({ error: "Access denied." }, 403);
+      }
+    }
 
     const groups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
       where: [["assignmentId", "==", params.id]],

@@ -12,6 +12,7 @@ export const PERMISSIONS = [
   { key: "assignments.delete", label: "Delete assignments", group: "Assignments" },
   { key: "reviews.run", label: "Run AI reviews", group: "Grading" },
   { key: "grades.edit", label: "Grade, score & mark students done", group: "Grading" },
+  { key: "scores.view", label: "View gradebook & student scores", group: "Grading" },
   { key: "submissions.manage", label: "Submit for students, import & delete submissions", group: "Grading" },
   { key: "students.manage", label: "Add & manage students", group: "People" },
   { key: "cohorts.manage", label: "Create & manage cohorts", group: "People" },
@@ -42,7 +43,7 @@ export const ROLE_DEFAULTS: Record<string, Permission[]> = {
   manager: EXCEPT("staff.manage", "changelog.manage"),
   instructor: EXCEPT("staff.manage", "changelog.manage"),
   teacher: EXCEPT("staff.manage", "changelog.manage"),
-  assistant: ["reviews.run", "grades.edit"],
+  assistant: ["reviews.run", "grades.edit", "scores.view"],
   student: [],
 };
 
@@ -91,5 +92,9 @@ export function isStaffOrGranted(
   user: { role?: string | null; permissions?: readonly string[] | null },
   permission: Permission,
 ): boolean {
-  return isStaff(user.role ?? "") || !!user.permissions?.includes(permission);
+  if (isStaff(user.role ?? "")) return true;
+  if (!user.permissions) return false;
+  if (user.permissions.includes(permission)) return true;
+  if (permission === "scores.view" && user.permissions.includes("grades.edit")) return true;
+  return false;
 }

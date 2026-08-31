@@ -10,7 +10,7 @@ import { verifyAuth } from "./middleware/auth";
 import { audit } from "./services/audit";
 import { logger } from "./utils/logger";
 import { v2Routes } from "./v2";
-import { resolvePermissions } from "./v2/services/access";
+import { resolveAccess } from "./v2/services/access";
 import type { Permission } from "./utils/permissions";
 import { json } from "./utils/json";
 
@@ -113,13 +113,13 @@ Bun.serve({
 
         // Permissions are read per request, so access granted or revoked on the
         // staff page applies immediately rather than at the next login.
-        const permissions = await resolvePermissions(authResult.userId, authResult.role);
+        const access = await resolveAccess(authResult.userId, authResult.role);
 
         routeRequest = Object.assign(request, {
-          user: { ...authResult, permissions },
+          user: { ...authResult, permissions: access.permissions, allowedAssignmentIds: access.allowedAssignmentIds },
         }) as AuthenticatedRequest;
 
-        if (route.permission && !permissions.includes(route.permission)) {
+        if (route.permission && !access.permissions.includes(route.permission)) {
           return json({ error: "You do not have access to do that." }, 403);
         }
       }

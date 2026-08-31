@@ -7,15 +7,20 @@ import { COLLECTIONS } from "../firebase";
 export const gradebookRoutes = {
   async get(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (!isStaffOrGranted(user, "grades.edit")) return json({ error: "Access denied." }, 403);
+    if (!isStaffOrGranted(user, "grades.edit") && !isStaffOrGranted(user, "scores.view")) return json({ error: "Access denied." }, 403);
 
-    const [allStudents, allAssignments, allSubmissions, allReviews, allGroups] = await Promise.all([
+    const [allStudents, rawAssignments, allSubmissions, allReviews, allGroups, allCohorts] = await Promise.all([
       data.findMany<any>(COLLECTIONS.users, { where: [["role", "==", "student"]] }),
       data.findMany<any>(COLLECTIONS.assignments, { orderBy: ["createdAt", "asc"] }),
       data.findMany<any>(COLLECTIONS.submissions, {}),
       data.findMany<any>(COLLECTIONS.reviews, {}),
       data.findMany<any>(COLLECTIONS.assignmentGroups, {}),
+      data.findMany<any>(COLLECTIONS.cohorts, { orderBy: ["createdAt", "desc"] }),
     ]);
+
+    const allAssignments = (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0)
+      ? rawAssignments.filter((a) => user.allowedAssignmentIds!.includes(a.id))
+      : rawAssignments;
 
     const reviewBySubmission = new Map(allReviews.map((r) => [r.submissionId, r]));
     const submissionsByStudentAssignment = new Map<string, any>();
@@ -74,6 +79,7 @@ export const gradebookRoutes = {
         };
       });
 
-    return json({ assignments: assignmentsLite, rows });
+    const cohorts = allCohorts.map((c) => ({ id: c.id, name: c.name, track: c.track }));
+    return json({ assignments: assignmentsLite, rows, cohorts });
   },
 };
