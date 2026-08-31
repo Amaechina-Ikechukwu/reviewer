@@ -1,14 +1,73 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { createProject, listStudents } from "../api";
+import { createProject, listCohorts, listStudents } from "../api";
 import TeacherShell from "../components/TeacherShell";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Icon } from "../components/ui/Icons";
-import type { StudentRecord } from "../types";
+import type { Cohort, StudentRecord } from "../types";
 
 type Mode = "single" | "bulk";
+
+type StudentGroup = { cohortName: string; students: StudentRecord[] };
+
+/** Groups students by cohort (alphabetical, cohort-less students last) so a
+ * teacher assigning a project can find and select a whole class at a glance
+ * instead of scanning one long, unordered roster. */
+function groupStudentsByCohort(students: StudentRecord[], cohorts: Cohort[]): StudentGroup[] {
+  const cohortNameById = new Map(cohorts.map((c) => [c.id, c.name]));
+  const byCohort = new Map<string, StudentRecord[]>();
+  for (const s of students) {
+    const key = s.cohortId || "__none__";
+    if (!byCohort.has(key)) byCohort.set(key, []);
+    byCohort.get(key)!.push(s);
+  }
+  const groups: StudentGroup[] = [...byCohort.entries()].map(([key, list]) => ({
+    cohortName: key === "__none__" ? "No cohort" : (cohortNameById.get(key) ?? "Unknown cohort"),
+    students: [...list].sort((a, b) => a.fullName.localeCompare(b.fullName)),
+  }));
+  groups.sort((a, b) => {
+    if (a.cohortName === "No cohort") return 1;
+    if (b.cohortName === "No cohort") return -1;
+    return a.cohortName.localeCompare(b.cohortName);
+  });
+  return groups;
+}
+
+function StudentOptionGroups({
+  groups,
+  selectedIds,
+  onToggle,
+}: {
+  groups: StudentGroup[];
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <>
+      {groups.map((group) => (
+        <div key={group.cohortName}>
+          <div className="bg-[var(--surface-muted)]/60 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--fg-muted)]">
+            {group.cohortName}
+          </div>
+          {group.students.map((s) => (
+            <label key={s.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-muted)]">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(s.id)}
+                onChange={() => onToggle(s.id)}
+                className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)]"
+              />
+              <span className="text-[var(--fg)]">{s.fullName}</span>
+              <span className="ml-auto text-xs text-[var(--fg-muted)]">{s.email}</span>
+            </label>
+          ))}
+        </div>
+      ))}
+    </>
+  );
+}
 
 export default function CreateProjectPage() {
   const navigate = useNavigate();
@@ -27,8 +86,11 @@ export default function CreateProjectPage() {
 
   /* ── Shared ── */
   const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const studentGroups = useMemo(() => groupStudentsByCohort(students, cohorts), [students, cohorts]);
 
   /* ── Student dropdown (single) ── */
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -40,6 +102,7 @@ export default function CreateProjectPage() {
 
   useEffect(() => {
     listStudents().then(setStudents).catch(() => {});
+    listCohorts().then(setCohorts).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -223,18 +286,7 @@ export default function CreateProjectPage() {
                       </button>
                       <span className="ml-auto text-xs text-[var(--fg-muted)]">{selectedIds.length}/{students.length}</span>
                     </div>
-                    {students.map((s) => (
-                      <label key={s.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-muted)]">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(s.id)}
-                          onChange={() => toggleStudent(s.id)}
-                          className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)]"
-                        />
-                        <span className="text-[var(--fg)]">{s.fullName}</span>
-                        <span className="ml-auto text-xs text-[var(--fg-muted)]">{s.email}</span>
-                      </label>
-                    ))}
+                    <StudentOptionGroups groups={studentGroups} selectedIds={selectedIds} onToggle={toggleStudent} />
                     {students.length === 0 && (
                       <div className="px-3 py-4 text-center text-xs text-[var(--fg-muted)]">No students found.</div>
                     )}
@@ -292,18 +344,7 @@ export default function CreateProjectPage() {
                       </button>
                       <span className="ml-auto text-xs text-[var(--fg-muted)]">{bulkSelectedIds.length}/{students.length}</span>
                     </div>
-                    {students.map((s) => (
-                      <label key={s.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--surface-muted)]">
-                        <input
-                          type="checkbox"
-                          checked={bulkSelectedIds.includes(s.id)}
-                          onChange={() => toggleBulkStudent(s.id)}
-                          className="h-4 w-4 rounded border-[var(--border)] text-[var(--accent)]"
-                        />
-                        <span className="text-[var(--fg)]">{s.fullName}</span>
-                        <span className="ml-auto text-xs text-[var(--fg-muted)]">{s.email}</span>
-                      </label>
-                    ))}
+                    <StudentOptionGroups groups={studentGroups} selectedIds={bulkSelectedIds} onToggle={toggleBulkStudent} />
                     {students.length === 0 && (
                       <div className="px-3 py-4 text-center text-xs text-[var(--fg-muted)]">No students found.</div>
                     )}
