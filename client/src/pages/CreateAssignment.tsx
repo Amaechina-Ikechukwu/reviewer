@@ -29,8 +29,8 @@ export default function CreateAssignment() {
   const [track, setTrack] = useState<Track | "">("");
   const [allowGithub, setAllowGithub] = useState(true);
   const [allowFileUpload, setAllowFileUpload] = useState(true);
+  const [assessOffline, setAssessOffline] = useState(false);
   const isCodeTrack = !track || CODE_TRACKS.includes(track as Track);
-  const offlineOnly = !allowFileUpload && !(isCodeTrack && allowGithub);
   const [maxScore, setMaxScore] = useState(100);
   const [classNotesType, setClassNotesType] = useState<"markdown" | "pdf" | "docx" | "link">("markdown");
   const [classNotes, setClassNotes] = useState("");
@@ -463,37 +463,39 @@ export default function CreateAssignment() {
                   </label>
                   {/* Work assessed away from the platform — handwritten, a
                       presentation, an oral or practical, anything graded in the
-                      room. None of it reaches us, so the teacher records it. */}
+                      room. None of it reaches us, so the teacher records it.
+                      Independent of the two digital methods above: manual
+                      marking from the roster works whether or not GitHub/ZIP
+                      is also enabled, so all three can be checked together. */}
                   <label
                     className={cn(
                       "inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-                      offlineOnly
+                      assessOffline
                         ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
                         : "border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:border-[var(--border-strong)]",
                     )}
                   >
                     <input
                       type="checkbox"
-                      checked={offlineOnly}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setAllowGithub(false);
-                          setAllowFileUpload(false);
-                        } else {
-                          setAllowFileUpload(true);
-                        }
-                      }}
+                      checked={assessOffline}
+                      onChange={(e) => setAssessOffline(e.target.checked)}
                       className="h-4 w-4 accent-[var(--accent)]"
                     />
                     <Icon.Check className="h-4 w-4" />
                     Assessed offline
                   </label>
                 </div>
-                {offlineOnly && (
+                {assessOffline && (
                   <p className="text-xs text-[var(--fg-muted)]">
                     For work you evaluate in person — handwritten, a presentation, an oral or practical, a portfolio
-                    review. Students have nothing to hand in; you mark each of them done (full marks) or type a score,
-                    from the assignment page.
+                    review. Mark those students done (full marks) or type a score from the assignment page — this
+                    works alongside GitHub/ZIP submissions if some students submit digitally and others don't.
+                  </p>
+                )}
+                {!allowGithub && !allowFileUpload && !assessOffline && (
+                  <p className="text-xs text-[var(--fg-muted)]">
+                    No submission method is enabled — students will have nothing to hand in. You'll grade everyone
+                    from the assignment roster after creating it.
                   </p>
                 )}
               </div>

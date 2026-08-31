@@ -228,10 +228,6 @@ export const assignmentRoutes = {
 
     const effectiveAllowGithub = track && !trackAllowsGithub(track) ? false : (body.allowGithub ?? true);
 
-    if (effectiveAllowGithub === false && body.allowFileUpload === false) {
-      return json({ error: "At least one submission method must be enabled." }, 400);
-    }
-
     const isGroupAssignment = body.isGroupAssignment === true;
     const groupCount = isGroupAssignment ? Math.max(1, Math.min(50, Math.round(body.groupCount ?? 0))) : 0;
     if (isGroupAssignment && groupCount < 1) {
@@ -394,9 +390,6 @@ export const assignmentRoutes = {
 
     const newAllowGithub = body.allowGithub !== undefined ? body.allowGithub : existing.allowGithub;
     const newAllowFileUpload = body.allowFileUpload !== undefined ? body.allowFileUpload : existing.allowFileUpload;
-    if (!newAllowGithub && !newAllowFileUpload) {
-      return json({ error: "At least one submission method must be enabled." }, 400);
-    }
 
     const nextTrack = body.track !== undefined ? (body.track || null) : existing.track;
     if (nextTrack && !trackAllowsGithub(nextTrack as Track) && newAllowGithub) {
