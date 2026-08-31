@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listProjects, createProject, submitProject } from "../api";
 import StudentShell from "../components/StudentShell";
+import { toast } from "../components/Toast";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
@@ -27,6 +28,8 @@ export default function StudentProjectsPage() {
     try {
       const p = await listProjects();
       setProjects(p);
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to load projects");
     } finally {
       setLoading(false);
     }
@@ -49,6 +52,8 @@ export default function StudentProjectsPage() {
       setCreateDescription("");
       setCreateDeadline("");
       await load();
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setSaving(false);
     }
@@ -66,6 +71,8 @@ export default function StudentProjectsPage() {
       setProjects((prev) => prev.map((p) => (p.id === submitTarget.id ? updated : p)));
       setSubmitTarget(null);
       setSubmitUrl("");
+    } catch (err) {
+      toast().error(err instanceof Error ? err.message : "Failed to submit project");
     } finally {
       setSubmitting(false);
     }

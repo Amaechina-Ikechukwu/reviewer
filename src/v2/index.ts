@@ -148,11 +148,16 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "POST", path: "/v2/api/quizzes/:id/release", handler: quizRoutes.releaseResults, requiresAuth: true, permission: "quizzes.manage" },
   { method: "POST", path: "/v2/api/quizzes/:id/attempts/:attemptId/release", handler: quizRoutes.releaseAttempt, requiresAuth: true, permission: "quizzes.manage" },
 
-  { method: "POST", path: "/v2/api/projects", handler: projectRoutes.create, requiresAuth: true, permission: "projects.manage" },
+  // Create/update/delete have no dispatcher-level permission: a plain student
+  // can create, edit, and delete their own solo project (see projectRoutes),
+  // which a blanket "projects.manage" gate here would block since students
+  // can never be granted that permission. Staff-vs-others enforcement for
+  // these three happens inside the handlers instead.
+  { method: "POST", path: "/v2/api/projects", handler: projectRoutes.create, requiresAuth: true },
   { method: "GET", path: "/v2/api/projects", handler: projectRoutes.list, requiresAuth: true },
   { method: "GET", path: "/v2/api/projects/:id", handler: projectRoutes.get, requiresAuth: true },
-  { method: "PATCH", path: "/v2/api/projects/:id", handler: projectRoutes.update, requiresAuth: true, permission: "projects.manage" },
-  { method: "DELETE", path: "/v2/api/projects/:id", handler: projectRoutes.remove, requiresAuth: true, permission: "projects.manage" },
+  { method: "PATCH", path: "/v2/api/projects/:id", handler: projectRoutes.update, requiresAuth: true },
+  { method: "DELETE", path: "/v2/api/projects/:id", handler: projectRoutes.remove, requiresAuth: true },
   { method: "POST", path: "/v2/api/projects/:id/students", handler: projectRoutes.assignStudents, requiresAuth: true, permission: "projects.manage" },
   { method: "DELETE", path: "/v2/api/projects/:id/students/:studentId", handler: projectRoutes.removeStudent, requiresAuth: true, permission: "projects.manage" },
   { method: "POST", path: "/v2/api/projects/:id/submit", handler: projectRoutes.submit, requiresAuth: true },

@@ -2,6 +2,18 @@ import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
 import { isStaff } from "../../utils/jwt";
 import { json, parseJson } from "../../utils/json";
+
+/**
+ * A plain student may always create/edit/delete their own solo project (no
+ * permission needed for that, same as submitting an assignment) — but a
+ * staff-role user needs actual "projects.manage" in their resolved
+ * permissions, same as the dispatcher would enforce, so a staff member whose
+ * access has been narrowed away from projects still can't touch others'.
+ */
+function canManageProjects(user: { role: string; permissions?: readonly string[] | null }): boolean {
+  if (!isStaff(user.role)) return true;
+  return !!user.permissions?.includes("projects.manage");
+}
 import { data } from "../data";
 import { COLLECTIONS } from "../firebase";
 import { audit } from "../services/audit";
@@ -30,6 +42,7 @@ type ProjectBody = {
 export const projectRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
+    if (!canManageProjects(user)) return json({ error: "You do not have access to do that." }, 403);
 
     const body = await parseJson<ProjectBody>(request);
     const title = body.title?.trim();
@@ -142,7 +155,8 @@ export const projectRoutes = {
     if (!project) return json({ error: "Project not found." }, 404);
 
     const isCreator = project.createdBy === user.userId;
-    if (!isStaff(user.role) && !isCreator) return json({ error: "Access denied." }, 403);
+    const staffAllowed = isStaff(user.role) && canManageProjects(user);
+    if (!staffAllowed && !isCreator) return json({ error: "Access denied." }, 403);
 
     const body = await parseJson<ProjectBody>(request);
     const update: Record<string, unknown> = {};
@@ -173,7 +187,8 @@ export const projectRoutes = {
     if (!project) return json({ error: "Project not found." }, 404);
 
     const isCreator = project.createdBy === user.userId;
-    if (!isStaff(user.role) && !isCreator) return json({ error: "Access denied." }, 403);
+    const staffAllowed = isStaff(user.role) && canManageProjects(user);
+    if (!staffAllowed && !isCreator) return json({ error: "Access denied." }, 403);
 
     await data.del(COLLECTIONS.projects, project.id);
     audit({ actorId: user.userId, actorEmail: user.email, action: "project.delete", targetType: "project", targetId: project.id });

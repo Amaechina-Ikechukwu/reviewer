@@ -30,6 +30,7 @@ export default function StudentProjectDetailPage() {
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -52,6 +53,7 @@ export default function StudentProjectDetailPage() {
         setEditDescription(p.description ?? "");
         setEditDeadline(p.deadline ?? "");
       })
+      .catch((err) => setLoadError(err instanceof Error ? err.message : "Could not load this project"))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -123,7 +125,7 @@ export default function StudentProjectDetailPage() {
   if (!project) {
     return (
       <StudentShell section="projects">
-        <div className="text-sm text-[var(--fg-muted)]">Project not found.</div>
+        <div className="text-sm text-[var(--fg-muted)]">{loadError || "Project not found."}</div>
       </StudentShell>
     );
   }
