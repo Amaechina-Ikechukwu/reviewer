@@ -30,7 +30,7 @@ const ALL_SECTIONS: NavSectionWithPerm[] = [
         to: "/teacher/assignments",
         icon: <Icon.FilePlus className="h-4 w-4" />,
         matches: (p) => p.startsWith("/teacher/assignments") && !p.includes("/groups"),
-        requiredPerms: ["assignments.manage", "grades.edit", "reviews.run", "scores.view"],
+        requiredPerms: ["assignments.manage", "grades.edit", "reviews.run"],
       },
       {
         key: "groupProjects",
@@ -55,7 +55,7 @@ const ALL_SECTIONS: NavSectionWithPerm[] = [
         to: "/teacher/submissions",
         icon: <Icon.Inbox className="h-4 w-4" />,
         matches: (p) => p.startsWith("/teacher/submissions") || p.startsWith("/teacher/review") || p.startsWith("/teacher/import"),
-        requiredPerms: ["grades.edit", "reviews.run", "scores.view", "submissions.manage"],
+        requiredPerms: ["grades.edit", "reviews.run", "submissions.manage"],
       },
       {
         key: "gradebook",
