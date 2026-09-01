@@ -164,6 +164,8 @@ export const v2Routes: V2RouteSpec[] = [
   { method: "DELETE", path: "/v2/api/projects/:id/students/:studentId", handler: projectRoutes.removeStudent, requiresAuth: true, permission: "projects.manage" },
   { method: "POST", path: "/v2/api/projects/:id/submit", handler: projectRoutes.submit, requiresAuth: true },
   { method: "POST", path: "/v2/api/projects/:id/review", handler: projectRoutes.review, requiresAuth: true, permission: "projects.manage" },
+  { method: "GET", path: "/v2/api/public/projects/:id", handler: projectRoutes.getPublicBrief, requiresAuth: false },
+  { method: "GET", path: "/v2/api/public/projects/:id/brief", handler: projectRoutes.getPublicBriefFile, requiresAuth: false },
 
   // In-app notifications
   { method: "GET", path: "/v2/api/notifications/in-app", handler: inAppNotificationRoutes.list, requiresAuth: true },

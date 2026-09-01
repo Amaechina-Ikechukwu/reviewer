@@ -10,7 +10,7 @@ import { Icon } from "../components/ui/Icons";
 import { Input, Select } from "../components/ui/Input";
 import { Table, TBody, TD, TH, THead, TR, EmptyRow } from "../components/ui/Table";
 import { cn } from "../lib/cn";
-import type { Cohort, StudentRecord } from "../types";
+import type { Cohort, Project, StudentRecord } from "../types";
 
 type Row = StudentRecord & { assignedCount: number; ownCount: number };
 type SortKey = "name" | "assigned" | "own";
@@ -56,6 +56,7 @@ function SortHeader({
 export default function TeacherProjectsPage() {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -76,16 +77,17 @@ export default function TeacherProjectsPage() {
 
   useEffect(() => {
     Promise.all([listProjects(), listStudents(), listCohorts().catch(() => [])])
-      .then(([projects, studentList, cohortList]) => {
+      .then(([projectList, studentList, cohortList]) => {
         setStudents(studentList);
         setCohorts(cohortList);
+        setProjects(projectList);
 
         const studentIds = new Set(studentList.map((s) => s.id));
         const assigned: Record<string, number> = {};
         const own: Record<string, number> = {};
         for (const student of studentList) { assigned[student.id] = 0; own[student.id] = 0; }
 
-        for (const project of projects) {
+        for (const project of projectList) {
           // A project a student created for themselves has them as the sole
           // member and the creator; anything else — assigned by staff, even
           // to a group — counts as instructor work, not self-practice.
@@ -152,6 +154,19 @@ export default function TeacherProjectsPage() {
     [rows],
   );
 
+  const studentIdSet = useMemo(() => new Set(students.map((s) => s.id)), [students]);
+
+  // Same distinction as the "Assigned by instructor" column: a project a
+  // student created for themselves has them as its creator; everything else
+  // was created by staff.
+  const instructorProjects = useMemo(
+    () =>
+      [...projects]
+        .filter((p) => !studentIdSet.has(p.createdBy))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [projects, studentIdSet],
+  );
+
   if (loading) {
     return (
       <TeacherShell section="projects">
@@ -162,7 +177,7 @@ export default function TeacherProjectsPage() {
 
   return (
     <TeacherShell section="projects">
-      <div className="max-w-4xl space-y-6">
+      <div className="max-w-6xl space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight text-[var(--fg)]">Projects</h1>
@@ -181,6 +196,8 @@ export default function TeacherProjectsPage() {
           </div>
         </div>
 
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-56">
             <Icon.Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--fg-subtle)]" />
@@ -269,6 +286,49 @@ export default function TeacherProjectsPage() {
             </TBody>
           </Table>
         </Card>
+        </div>
+
+        <div>
+          <Card className="flex h-full flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Icon.Folder className="h-4 w-4 text-[var(--fg-muted)]" />
+                <h2 className="text-sm font-semibold text-[var(--fg)]">Projects created by instructor</h2>
+              </div>
+              <span className="rounded-full bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--fg-muted)]">
+                {instructorProjects.length}
+              </span>
+            </div>
+
+            {instructorProjects.length === 0 ? (
+              <div className="flex flex-1 items-center justify-center px-4 py-10 text-center">
+                <div>
+                  <p className="text-sm font-medium text-[var(--fg)]">No projects yet</p>
+                  <p className="mt-0.5 text-xs text-[var(--fg-muted)]">Projects you create will show up here.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="max-h-[560px] flex-1 divide-y divide-[var(--border)] overflow-y-auto">
+                {instructorProjects.map((p) => (
+                  <Link
+                    key={p.id}
+                    to={`/teacher/projects/${p.id}`}
+                    className="block px-4 py-3 transition-colors hover:bg-[var(--surface-muted)]/30"
+                  >
+                    <p className="truncate text-sm font-medium text-[var(--fg)]">{p.title}</p>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-[var(--fg-muted)]">
+                      <Badge tone={p.status === "active" ? "success" : p.status === "completed" ? "info" : "neutral"}>
+                        {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                      </Badge>
+                      <span>{(p.studentIds ?? []).length} student{(p.studentIds ?? []).length === 1 ? "" : "s"}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+        </div>
       </div>
     </TeacherShell>
   );

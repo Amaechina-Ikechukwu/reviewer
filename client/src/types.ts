@@ -424,6 +424,15 @@ export type Project = {
   createdAt: string;
 };
 
+export type PublicProjectBrief = {
+  id: string;
+  title: string;
+  description: string | null;
+  briefPdfPath?: string | null;
+  deadline: string | null;
+  createdByName: string;
+};
+
 export type InAppNotification = {
   id: string;
   type: string;

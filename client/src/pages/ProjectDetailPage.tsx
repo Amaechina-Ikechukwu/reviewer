@@ -43,6 +43,7 @@ export default function ProjectDetailPage() {
   const [declineOpen, setDeclineOpen] = useState(false);
   const [declineComment, setDeclineComment] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [previewHeight, setPreviewHeight] = useState(400);
   const [previewDevice, setPreviewDevice] = useState<"laptop" | "tablet" | "mobile">("laptop");
@@ -82,6 +83,13 @@ export default function ProjectDetailPage() {
       document.removeEventListener("mouseup", onMouseUp);
     };
   }, []);
+
+  function copyPublicLink() {
+    if (!project) return;
+    navigator.clipboard.writeText(`${window.location.origin}/projects/${project.id}/brief`);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  }
 
   function onResizeStart(e: React.MouseEvent) {
     e.preventDefault();
@@ -188,6 +196,12 @@ export default function ProjectDetailPage() {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {project.briefPdfPath && (
+                <Button variant="secondary" size="sm" onClick={copyPublicLink}>
+                  <Icon.Link className="h-3.5 w-3.5" />
+                  {linkCopied ? "Copied!" : "Copy public link"}
+                </Button>
+              )}
               <Button variant="secondary" size="sm" onClick={() => setEditOpen(true)}>Edit</Button>
               <Button variant="ghost" size="sm" onClick={() => setDeleteConfirmOpen(true)} className="text-[var(--fg-muted)] hover:text-[var(--danger)]">Delete</Button>
             </div>

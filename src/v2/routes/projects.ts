@@ -41,6 +41,24 @@ type ProjectBody = {
   briefPdfPath?: string | null;
 };
 
+/** Every mutating project endpoint returns the updated doc straight from
+ * `data.update`, which — unlike `get()` — never resolves `studentIds` into
+ * full student records. Without this, the Students panel (and anything else
+ * reading `.students`) reads back empty right after any edit, assignment
+ * change, submission, or review, until the page is manually reloaded. */
+async function withStudents(project: any): Promise<any> {
+  if (project?.studentIds?.length > 0) {
+    const students = await data.findMany<any>(COLLECTIONS.users, {
+      where: [["role", "==", "student"]],
+    });
+    const assigned = students.filter((s: any) => project.studentIds.includes(s.id));
+    project.students = assigned.map((s: any) => ({ id: s.id, email: s.email, fullName: s.fullName }));
+  } else if (project) {
+    project.students = [];
+  }
+  return project;
+}
+
 export const projectRoutes = {
   async create(request: Request) {
     const user = (request as AuthenticatedRequest).user;
@@ -136,17 +154,7 @@ export const projectRoutes = {
       return json({ error: "Access denied." }, 403);
     }
 
-    if (project.studentIds?.length > 0) {
-      const students = await data.findMany<any>(COLLECTIONS.users, {
-        where: [["role", "==", "student"]],
-      });
-      const assignedStudents = students.filter((s: any) => project.studentIds.includes(s.id));
-      project.students = assignedStudents.map((s: any) => ({
-        id: s.id, email: s.email, fullName: s.fullName,
-      }));
-    } else {
-      project.students = [];
-    }
+    await withStudents(project);
 
     return json(project);
   },
@@ -180,6 +188,7 @@ export const projectRoutes = {
     if (Object.keys(update).length === 0) return json(project);
 
     const updated = await data.update<any>(COLLECTIONS.projects, project.id, update);
+    await withStudents(updated);
     audit({ actorId: user.userId, actorEmail: user.email, action: "project.update", targetType: "project", targetId: project.id, details: update });
     return json(updated);
   },
@@ -243,6 +252,38 @@ export const projectRoutes = {
     });
   },
 
+  // Unauthenticated: returns only the brief-facing fields so a project brief
+  // can be shared with anyone via a public link, same as an assignment's
+  // public brief — no studentIds, createdBy, review state, etc.
+  async getPublicBrief(request: Request, params: Record<string, string>) {
+    const project = await data.getById<any>(COLLECTIONS.projects, params.id);
+    if (!project) return json({ error: "Project not found." }, 404);
+    return json({
+      id: project.id,
+      title: project.title,
+      description: project.description,
+      briefPdfPath: project.briefPdfPath,
+      deadline: project.deadline,
+      createdByName: project.createdByName,
+    });
+  },
+
+  async getPublicBriefFile(request: Request, params: Record<string, string>) {
+    const project = await data.getById<any>(COLLECTIONS.projects, params.id);
+    if (!project) return new Response("Not found", { status: 404 });
+    if (!project.briefPdfPath) return new Response("Brief not found", { status: 404 });
+
+    const buffer = await storageDownload(`briefs/${project.briefPdfPath}.pdf`).catch(() => null);
+    if (!buffer) return new Response("Brief not found", { status: 404 });
+
+    return new Response(buffer as unknown as BodyInit, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": "inline",
+      },
+    });
+  },
+
   async assignStudents(request: Request, params: Record<string, string>) {
     const user = (request as AuthenticatedRequest).user;
     if (!isStaff(user.role)) return json({ error: "Access denied." }, 403);
@@ -277,6 +318,7 @@ export const projectRoutes = {
       });
     }
 
+    await withStudents(updated);
     audit({ actorId: user.userId, actorEmail: user.email, action: "project.assign_students", targetType: "project", targetId: project.id, details: { studentIds } });
     return json(updated);
   },
@@ -295,6 +337,7 @@ export const projectRoutes = {
     }
 
     const updated = await data.update<any>(COLLECTIONS.projects, project.id, { studentIds: updatedIds });
+    await withStudents(updated);
     audit({ actorId: user.userId, actorEmail: user.email, action: "project.remove_student", targetType: "project", targetId: project.id, details: { studentId: params.studentId } });
     return json(updated);
   },
@@ -357,6 +400,7 @@ export const projectRoutes = {
       forRole: "staff",
     });
 
+    await withStudents(updated);
     audit({ actorId: user.userId, actorEmail: user.email, action: "project.submit", targetType: "project", targetId: project.id, details: { deployedUrl } });
     return json(updated);
   },
@@ -386,6 +430,7 @@ export const projectRoutes = {
     if (!accepted) update.status = "active";
 
     const updated = await data.update<any>(COLLECTIONS.projects, project.id, update);
+    await withStudents(updated);
 
     // Notify the project members
     const allUsers = await data.findMany<any>(COLLECTIONS.users, {});
