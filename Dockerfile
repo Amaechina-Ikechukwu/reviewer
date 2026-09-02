@@ -25,12 +25,10 @@ COPY drizzle/ ./drizzle/
 COPY tsconfig.json ./
 COPY --from=client-build /app/client/dist ./client/dist
 
-# Cloud Run sets PORT dynamically (default 8080)
-ENV PORT=8080
 # Use /tmp for uploads — Cloud Run filesystem is ephemeral.
 # For persistent file uploads wire GCS_BUCKET instead (see .env.example).
 ENV UPLOAD_DIR=/tmp/uploads
 
-EXPOSE 8080
+EXPOSE 3000
 
 CMD ["bun", "run", "src/index.ts"]
