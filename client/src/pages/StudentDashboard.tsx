@@ -209,7 +209,7 @@ export default function StudentDashboard() {
       .then((r) => setOverrideIds(new Set(r.assignmentIds)))
       .catch(() => setOverrideIds(new Set()));
 
-    api<SubmissionRow[]>("/submissions").then(async (rows) => {
+    api<SubmissionRow[]>("/submissions?mine=true").then(async (rows) => {
       setSubmissions(rows);
       const entries = await Promise.all(rows.map(async (row) => {
         try {

@@ -48,7 +48,7 @@ export default function StudentResults() {
 
   useEffect(() => {
     setLoading(true);
-    api<SubmissionRow[]>("/submissions")
+    api<SubmissionRow[]>("/submissions?mine=true")
       .then(async (rows) => {
         setSubmissions(rows);
         const entries = await Promise.all(

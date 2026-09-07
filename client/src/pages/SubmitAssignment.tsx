@@ -102,7 +102,7 @@ export default function SubmitAssignment() {
       .then((r) => setHasOverride(r.assignmentIds.includes(assignmentId!)))
       .catch(() => setHasOverride(false));
 
-    api<Array<{ submission: { id: string; submittedAt: string; studentId: string; groupId?: string | null; submissionType: SubmissionType }; studentName?: string | null }>>(`/submissions?assignment_id=${assignmentId}`)
+    api<Array<{ submission: { id: string; submittedAt: string; studentId: string; groupId?: string | null; submissionType: SubmissionType }; studentName?: string | null }>>(`/submissions?assignment_id=${assignmentId}&mine=true`)
       .then((rows) => {
         if (rows.length > 0) {
           const row = rows[0];

@@ -423,6 +423,11 @@ export const submissionRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const assignmentId = url.searchParams.get("assignment_id");
     const date = url.searchParams.get("date");
+    // Explicit opt-in for "my own submissions" views (student dashboards, the
+    // submit page's already-submitted check) — independent of the caller's
+    // grading permissions, so a student granted grading access still sees
+    // their own work here instead of the whole roster's.
+    const mine = url.searchParams.get("mine") === "true";
 
     const where: any[] = [];
     if (assignmentId) where.push(["assignmentId", "==", assignmentId]);
@@ -436,19 +441,21 @@ export const submissionRoutes = {
       orderBy: ["submittedAt", "desc"],
     });
 
-    const hasGradingOrStaffAccess = isStaff(user.role) ||
+    const hasGradingOrStaffAccess = !mine && (
+      isStaff(user.role) ||
       isStaffOrGranted(user, "grades.edit") ||
       isStaffOrGranted(user, "scores.view") ||
       isStaffOrGranted(user, "reviews.run") ||
-      isStaffOrGranted(user, "submissions.manage");
+      isStaffOrGranted(user, "submissions.manage")
+    );
 
-    if (!hasGradingOrStaffAccess && user.role === "student") {
+    if (!hasGradingOrStaffAccess && (mine || user.role === "student")) {
       const myGroups = await data.findMany<any>(COLLECTIONS.assignmentGroups, {
         where: [["memberIds", "array-contains", user.userId]],
       });
       const myGroupIds = new Set(myGroups.map((g) => g.id));
       subs = subs.filter((s) => s.studentId === user.userId || (s.groupId && myGroupIds.has(s.groupId)));
-    } else if (user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
+    } else if (!mine && user.role === "student" && user.allowedAssignmentIds && user.allowedAssignmentIds.length > 0) {
       subs = subs.filter((s) => user.allowedAssignmentIds!.includes(s.assignmentId));
     }
 
