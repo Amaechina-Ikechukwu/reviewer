@@ -52,8 +52,12 @@ export default function ProjectDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
+    setLoading(true);
+    setProject(null);
     getProject(id)
       .then((p) => {
+        if (cancelled) return;
         setProject(p);
         setEditTitle(p.title);
         setEditDescription(p.description ?? "");
@@ -61,7 +65,12 @@ export default function ProjectDetailPage() {
         setEditStatus(p.status);
         setEditBriefPdfPath(p.briefPdfPath ?? null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {

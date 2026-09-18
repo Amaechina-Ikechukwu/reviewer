@@ -50,16 +50,28 @@ export default function StudentProjectDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
+    setLoading(true);
+    setProject(null);
+    setLoadError("");
     getProject(id)
       .then((p) => {
+        if (cancelled) return;
         setProject(p);
         setEditTitle(p.title);
         setEditDescription(p.description ?? "");
         setEditDeadline(p.deadline ?? "");
         setEditBriefPdfPath(p.briefPdfPath ?? null);
       })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Could not load this project"))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Could not load this project");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
