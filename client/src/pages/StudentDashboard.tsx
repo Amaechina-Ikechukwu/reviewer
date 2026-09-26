@@ -13,6 +13,7 @@ import type { Assignment, Review } from "../types";
 type SubmissionRow = {
   submission: { id: string; assignmentId?: string; submittedAt: string };
   assignmentTitle: string | null;
+  assignmentMaxScore?: number;
 };
 
 function useCountdown(target: string | null) {
@@ -157,7 +158,7 @@ function AssignmentRow({ assignment, closed }: { assignment: Assignment; closed?
 
 function ResultCard({ row, review }: { row: SubmissionRow; review: Review | undefined }) {
   const score = review?.teacherOverrideScore ?? review?.aiScore;
-  const max = review?.maxScore ?? 100;
+  const max = row.assignmentMaxScore ?? review?.maxScore ?? 100;
   const insight = review?.feedback?.summary;
   const label = row.assignmentTitle ?? "Assignment";
 

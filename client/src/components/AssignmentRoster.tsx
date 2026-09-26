@@ -143,6 +143,15 @@ export default function AssignmentRoster({
       await markAssignmentDone(assignmentId, { studentIds, score });
       const who = studentIds.length === 1 ? "1 student" : `${studentIds.length} students`;
       toast().success(`Marked ${who} ${score}/${maxScore}`);
+      setDrafts((current) => {
+        const next = { ...current };
+        studentIds.forEach((id) => delete next[id]);
+        return next;
+      });
+      if (busyKey === "bulk") {
+        setBulkScore("");
+        setSelected(new Set());
+      }
       await load();
       onChanged?.();
     } catch (err) {

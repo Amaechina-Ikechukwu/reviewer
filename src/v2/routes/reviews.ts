@@ -173,6 +173,29 @@ export const reviewRoutes = {
     const submission = await data.getById<any>(COLLECTIONS.submissions, params.submissionId);
     if (!submission) return json({ error: "Forbidden" }, 403);
 
+    const assignment = await data.getById<any>(COLLECTIONS.assignments, submission.assignmentId);
+    if (review && assignment && review.maxScore !== assignment.maxScore) {
+      const oldMax = review.maxScore || 100;
+      const newMax = assignment.maxScore;
+      const revUpdate: Record<string, any> = { maxScore: newMax };
+      if (typeof review.teacherOverrideScore === "number") {
+        if (review.teacherOverrideScore === oldMax) {
+          revUpdate.teacherOverrideScore = newMax;
+        } else if (review.teacherOverrideScore > newMax) {
+          revUpdate.teacherOverrideScore = Math.min(newMax, Math.round((review.teacherOverrideScore / oldMax) * newMax));
+        }
+      }
+      if (typeof review.aiScore === "number") {
+        if (review.aiScore === oldMax) {
+          revUpdate.aiScore = newMax;
+        } else if (review.aiScore > newMax) {
+          revUpdate.aiScore = Math.min(newMax, Math.round((review.aiScore / oldMax) * newMax));
+        }
+      }
+      await data.update(COLLECTIONS.reviews, review.id, revUpdate);
+      Object.assign(review, revUpdate);
+    }
+
     const hasGradingOrViewing = isStaffOrGranted(user, "grades.edit") || isStaffOrGranted(user, "scores.view") || isStaffOrGranted(user, "reviews.run");
 
     if (hasGradingOrViewing) {
@@ -237,6 +260,7 @@ export const reviewRoutes = {
 
     await data.update(COLLECTIONS.reviews, existing.id, {
       teacherOverrideScore: Math.round(score),
+      maxScore: assignment?.maxScore ?? 100,
       status: "completed",
       feedback: updatedFeedback,
       reviewedAt: new Date(),

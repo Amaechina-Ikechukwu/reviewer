@@ -169,7 +169,7 @@ export default function StudentResultDetail() {
   }
 
   const { submission, assignment } = data;
-  const maxScore = review?.maxScore ?? assignment.maxScore ?? 100;
+  const maxScore = assignment.maxScore ?? review?.maxScore ?? 100;
   const score = review?.teacherOverrideScore ?? review?.aiScore;
   const released = typeof review?.teacherOverrideScore === "number";
   const feedback = review?.feedback;

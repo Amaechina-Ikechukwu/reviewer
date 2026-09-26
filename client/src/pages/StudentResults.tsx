@@ -15,6 +15,7 @@ import type { Review } from "../types";
 type SubmissionRow = {
   submission: { id: string; submittedAt: string };
   assignmentTitle: string | null;
+  assignmentMaxScore?: number;
 };
 
 function scoreTone(score: number, maxScore: number) {
@@ -101,7 +102,7 @@ export default function StudentResults() {
           {sortedSubmissions.map((row) => {
             const review = reviews[row.submission.id];
             const score = review?.teacherOverrideScore ?? review?.aiScore;
-            const maxScore = review?.maxScore ?? 100;
+            const maxScore = row.assignmentMaxScore ?? review?.maxScore ?? 100;
             const isFocused = focusedId === row.submission.id;
             return (
               <Link

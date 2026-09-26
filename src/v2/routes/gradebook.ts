@@ -68,7 +68,7 @@ export const gradebookRoutes = {
           if (!sub) { scores[assignment.id] = null; continue; }
           const review = reviewBySubmission.get(sub.id);
           const score = review?.teacherOverrideScore ?? review?.aiScore ?? null;
-          const maxScore = review?.maxScore ?? assignment.maxScore;
+          const maxScore = assignment.maxScore;
           scores[assignment.id] = { score, maxScore, status: review?.status ?? "no_review", submissionId: sub.id };
           if (typeof score === "number") { grandTotal += score; grandMaxTotal += maxScore; }
         }

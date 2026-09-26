@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card"
 import { Icon } from "../components/ui/Icons";
 import { Input, Label, Select, Textarea } from "../components/ui/Input";
 import { PageHeader } from "../components/ui/PageHeader";
-import { api } from "../api";
-import type { CustomForm, CustomFormField, CustomFormFieldType, CustomFormStatus, CustomFormTargetType, StudentRecord } from "../types";
+import { api, listCohorts } from "../api";
+import type { Cohort, CustomForm, CustomFormField, CustomFormFieldType, CustomFormStatus, CustomFormTargetType, StudentRecord } from "../types";
 
 type EditableField = CustomFormField & { _key: string };
 
@@ -49,11 +49,16 @@ export default function CustomFormBuilder() {
   const [lockedFields, setLockedFields] = useState(false);
   const [targetType, setTargetType] = useState<CustomFormTargetType>("all");
   const [targetStudentId, setTargetStudentId] = useState<string>("");
+  const [targetCohortId, setTargetCohortId] = useState<string>("");
   const [students, setStudents] = useState<StudentRecord[]>([]);
+  const [cohorts, setCohorts] = useState<Cohort[]>([]);
 
   useEffect(() => {
     api<StudentRecord[]>("/students")
       .then(setStudents)
+      .catch(() => { /* non-fatal */ });
+    listCohorts()
+      .then(setCohorts)
       .catch(() => { /* non-fatal */ });
   }, []);
 
@@ -65,8 +70,9 @@ export default function CustomFormBuilder() {
         setDescription(form.description || "");
         setStatus(form.status);
         setClosesAt(toIsoLocal(form.closesAt));
-        setTargetType(form.targetType === "specific" ? "specific" : "all");
+        setTargetType(form.targetType === "specific" ? "specific" : form.targetType === "cohort" ? "cohort" : "all");
         setTargetStudentId(form.targetStudentId || "");
+        setTargetCohortId(form.targetCohortId || "");
         setFields(
           (form.fields || []).map((f, idx) => ({
             ...f,
@@ -160,6 +166,10 @@ export default function CustomFormBuilder() {
       toast().error("Choose a student to send this form to, or switch to 'All students'.");
       return;
     }
+    if (targetType === "cohort" && !targetCohortId) {
+      toast().error("Choose a cohort to send this form to, or switch to 'All students'.");
+      return;
+    }
 
     const payload = {
       title: cleanTitle,
@@ -168,6 +178,7 @@ export default function CustomFormBuilder() {
       closesAt: closesAt ? new Date(closesAt).toISOString() : null,
       targetType,
       targetStudentId: targetType === "specific" ? targetStudentId : null,
+      targetCohortId: targetType === "cohort" ? targetCohortId : null,
       ...(lockedFields ? {} : { fields: cleanedFields }),
     };
 
@@ -288,6 +299,22 @@ export default function CustomFormBuilder() {
                   />
                   Specific student
                 </label>
+                <label
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                    targetType === "cohort"
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--fg)]"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--fg-muted)] hover:border-[var(--border-strong)]"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="form-target"
+                    checked={targetType === "cohort"}
+                    onChange={() => setTargetType("cohort")}
+                    className="h-4 w-4 accent-[var(--accent)]"
+                  />
+                  Cohort
+                </label>
               </div>
               {targetType === "specific" && (
                 <Label>
@@ -307,10 +334,28 @@ export default function CustomFormBuilder() {
                   </Select>
                 </Label>
               )}
+              {targetType === "cohort" && (
+                <Label>
+                  Cohort
+                  <Select
+                    value={targetCohortId}
+                    onChange={(e) => setTargetCohortId(e.target.value)}
+                  >
+                    <option value="">— Choose a cohort —</option>
+                    {cohorts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
+              )}
               <p className="text-xs text-[var(--fg-muted)]">
                 {targetType === "all"
                   ? "All students will see this form and be emailed when you open it."
-                  : "Only the chosen student will see this form and receive the email when you open it."}
+                  : targetType === "cohort"
+                    ? "Only students in the chosen cohort will see this form and receive the email when you open it."
+                    : "Only the chosen student will see this form and receive the email when you open it."}
               </p>
             </div>
           </CardContent>

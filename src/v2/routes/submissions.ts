@@ -478,6 +478,7 @@ export const submissionRoutes = {
         studentEmail: s?.email || null,
         assignmentTitle: a?.title || null,
         assignmentDefaultProvider: a?.defaultProvider || null,
+        assignmentMaxScore: a?.maxScore ?? 100,
       };
     });
 
@@ -740,7 +741,7 @@ export const submissionRoutes = {
         score: typeof score === "number" ? score : null,
         scoredByTeacher: typeof review?.teacherOverrideScore === "number",
         markedDone: !!review?.markedDoneAt,
-        maxScore: review?.maxScore ?? assignment.maxScore,
+        maxScore: assignment.maxScore,
       };
     });
 
@@ -842,6 +843,7 @@ export const submissionRoutes = {
       } else {
         await data.update(COLLECTIONS.reviews, review.id, {
           status: "completed",
+          maxScore,
           teacherOverrideScore: hasScore ? Math.round(score!) : (review.teacherOverrideScore ?? review.aiScore ?? maxScore),
           markedDoneAt: new Date(),
           markedDoneBy: actor.userId,

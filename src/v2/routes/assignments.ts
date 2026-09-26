@@ -434,7 +434,61 @@ export const assignmentRoutes = {
     if (body.sourceDocxPath !== undefined) update.sourceDocxPath = body.sourceDocxPath || null;
     if (body.allowGithub !== undefined) update.allowGithub = body.allowGithub;
     if (body.allowFileUpload !== undefined) update.allowFileUpload = body.allowFileUpload;
-    if (body.maxScore !== undefined) update.maxScore = body.maxScore > 0 ? Math.round(body.maxScore) : 100;
+    if (body.maxScore !== undefined) {
+      const newMaxScore = body.maxScore > 0 ? Math.round(body.maxScore) : 100;
+      update.maxScore = newMaxScore;
+
+      if (newMaxScore !== existing.maxScore) {
+        const oldMax = existing.maxScore || 100;
+        const subs = await data.findMany<any>(COLLECTIONS.submissions, {
+          where: [["assignmentId", "==", existing.id]],
+        });
+        for (const sub of subs) {
+          const rev = await data.findOne<any>(COLLECTIONS.reviews, [["submissionId", "==", sub.id]]);
+          if (rev) {
+            const revUpdate: Record<string, any> = { maxScore: newMaxScore };
+            if (typeof rev.teacherOverrideScore === "number") {
+              if (rev.teacherOverrideScore === oldMax) {
+                revUpdate.teacherOverrideScore = newMaxScore;
+              } else if (rev.teacherOverrideScore > newMaxScore) {
+                revUpdate.teacherOverrideScore = Math.min(newMaxScore, Math.round((rev.teacherOverrideScore / oldMax) * newMaxScore));
+              }
+            }
+            if (typeof rev.aiScore === "number") {
+              if (rev.aiScore === oldMax) {
+                revUpdate.aiScore = newMaxScore;
+              } else if (rev.aiScore > newMaxScore) {
+                revUpdate.aiScore = Math.min(newMaxScore, Math.round((rev.aiScore / oldMax) * newMaxScore));
+              }
+            }
+            if (rev.feedback && typeof rev.feedback === "object") {
+              let feedbackChanged = false;
+              const feedbackCopy = { ...rev.feedback };
+              if (Array.isArray(feedbackCopy.criteria)) {
+                feedbackCopy.criteria = feedbackCopy.criteria.map((c: any) => ({
+                  ...c,
+                  score: Math.min(newMaxScore, Math.round((Number(c.score || 0) / oldMax) * newMaxScore)),
+                  maxScore: Math.min(newMaxScore, Math.round((Number(c.maxScore || oldMax) / oldMax) * newMaxScore)),
+                }));
+                feedbackChanged = true;
+              }
+              if (Array.isArray(feedbackCopy.fileScores)) {
+                feedbackCopy.fileScores = feedbackCopy.fileScores.map((f: any) => ({
+                  ...f,
+                  score: Math.min(newMaxScore, Math.round((Number(f.score || 0) / oldMax) * newMaxScore)),
+                  maxScore: newMaxScore,
+                }));
+                feedbackChanged = true;
+              }
+              if (feedbackChanged) {
+                revUpdate.feedback = feedbackCopy;
+              }
+            }
+            await data.update(COLLECTIONS.reviews, rev.id, revUpdate);
+          }
+        }
+      }
+    }
     if (body.classNotesType !== undefined) update.classNotesType = body.classNotesType || null;
     if (body.classNotes !== undefined) update.classNotes = body.classNotes?.trim() || null;
     if (body.classNotesUrl !== undefined) update.classNotesUrl = body.classNotesUrl?.trim() || null;

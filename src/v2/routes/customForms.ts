@@ -24,9 +24,10 @@ type FormBody = {
   fields?: FormField[];
   status?: "draft" | "open" | "closed";
   closesAt?: string | null;
-  targetType?: "all" | "specific";
+  targetType?: "all" | "specific" | "cohort";
   targetStudentId?: string | null;
   targetGroupId?: string | null;
+  targetCohortId?: string | null;
   assignmentId?: string | null;
 };
 
@@ -97,6 +98,11 @@ function validateAnswers(fields: FormField[], answers: Record<string, unknown>):
 }
 
 async function isFormVisibleToStudent(form: any, studentId: string): Promise<boolean> {
+  if (form.targetType === "cohort") {
+    if (!form.targetCohortId) return false;
+    const student = await data.getById<any>(COLLECTIONS.users, studentId);
+    return !!student && student.cohortId === form.targetCohortId;
+  }
   if (form.targetType !== "specific") return true;
   if (form.targetStudentId) return form.targetStudentId === studentId;
   if (form.targetGroupId) {
@@ -107,6 +113,16 @@ async function isFormVisibleToStudent(form: any, studentId: string): Promise<boo
 }
 
 async function getFormRecipients(form: any): Promise<{ email: string; fullName: string }[]> {
+  if (form.targetType === "cohort" && form.targetCohortId) {
+    const cohortStudents = await data.findMany<any>(COLLECTIONS.users, {
+      where: [["role", "==", "student"], ["cohortId", "==", form.targetCohortId]],
+    });
+    return cohortStudents
+      .filter((s) => s.passwordHash !== "INVITE_PENDING")
+      .filter((s) => !String(s.email).endsWith("@historical.reviewai.local"))
+      .map((s) => ({ email: s.email, fullName: s.fullName }));
+  }
+
   if (form.targetType === "specific" && form.targetStudentId) {
     const student = await data.getById<any>(COLLECTIONS.users, form.targetStudentId);
     if (student && student.passwordHash !== "INVITE_PENDING") {
@@ -156,9 +172,10 @@ export const customFormRoutes = {
       return json({ error: "Please provide a valid closing date." }, 400);
     }
 
-    const targetType = body.targetType === "specific" ? "specific" : "all";
+    const targetType = body.targetType === "specific" ? "specific" : body.targetType === "cohort" ? "cohort" : "all";
     let targetStudentId: string | null = null;
     let targetGroupId: string | null = null;
+    let targetCohortId: string | null = null;
     let assignmentId: string | null = null;
 
     if (targetType === "specific") {
@@ -168,6 +185,11 @@ export const customFormRoutes = {
         targetGroupId = body.targetGroupId;
         assignmentId = body.assignmentId || null;
       }
+    } else if (targetType === "cohort") {
+      if (!body.targetCohortId) return json({ error: "Choose a cohort." }, 400);
+      const cohort = await data.getById<any>(COLLECTIONS.cohorts, body.targetCohortId);
+      if (!cohort) return json({ error: "Cohort not found." }, 404);
+      targetCohortId = body.targetCohortId;
     }
 
     const id = randomUUID();
@@ -184,6 +206,7 @@ export const customFormRoutes = {
       targetType,
       targetStudentId,
       targetGroupId,
+      targetCohortId,
       assignmentId,
       publishedLink,
     });
@@ -310,20 +333,31 @@ export const customFormRoutes = {
     }
 
     if (body.targetType !== undefined) {
-      const t = body.targetType === "specific" ? "specific" : "all";
+      const t = body.targetType === "specific" ? "specific" : body.targetType === "cohort" ? "cohort" : "all";
       update.targetType = t;
       if (t === "all") {
+        update.targetStudentId = null;
+        update.targetGroupId = null;
+        update.targetCohortId = null;
+        update.assignmentId = null;
+      } else if (t === "cohort") {
+        if (!body.targetCohortId) return json({ error: "Choose a cohort." }, 400);
+        const cohort = await data.getById<any>(COLLECTIONS.cohorts, body.targetCohortId);
+        if (!cohort) return json({ error: "Cohort not found." }, 404);
+        update.targetCohortId = body.targetCohortId;
         update.targetStudentId = null;
         update.targetGroupId = null;
         update.assignmentId = null;
       } else {
         update.targetStudentId = body.targetStudentId || null;
         update.targetGroupId = body.targetStudentId ? null : (body.targetGroupId || null);
+        update.targetCohortId = null;
         update.assignmentId = body.assignmentId || null;
       }
     } else {
       if (body.targetStudentId !== undefined) update.targetStudentId = body.targetStudentId || null;
       if (body.targetGroupId !== undefined) update.targetGroupId = body.targetGroupId || null;
+      if (body.targetCohortId !== undefined) update.targetCohortId = body.targetCohortId || null;
       if (body.assignmentId !== undefined) update.assignmentId = body.assignmentId || null;
     }
 

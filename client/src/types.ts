@@ -341,7 +341,7 @@ export type CustomFormField = {
 
 export type CustomFormStatus = "draft" | "open" | "closed";
 
-export type CustomFormTargetType = "all" | "specific";
+export type CustomFormTargetType = "all" | "specific" | "cohort";
 
 export type CustomForm = {
   id: string;
@@ -355,6 +355,7 @@ export type CustomForm = {
   targetType?: CustomFormTargetType;
   targetStudentId?: string | null;
   targetGroupId?: string | null;
+  targetCohortId?: string | null;
   assignmentId?: string | null;
   publishedLink?: string | null;
 };

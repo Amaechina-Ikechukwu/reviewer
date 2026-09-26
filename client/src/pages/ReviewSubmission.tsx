@@ -135,7 +135,7 @@ export default function ReviewSubmission() {
 
   const selectedFile = files.find((file) => file.filename === selectedFilename) || files[0];
 
-  const maxScore = review?.maxScore || submission?.assignment.maxScore || 100;
+  const maxScore = submission?.assignment.maxScore ?? review?.maxScore ?? 100;
   const geminiSummary = review?.feedback?.summary || "No Gemini review has been run for this submission yet.";
   const geminiSuggestions = review?.feedback?.suggestions || [];
   const geminiModel = review?.feedback?.model || "gemini-2.5-flash";
@@ -187,6 +187,8 @@ export default function ReviewSubmission() {
         body: JSON.stringify({ score: Number(overrideScore), feedback: finalFeedback }),
       });
       setReview(nextReview);
+      const score = nextReview.teacherOverrideScore ?? nextReview.aiScore;
+      setOverrideScore(typeof score === "number" ? String(score) : "");
       setReleaseCount((c) => c + 1);
       toast().success("Grade released");
     } catch (err) {
@@ -458,7 +460,7 @@ export default function ReviewSubmission() {
             <Card>
               <CardHeader>
                 <CardTitle>Final assessment</CardTitle>
-                {typeof geminiScore === "number" && geminiScore > 0 && (
+                {typeof geminiScore === "number" && geminiScore >= 0 && (
                   <ScorePill score={geminiScore} max={maxScore} />
                 )}
               </CardHeader>
