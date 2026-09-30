@@ -25,7 +25,7 @@ export default function CustomFormsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   function copyLink(form: CustomForm) {
-    const link = form.publishedLink || `${window.location.origin}/student/forms/${form.id}`;
+    const link = `${window.location.origin}/student/forms/${form.id}`;
     navigator.clipboard.writeText(link).then(
       () => {
         setCopiedId(form.id);

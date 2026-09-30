@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedRequest } from "../../middleware/auth";
+import { isStaff } from "../../utils/jwt";
 import { isStaffOrGranted } from "../../utils/permissions";
 import { enqueueEmailJob } from "../services/emailJobs";
 import { json, parseJson } from "../../utils/json";
@@ -193,7 +194,7 @@ export const customFormRoutes = {
     }
 
     const id = randomUUID();
-    const appUrl = process.env.APP_URL || "http://localhost:5173/v2";
+    const appUrl = (process.env.APP_URL || "http://localhost:5173").replace(/\/v2\/?$/, "");
     const publishedLink = `${appUrl}/student/forms/${id}`;
 
     const form = await data.insert<any>(COLLECTIONS.customForms, id, {
@@ -230,9 +231,15 @@ export const customFormRoutes = {
 
   async list(request: Request) {
     const user = (request as AuthenticatedRequest).user;
-    if (user.role === "teacher") {
+    const hasStaffAccess = isStaff(user.role) || isStaffOrGranted(user, "forms.manage");
+
+    if (hasStaffAccess) {
+      let where: any = undefined;
+      if (!["owner", "admin"].includes(user.role)) {
+        where = [["createdBy", "==", user.userId]];
+      }
       const rows = await data.findMany<any>(COLLECTIONS.customForms, {
-        where: [["createdBy", "==", user.userId]],
+        where,
         orderBy: ["createdAt", "desc"],
       });
       return json(rows);
@@ -261,8 +268,18 @@ export const customFormRoutes = {
     const user = (request as AuthenticatedRequest).user;
     const form = await data.getById<any>(COLLECTIONS.customForms, params.id);
     if (!form) return json({ error: "Form not found." }, 404);
-    if (user.role === "teacher" && form.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
-    if (user.role === "student" && form.status !== "open") {
+
+    const hasStaffAccess = isStaff(user.role) || isStaffOrGranted(user, "forms.manage");
+    const isOwnerOrAdmin = ["owner", "admin"].includes(user.role);
+
+    if (hasStaffAccess) {
+      if (!isOwnerOrAdmin && form.createdBy !== user.userId) {
+        return json({ error: "Form not found." }, 404);
+      }
+      return json(form);
+    }
+
+    if (form.status !== "open") {
       // Allow students to view a closed/draft form only if they already responded
       const own = await data.findOne<any>(COLLECTIONS.customFormResponses, [
         ["formId", "==", form.id],
@@ -272,18 +289,14 @@ export const customFormRoutes = {
       return json({ ...form, myResponse: own });
     }
 
-    if (user.role === "student") {
-      const own = await data.findOne<any>(COLLECTIONS.customFormResponses, [
-        ["formId", "==", form.id],
-        ["studentId", "==", user.userId],
-      ]);
-      if (!own && !(await isFormVisibleToStudent(form, user.userId))) {
-        return json({ error: "Form not found." }, 404);
-      }
-      return json({ ...form, myResponse: own ?? null });
+    const own = await data.findOne<any>(COLLECTIONS.customFormResponses, [
+      ["formId", "==", form.id],
+      ["studentId", "==", user.userId],
+    ]);
+    if (!own && !(await isFormVisibleToStudent(form, user.userId))) {
+      return json({ error: "Form not found." }, 404);
     }
-
-    return json(form);
+    return json({ ...form, myResponse: own ?? null });
   },
 
   async update(request: Request, params: Record<string, string>) {
@@ -291,7 +304,8 @@ export const customFormRoutes = {
     if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const existing = await data.getById<any>(COLLECTIONS.customForms, params.id);
-    if (!existing || existing.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
+    const isOwnerOrAdmin = ["owner", "admin"].includes(user.role);
+    if (!existing || (!isOwnerOrAdmin && existing.createdBy !== user.userId)) return json({ error: "Form not found." }, 404);
 
     const body = await parseJson<FormBody>(request);
     const update: Record<string, unknown> = {};
@@ -386,7 +400,8 @@ export const customFormRoutes = {
     if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const form = await data.getById<any>(COLLECTIONS.customForms, params.id);
-    if (!form || form.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
+    const isOwnerOrAdmin = ["owner", "admin"].includes(user.role);
+    if (!form || (!isOwnerOrAdmin && form.createdBy !== user.userId)) return json({ error: "Form not found." }, 404);
 
     await data.delMany(COLLECTIONS.customFormResponses, [["formId", "==", form.id]]);
     await data.del(COLLECTIONS.customForms, form.id);
@@ -455,7 +470,8 @@ export const customFormRoutes = {
     if (!isStaffOrGranted(user, "forms.manage")) return json({ error: "Access denied." }, 403);
 
     const form = await data.getById<any>(COLLECTIONS.customForms, params.id);
-    if (!form || form.createdBy !== user.userId) return json({ error: "Form not found." }, 404);
+    const isOwnerOrAdmin = ["owner", "admin"].includes(user.role);
+    if (!form || (!isOwnerOrAdmin && form.createdBy !== user.userId)) return json({ error: "Form not found." }, 404);
 
     const responses = await data.findMany<any>(COLLECTIONS.customFormResponses, {
       where: [["formId", "==", form.id]],
@@ -488,7 +504,8 @@ export const customFormRoutes = {
     if (!response) return json({ error: "Response not found." }, 404);
 
     const form = await data.getById<any>(COLLECTIONS.customForms, response.formId);
-    if (!form || form.createdBy !== user.userId) return json({ error: "Response not found." }, 404);
+    const isOwnerOrAdmin = ["owner", "admin"].includes(user.role);
+    if (!form || (!isOwnerOrAdmin && form.createdBy !== user.userId)) return json({ error: "Response not found." }, 404);
 
     const body = await parseJson<DecisionBody>(request);
     const fieldId = body.fieldId?.trim();
