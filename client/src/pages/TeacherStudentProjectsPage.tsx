@@ -83,16 +83,27 @@ export default function TeacherStudentProjectsPage() {
           <Card className="overflow-hidden">
             <div className="divide-y divide-[var(--border)]">
               {projects.map((project) => {
-                const isSubmitted = project.status === "completed" && project.reviewStatus !== "declined";
+                const sub = studentId ? project.submissions?.[studentId] : null;
+                const legacySub = (project.studentIds?.length === 1 || project.submittedBy === studentId) && project.deployedUrl ? {
+                  deployedUrl: project.deployedUrl,
+                  submittedAt: project.submittedAt,
+                  reviewStatus: project.reviewStatus,
+                } : null;
+                const effectiveSub = sub || legacySub;
+
+                const isDeclined = effectiveSub?.reviewStatus === "declined";
+                const isAccepted = effectiveSub?.reviewStatus === "accepted";
+                const isSubmitted = !!effectiveSub?.deployedUrl;
+
                 return (
                   <Link
                     key={project.id}
-                    to={`/teacher/projects/${project.id}`}
+                    to={`/teacher/projects/${project.id}${studentId ? `?studentId=${studentId}` : ""}`}
                     className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-[var(--surface-muted)]/30"
                   >
                     <span
                       className={`min-w-0 flex-1 text-sm font-medium ${
-                        isSubmitted ? "text-[var(--fg-muted)] line-through" : "text-[var(--fg)]"
+                        isAccepted ? "text-[var(--fg-muted)] line-through" : "text-[var(--fg)]"
                       }`}
                     >
                       {project.title}
@@ -100,8 +111,12 @@ export default function TeacherStudentProjectsPage() {
                     {project.deadline && (
                       <span className="shrink-0 text-xs text-[var(--fg-muted)]">{formatDate(project.deadline)}</span>
                     )}
-                    {project.reviewStatus === "declined" ? (
-                      <Badge tone="danger">Declined</Badge>
+                    {isDeclined ? (
+                      <Badge tone="danger" dot>Declined</Badge>
+                    ) : isAccepted ? (
+                      <Badge tone="success" dot>Accepted</Badge>
+                    ) : isSubmitted ? (
+                      <Badge tone="info" dot>Submitted</Badge>
                     ) : (
                       <Badge tone={STATUS_TONES[project.status]}>{STATUS_LABELS[project.status]}</Badge>
                     )}

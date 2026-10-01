@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getProject, updateProject, deleteProject, assignStudentsToProject, removeStudentFromProject, reviewProject } from "../api";
 import TeacherShell from "../components/TeacherShell";
 import { ProjectBriefField } from "../components/ProjectBriefField";
@@ -27,8 +27,11 @@ const STATUS_TONE: Record<ProjectStatus, "success" | "info" | "neutral"> = {
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const studentIdParam = searchParams.get("studentId");
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -72,6 +75,40 @@ export default function ProjectDetailPage() {
       cancelled = true;
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!project) return;
+    const students = project.students ?? [];
+    if (students.length === 0) {
+      setSelectedStudentId(null);
+      return;
+    }
+    if (studentIdParam && students.some((s) => s.id === studentIdParam)) {
+      setSelectedStudentId(studentIdParam);
+      return;
+    }
+    if (selectedStudentId && students.some((s) => s.id === selectedStudentId)) {
+      return;
+    }
+    const withSub = students.find((s) => !!project.submissions?.[s.id]);
+    setSelectedStudentId(withSub ? withSub.id : students[0].id);
+  }, [project, studentIdParam]);
+
+  const selectedStudent = project?.students?.find((s) => s.id === selectedStudentId) ?? project?.students?.[0] ?? null;
+
+  const selectedSubmission = selectedStudent && project
+    ? project.submissions?.[selectedStudent.id] || (
+        ((project.students?.length === 1 || project.submittedBy === selectedStudent.id) && project.deployedUrl) ? {
+          studentId: selectedStudent.id,
+          studentName: selectedStudent.fullName,
+          studentEmail: selectedStudent.email,
+          deployedUrl: project.deployedUrl,
+          submittedAt: project.submittedAt || project.createdAt,
+          reviewStatus: project.reviewStatus,
+          reviewComment: project.reviewComment,
+        } : null
+      )
+    : null;
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -147,13 +184,21 @@ export default function ProjectDetailPage() {
     if (!project) return;
     await removeStudentFromProject(project.id, studentId);
     setProject((p) => p ? { ...p, students: p.students?.filter((s) => s.id !== studentId), studentIds: p.studentIds.filter((id) => id !== studentId) } : p);
+    if (selectedStudentId === studentId) {
+      setSelectedStudentId(null);
+    }
   }
 
   async function handleReview(action: "accepted" | "declined") {
     if (!project) return;
     setReviewing(true);
     try {
-      const updated = await reviewProject(project.id, action, action === "declined" ? declineComment || undefined : undefined);
+      const updated = await reviewProject(
+        project.id,
+        action,
+        action === "declined" ? declineComment || undefined : undefined,
+        selectedStudent?.id,
+      );
       setProject(updated);
       setDeclineOpen(false);
       setDeclineComment("");
@@ -230,33 +275,83 @@ export default function ProjectDetailPage() {
           <div className="space-y-6">
             {/* Submission */}
             <Card className="overflow-hidden">
-              <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-5 py-3">
-                <Icon.Upload className="h-4 w-4 text-[var(--fg-muted)]" />
-                <h2 className="text-sm font-semibold text-[var(--fg)]">Submission</h2>
+              <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <Icon.Upload className="h-4 w-4 text-[var(--fg-muted)]" />
+                  <h2 className="text-sm font-semibold text-[var(--fg)]">
+                    Submission {selectedStudent ? `· ${selectedStudent.fullName}` : ""}
+                  </h2>
+                </div>
+                {selectedSubmission?.reviewStatus ? (
+                  <Badge tone={selectedSubmission.reviewStatus === "accepted" ? "success" : "danger"} dot>
+                    {selectedSubmission.reviewStatus === "accepted" ? "Accepted" : "Declined"}
+                  </Badge>
+                ) : selectedSubmission?.deployedUrl ? (
+                  <Badge tone="info" dot>Submitted</Badge>
+                ) : null}
               </div>
 
-              {project.deployedUrl ? (
+              {/* Student selector dropdown if multiple students */}
+              {studentCount > 1 && (
+                <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg)] px-5 py-2.5">
+                  <label htmlFor="student-selector" className="text-xs font-medium text-[var(--fg-muted)]">
+                    Viewing student:
+                  </label>
+                  <select
+                    id="student-selector"
+                    value={selectedStudent?.id ?? ""}
+                    onChange={(e) => {
+                      setSelectedStudentId(e.target.value);
+                      setSearchParams({ studentId: e.target.value }, { replace: true });
+                    }}
+                    className="max-w-[240px] truncate rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium text-[var(--fg)] focus:outline-none focus:ring-1 focus:ring-[var(--accent)]"
+                  >
+                    {project.students!.map((s) => {
+                      const sub = project.submissions?.[s.id];
+                      const statusSuffix = sub?.reviewStatus ? ` (${sub.reviewStatus})` : sub?.deployedUrl ? " (submitted)" : "";
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.fullName}{statusSuffix}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {selectedSubmission?.deployedUrl ? (
                 <div className="space-y-5 px-5 py-5">
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[var(--fg-muted)]">Deployed URL</label>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="block text-xs font-medium text-[var(--fg-muted)]">
+                        Deployed URL {selectedStudent ? `(${selectedStudent.fullName})` : ""}
+                      </label>
+                      <a
+                        href={selectedSubmission.deployedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-[var(--accent)] hover:underline"
+                      >
+                        Open in new tab ↗
+                      </a>
+                    </div>
                     <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3.5 py-2.5">
                       <Icon.Link className="h-4 w-4 shrink-0 text-[var(--fg-muted)]" />
                       <a
-                        href={project.deployedUrl}
+                        href={selectedSubmission.deployedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--accent)] transition-colors hover:text-[var(--accent)]/80"
                       >
-                        {project.deployedUrl}
+                        {selectedSubmission.deployedUrl}
                       </a>
-                      <span className="shrink-0 text-xs text-[var(--fg-muted)]">↗</span>
                     </div>
                   </div>
 
-                  {project.submittedAt && (
+                  {selectedSubmission.submittedAt && (
                     <div className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
                       <Icon.Clock className="h-3.5 w-3.5" />
-                      <span>Submitted <strong className="font-medium text-[var(--fg)]">{new Date(project.submittedAt).toLocaleString()}</strong></span>
+                      <span>Submitted <strong className="font-medium text-[var(--fg)]">{new Date(selectedSubmission.submittedAt).toLocaleString()}</strong></span>
                     </div>
                   )}
 
@@ -267,7 +362,7 @@ export default function ProjectDetailPage() {
                       <span className="h-2.5 w-2.5 rounded-full bg-[#f5c33b]" />
                       <span className="h-2.5 w-2.5 rounded-full bg-[var(--success)]" />
                       <span className="ml-2 min-w-0 flex-1 truncate rounded bg-[var(--bg)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
-                        {project.deployedUrl}
+                        {selectedSubmission.deployedUrl}
                       </span>
                       <div className="flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--bg)] p-0.5">
                         {([
@@ -289,7 +384,7 @@ export default function ProjectDetailPage() {
                         ))}
                       </div>
                       <a
-                        href={project.deployedUrl}
+                        href={selectedSubmission.deployedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 rounded p-1 text-[var(--fg-subtle)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
@@ -307,7 +402,7 @@ export default function ProjectDetailPage() {
                         }}
                       >
                         <iframe
-                          src={project.deployedUrl}
+                          src={selectedSubmission.deployedUrl}
                           style={{ height: previewHeight, width: "100%" }}
                           className="border-0"
                           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-storage-access-by-user-activation"
@@ -323,26 +418,58 @@ export default function ProjectDetailPage() {
                     </div>
                   </div>
 
-                  {project.reviewStatus ? (
-                    <div className="flex items-start gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
-                      <Icon.Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success)]" />
-                      <div>
-                        <p className="text-sm font-medium text-[var(--fg)]">
-                          {project.reviewStatus === "accepted" ? "Submission accepted" : "Submission declined"}
-                        </p>
-                        {project.reviewComment && (
-                          <p className="mt-1 text-sm text-[var(--fg-muted)]">"{project.reviewComment}"</p>
+                  {selectedSubmission.reviewStatus ? (
+                    <div className="flex items-start justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        {selectedSubmission.reviewStatus === "accepted" ? (
+                          <Icon.Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success)]" />
+                        ) : (
+                          <Icon.X className="mt-0.5 h-4 w-4 shrink-0 text-[var(--danger)]" />
                         )}
+                        <div>
+                          <p className="text-sm font-medium text-[var(--fg)]">
+                            {selectedSubmission.reviewStatus === "accepted" ? "Submission accepted" : "Submission declined"}
+                          </p>
+                          {selectedSubmission.reviewComment && (
+                            <p className="mt-1 text-sm text-[var(--fg-muted)]">"{selectedSubmission.reviewComment}"</p>
+                          )}
+                          {selectedSubmission.reviewedBy && (
+                            <p className="mt-1 text-xs text-[var(--fg-subtle)]">
+                              Reviewed by {selectedSubmission.reviewedBy}
+                              {selectedSubmission.reviewedAt ? ` on ${new Date(selectedSubmission.reviewedAt).toLocaleDateString()}` : ""}
+                            </p>
+                          )}
+                        </div>
                       </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => {
+                          if (selectedSubmission.reviewStatus === "accepted") {
+                            setDeclineOpen(true);
+                          } else {
+                            handleReview("accepted");
+                          }
+                        }}
+                      >
+                        {selectedSubmission.reviewStatus === "accepted" ? "Change to decline" : "Change to accept"}
+                      </Button>
                     </div>
-                  ) : project.status === "completed" && (
+                  ) : (
                     <div className="space-y-4 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/30 px-4 py-4">
-                      <p className="text-xs font-medium text-[var(--fg-muted)]">Review this submission before marking.</p>
+                      <p className="text-xs font-medium text-[var(--fg-muted)]">
+                        Review {selectedStudent ? `${selectedStudent.fullName}'s` : "this"} submission.
+                      </p>
                       <div className="flex items-center gap-2">
                         <Button size="sm" onClick={() => handleReview("accepted")} loading={reviewing}>
                           Accept submission
                         </Button>
-                        <Button size="sm" variant="outline" className="border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger-soft)]" onClick={() => setDeclineOpen(true)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                          onClick={() => setDeclineOpen(true)}
+                        >
                           Decline submission
                         </Button>
                       </div>
@@ -356,7 +483,9 @@ export default function ProjectDetailPage() {
                   </div>
                   <div>
                     <p className="font-medium text-[var(--fg)]">Awaiting submission</p>
-                    <p className="mt-0.5 text-sm text-[var(--fg-muted)]">This project hasn't been submitted yet.</p>
+                    <p className="mt-0.5 text-sm text-[var(--fg-muted)]">
+                      {selectedStudent ? `${selectedStudent.fullName} hasn't submitted yet.` : "This project hasn't been submitted yet."}
+                    </p>
                   </div>
                 </div>
               )}
@@ -400,21 +529,70 @@ export default function ProjectDetailPage() {
                 </div>
               ) : (
                 <div className="flex-1 divide-y divide-[var(--border)]">
-                  {project.students!.map((student) => (
-                    <div key={student.id} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--surface-muted)]/30">
-                      <Avatar name={student.fullName} size="xs" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[var(--fg)]">{student.fullName}</p>
-                        <p className="truncate text-xs text-[var(--fg-muted)]">{student.email}</p>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveStudent(student.id)}
-                        className="shrink-0 text-xs text-[var(--fg-subtle)] transition-colors hover:text-[var(--danger)]"
+                  {project.students!.map((student) => {
+                    const isSelected = selectedStudent?.id === student.id;
+                    const sub = project.submissions?.[student.id];
+                    return (
+                      <div
+                        key={student.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          setSelectedStudentId(student.id);
+                          setSearchParams({ studentId: student.id }, { replace: true });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            setSelectedStudentId(student.id);
+                            setSearchParams({ studentId: student.id }, { replace: true });
+                          }
+                        }}
+                        className={`group flex cursor-pointer items-center gap-3 px-5 py-3 transition-colors ${
+                          isSelected
+                            ? "bg-[var(--accent-soft)]/50 border-l-[3px] border-[var(--accent)]"
+                            : "hover:bg-[var(--surface-muted)]/40"
+                        }`}
                       >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+                        <Avatar name={student.fullName} size="xs" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className={`truncate text-sm font-medium ${isSelected ? "text-[var(--accent)]" : "text-[var(--fg)]"}`}>
+                              {student.fullName}
+                            </p>
+                            {isSelected && (
+                              <span className="shrink-0 rounded bg-[var(--accent)]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--accent)]">
+                                Selected
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-2">
+                            <p className="truncate text-xs text-[var(--fg-muted)]">{student.email}</p>
+                            <span className="text-[var(--border)]">·</span>
+                            {sub?.reviewStatus === "accepted" ? (
+                              <Badge tone="success" dot size="sm">Accepted</Badge>
+                            ) : sub?.reviewStatus === "declined" ? (
+                              <Badge tone="danger" dot size="sm">Declined</Badge>
+                            ) : sub?.deployedUrl ? (
+                              <Badge tone="info" dot size="sm">Submitted</Badge>
+                            ) : (
+                              <span className="text-[11px] text-[var(--fg-subtle)]">Pending</span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveStudent(student.id);
+                          }}
+                          className="shrink-0 text-xs text-[var(--fg-subtle)] transition-colors hover:text-[var(--danger)]"
+                          title="Remove student from project"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
@@ -490,7 +668,7 @@ export default function ProjectDetailPage() {
       <Modal
         open={declineOpen}
         onClose={() => setDeclineOpen(false)}
-        title="Decline project?"
+        title={selectedStudent ? `Decline submission for ${selectedStudent.fullName}?` : "Decline project?"}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setDeclineOpen(false)}>Cancel</Button>
@@ -503,7 +681,7 @@ export default function ProjectDetailPage() {
         {project && (
           <div className="space-y-4">
             <p className="text-sm text-[var(--fg-muted)]">
-              This will mark <strong className="text-[var(--fg)]">{project.title}</strong> as declined.
+              This will mark <strong className="text-[var(--fg)]">{selectedStudent ? `${selectedStudent.fullName}'s submission` : project.title}</strong> as declined.
             </p>
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Comment (optional)</label>

@@ -177,8 +177,8 @@ export function submitProject(projectId: string, deployedUrl: string) {
   return api<Project>(`/projects/${projectId}/submit`, { method: "POST", body: JSON.stringify({ deployedUrl }) });
 }
 
-export function reviewProject(projectId: string, action: "accepted" | "declined", comment?: string) {
-  return api<Project>(`/projects/${projectId}/review`, { method: "POST", body: JSON.stringify({ action, comment }) });
+export function reviewProject(projectId: string, action: "accepted" | "declined", comment?: string, studentId?: string) {
+  return api<Project>(`/projects/${projectId}/review`, { method: "POST", body: JSON.stringify({ action, comment, studentId }) });
 }
 
 // In-app notifications

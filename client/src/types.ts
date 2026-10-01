@@ -407,6 +407,18 @@ export type QuizAttempt = {
 
 export type ProjectStatus = "active" | "completed" | "archived";
 
+export type ProjectSubmission = {
+  studentId: string;
+  studentName?: string;
+  studentEmail?: string;
+  deployedUrl: string;
+  submittedAt: string;
+  reviewStatus?: "accepted" | "declined" | null;
+  reviewComment?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+};
+
 export type Project = {
   id: string;
   title: string;
@@ -418,8 +430,10 @@ export type Project = {
   deadline: string | null;
   deployedUrl?: string | null;
   submittedAt?: string | null;
+  submittedBy?: string | null;
   reviewStatus?: "accepted" | "declined" | null;
   reviewComment?: string | null;
+  submissions?: Record<string, ProjectSubmission>;
   createdBy: string;
   createdByName: string;
   createdAt: string;

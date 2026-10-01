@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listProjects, createProject, submitProject } from "../api";
+import { useAuth } from "../context/AuthContext";
 import StudentShell from "../components/StudentShell";
 import { ProjectBriefField } from "../components/ProjectBriefField";
 import { toast } from "../components/Toast";
@@ -13,6 +14,7 @@ import { Modal } from "../components/ui/Modal";
 import type { Project } from "../types";
 
 export default function StudentProjectsPage() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -118,7 +120,18 @@ export default function StudentProjectsPage() {
           <Card className="overflow-hidden">
             <div className="divide-y divide-[var(--border)]">
               {projects.map((project) => {
-                const isCompleted = project.status === "completed" && project.reviewStatus !== "declined";
+                const mySub = user ? project.submissions?.[user.id] : null;
+                const legacySub = (project.studentIds?.length === 1 || project.submittedBy === user?.id) && project.deployedUrl ? {
+                  deployedUrl: project.deployedUrl,
+                  submittedAt: project.submittedAt,
+                  reviewStatus: project.reviewStatus,
+                } : null;
+                const effectiveSub = mySub || legacySub;
+
+                const isDeclined = effectiveSub?.reviewStatus === "declined";
+                const isAccepted = effectiveSub?.reviewStatus === "accepted";
+                const isSubmitted = !!effectiveSub?.deployedUrl;
+
                 return (
                   <div
                     key={project.id}
@@ -127,7 +140,7 @@ export default function StudentProjectsPage() {
                     <Link
                       to={`/student/projects/${project.id}`}
                       className={`min-w-0 flex-1 text-sm font-medium ${
-                        isCompleted ? "text-[var(--fg-muted)] line-through" : "text-[var(--fg)]"
+                        isAccepted ? "text-[var(--fg-muted)] line-through" : "text-[var(--fg)]"
                       } transition-colors hover:text-[var(--accent)]`}
                     >
                       {project.title}
@@ -135,15 +148,22 @@ export default function StudentProjectsPage() {
                     {project.deadline && (
                       <span className="shrink-0 text-xs text-[var(--fg-muted)]">{formatDate(project.deadline)}</span>
                     )}
-                    {project.reviewStatus === "declined" ? (
+                    {isDeclined ? (
                       <div className="flex items-center gap-2">
                         <Badge tone="danger" dot>Declined</Badge>
-                        <Button size="sm" onClick={() => { setSubmitTarget(project); setSubmitUrl(""); }}>
+                        <Button size="sm" onClick={() => { setSubmitTarget(project); setSubmitUrl(effectiveSub?.deployedUrl || ""); }}>
                           Resubmit
                         </Button>
                       </div>
-                    ) : isCompleted ? (
-                      <Badge tone="success" dot>Submitted</Badge>
+                    ) : isAccepted ? (
+                      <Badge tone="success" dot>Accepted</Badge>
+                    ) : isSubmitted ? (
+                      <div className="flex items-center gap-2">
+                        <Badge tone="info" dot>Submitted</Badge>
+                        <Button size="sm" variant="ghost" onClick={() => { setSubmitTarget(project); setSubmitUrl(effectiveSub?.deployedUrl || ""); }}>
+                          Edit URL
+                        </Button>
+                      </div>
                     ) : (
                       <Button size="sm" onClick={() => { setSubmitTarget(project); setSubmitUrl(""); }}>
                         Submit

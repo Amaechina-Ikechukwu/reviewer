@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { getProject, updateProject, deleteProject } from "../api";
+import { getProject, updateProject, deleteProject, submitProject } from "../api";
 import { useAuth } from "../context/AuthContext";
 import StudentShell from "../components/StudentShell";
 import { ProjectBriefField } from "../components/ProjectBriefField";
@@ -42,6 +42,9 @@ export default function StudentProjectDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const [submitUrl, setSubmitUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const [previewHeight, setPreviewHeight] = useState(400);
   const [previewDevice, setPreviewDevice] = useState<"laptop" | "tablet" | "mobile">("laptop");
@@ -109,6 +112,35 @@ export default function StudentProjectDetailPage() {
   }
 
   const isCreator = project && user && project.createdBy === user.id;
+
+  const mySubmission = (user && project?.submissions?.[user.id]) || (
+    project && ((project.studentIds?.length === 1 || project.submittedBy === user?.id) && project.deployedUrl) ? {
+      studentId: user?.id ?? "",
+      deployedUrl: project.deployedUrl,
+      submittedAt: project.submittedAt || project.createdAt,
+      reviewStatus: project.reviewStatus,
+      reviewComment: project.reviewComment,
+    } : null
+  );
+
+  async function handleSubmit() {
+    if (!project || !submitUrl.trim()) return;
+    setSubmitting(true);
+    try {
+      let url = submitUrl.trim();
+      if (!/^https?:\/\//i.test(url)) {
+        url = `https://${url}`;
+      }
+      const updated = await submitProject(project.id, url);
+      setProject(updated);
+      setSubmitOpen(false);
+      setSubmitUrl("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to submit project");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   async function handleSave() {
     if (!project) return;
@@ -205,33 +237,51 @@ export default function StudentProjectDetailPage() {
         <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
           {/* Submission */}
           <div className="space-y-6">
-            {project.deployedUrl ? (
+            {mySubmission?.deployedUrl ? (
               <Card className="overflow-hidden">
-                <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-5 py-3">
-                  <Icon.Upload className="h-4 w-4 text-[var(--fg-muted)]" />
-                  <h2 className="text-sm font-semibold text-[var(--fg)]">Submission</h2>
+                <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-muted)]/50 px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <Icon.Upload className="h-4 w-4 text-[var(--fg-muted)]" />
+                    <h2 className="text-sm font-semibold text-[var(--fg)]">Your Submission</h2>
+                  </div>
+                  {mySubmission.reviewStatus ? (
+                    <Badge tone={mySubmission.reviewStatus === "accepted" ? "success" : "danger"} dot>
+                      {mySubmission.reviewStatus === "accepted" ? "Accepted" : "Declined"}
+                    </Badge>
+                  ) : (
+                    <Badge tone="info" dot>Submitted</Badge>
+                  )}
                 </div>
                 <div className="space-y-5 px-5 py-5">
                   <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[var(--fg-muted)]">Deployed URL</label>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="block text-xs font-medium text-[var(--fg-muted)]">Deployed URL</label>
+                      <button
+                        type="button"
+                        onClick={() => { setSubmitUrl(mySubmission.deployedUrl); setSubmitOpen(true); }}
+                        className="text-xs text-[var(--accent)] hover:underline"
+                      >
+                        Update URL
+                      </button>
+                    </div>
                     <div className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3.5 py-2.5">
                       <Icon.Link className="h-4 w-4 shrink-0 text-[var(--fg-muted)]" />
                       <a
-                        href={project.deployedUrl}
+                        href={mySubmission.deployedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--accent)] transition-colors hover:text-[var(--accent)]/80"
                       >
-                        {project.deployedUrl}
+                        {mySubmission.deployedUrl}
                       </a>
                       <span className="shrink-0 text-xs text-[var(--fg-muted)]">↗</span>
                     </div>
                   </div>
 
-                  {project.submittedAt && (
+                  {mySubmission.submittedAt && (
                     <div className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
                       <Icon.Clock className="h-3.5 w-3.5" />
-                      <span>Submitted <strong className="font-medium text-[var(--fg)]">{new Date(project.submittedAt).toLocaleString()}</strong></span>
+                      <span>Submitted <strong className="font-medium text-[var(--fg)]">{new Date(mySubmission.submittedAt).toLocaleString()}</strong></span>
                     </div>
                   )}
 
@@ -242,7 +292,7 @@ export default function StudentProjectDetailPage() {
                       <span className="h-2.5 w-2.5 rounded-full bg-[#f5c33b]" />
                       <span className="h-2.5 w-2.5 rounded-full bg-[var(--success)]" />
                       <span className="ml-2 min-w-0 flex-1 truncate rounded bg-[var(--bg)] px-2 py-0.5 text-[11px] text-[var(--fg-muted)]">
-                        {project.deployedUrl}
+                        {mySubmission.deployedUrl}
                       </span>
                       <div className="flex shrink-0 items-center gap-0.5 rounded-md bg-[var(--bg)] p-0.5">
                         {([
@@ -264,7 +314,7 @@ export default function StudentProjectDetailPage() {
                         ))}
                       </div>
                       <a
-                        href={project.deployedUrl}
+                        href={mySubmission.deployedUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 rounded p-1 text-[var(--fg-subtle)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--fg)]"
@@ -282,7 +332,7 @@ export default function StudentProjectDetailPage() {
                         }}
                       >
                         <iframe
-                          src={project.deployedUrl}
+                          src={mySubmission.deployedUrl}
                           style={{ height: previewHeight, width: "100%" }}
                           className="border-0"
                           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-storage-access-by-user-activation"
@@ -298,31 +348,45 @@ export default function StudentProjectDetailPage() {
                     </div>
                   </div>
 
-                  {project.reviewStatus && (
-                    <div className="flex items-start gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
-                      <Icon.Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success)]" />
-                      <div>
-                        <p className="text-sm font-medium text-[var(--fg)]">
-                          {project.reviewStatus === "accepted" ? "Submission accepted" : "Submission declined"}
-                        </p>
-                        {project.reviewComment && (
-                          <p className="mt-1 text-sm text-[var(--fg-muted)]">"{project.reviewComment}"</p>
+                  {mySubmission.reviewStatus && (
+                    <div className="flex items-start justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+                      <div className="flex items-start gap-3">
+                        {mySubmission.reviewStatus === "accepted" ? (
+                          <Icon.Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--success)]" />
+                        ) : (
+                          <Icon.X className="mt-0.5 h-4 w-4 shrink-0 text-[var(--danger)]" />
                         )}
+                        <div>
+                          <p className="text-sm font-medium text-[var(--fg)]">
+                            {mySubmission.reviewStatus === "accepted" ? "Submission accepted" : "Submission declined"}
+                          </p>
+                          {mySubmission.reviewComment && (
+                            <p className="mt-1 text-sm text-[var(--fg-muted)]">"{mySubmission.reviewComment}"</p>
+                          )}
+                        </div>
                       </div>
+                      {mySubmission.reviewStatus === "declined" && (
+                        <Button size="sm" onClick={() => { setSubmitUrl(mySubmission.deployedUrl); setSubmitOpen(true); }}>
+                          Resubmit
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
               </Card>
             ) : (
               <Card>
-                <div className="flex flex-col items-center gap-3 px-5 py-14 text-center">
+                <div className="flex flex-col items-center gap-4 px-5 py-14 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent-soft)]">
                     <Icon.Folder className="h-6 w-6 text-[var(--accent)]" />
                   </div>
                   <div>
-                    <p className="font-medium text-[var(--fg)]">Awaiting submission</p>
-                    <p className="mt-0.5 text-sm text-[var(--fg-muted)]">This project hasn't been submitted yet.</p>
+                    <p className="font-medium text-[var(--fg)]">Awaiting your submission</p>
+                    <p className="mt-0.5 text-sm text-[var(--fg-muted)]">You haven't submitted your deployed project URL yet.</p>
                   </div>
+                  <Button onClick={() => { setSubmitUrl(""); setSubmitOpen(true); }}>
+                    Submit Project
+                  </Button>
                 </div>
               </Card>
             )}
@@ -356,15 +420,30 @@ export default function StudentProjectDetailPage() {
                   </span>
                 </div>
                 <div className="divide-y divide-[var(--border)]">
-                  {project.students.map((student) => (
-                    <div key={student.id} className="flex items-center gap-3 px-5 py-3">
-                      <Avatar name={student.fullName} size="xs" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-[var(--fg)]">{student.fullName}</p>
-                        <p className="truncate text-xs text-[var(--fg-muted)]">{student.email}</p>
+                  {project.students.map((student) => {
+                    const mateSub = project.submissions?.[student.id];
+                    const isMe = user?.id === student.id;
+                    return (
+                      <div key={student.id} className="flex items-center gap-3 px-5 py-3">
+                        <Avatar name={student.fullName} size="xs" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-[var(--fg)]">
+                            {student.fullName} {isMe ? <span className="text-xs text-[var(--accent)] font-semibold">(You)</span> : ""}
+                          </p>
+                          <p className="truncate text-xs text-[var(--fg-muted)]">{student.email}</p>
+                        </div>
+                        {mateSub?.reviewStatus === "accepted" ? (
+                          <Badge tone="success" dot size="sm">Accepted</Badge>
+                        ) : mateSub?.reviewStatus === "declined" ? (
+                          <Badge tone="danger" dot size="sm">Declined</Badge>
+                        ) : mateSub?.deployedUrl ? (
+                          <Badge tone="info" dot size="sm">Submitted</Badge>
+                        ) : (
+                          <span className="text-[11px] text-[var(--fg-subtle)]">Pending</span>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </Card>
             </div>
@@ -418,6 +497,34 @@ export default function StudentProjectDetailPage() {
             This cannot be undone.
           </p>
         )}
+      </Modal>
+
+      <Modal
+        open={submitOpen}
+        onClose={() => setSubmitOpen(false)}
+        title={`Submit "${project.title}"`}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setSubmitOpen(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={submitting || !submitUrl.trim()}>
+              {submitting ? "Submitting..." : "Submit"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-[var(--fg)]">Deployed URL</label>
+            <Input
+              value={submitUrl}
+              onChange={(e) => setSubmitUrl(e.target.value)}
+              placeholder="https://your-project.vercel.app"
+            />
+            <p className="mt-1 text-xs text-[var(--fg-muted)]">
+              Enter the URL where your project is deployed and accessible.
+            </p>
+          </div>
+        </div>
       </Modal>
     </StudentShell>
   );

@@ -56,6 +56,36 @@ async function withStudents(project: any): Promise<any> {
   } else if (project) {
     project.students = [];
   }
+
+  if (project) {
+    project.submissions = project.submissions || {};
+    if (project.deployedUrl && Object.keys(project.submissions).length === 0) {
+      if (project.studentIds?.length === 1) {
+        const sid = project.studentIds[0];
+        const st = project.students?.find((s: any) => s.id === sid);
+        project.submissions[sid] = {
+          studentId: sid,
+          studentName: st?.fullName,
+          studentEmail: st?.email,
+          deployedUrl: project.deployedUrl,
+          submittedAt: project.submittedAt || project.createdAt,
+          reviewStatus: project.reviewStatus || null,
+          reviewComment: project.reviewComment || null,
+        };
+      }
+    } else if (project.submissions && project.students) {
+      for (const [sid, sub] of Object.entries<any>(project.submissions)) {
+        if (!sub.studentName || !sub.studentEmail) {
+          const st = project.students.find((s: any) => s.id === sid);
+          if (st) {
+            sub.studentName = sub.studentName || st.fullName;
+            sub.studentEmail = sub.studentEmail || st.email;
+          }
+        }
+      }
+    }
+  }
+
   return project;
 }
 
@@ -352,24 +382,47 @@ export const projectRoutes = {
       return json({ error: "You are not a member of this project." }, 403);
     }
 
-    if (project.status === "completed" && project.reviewStatus !== "declined") {
-      return json({ error: "Project is already submitted." }, 400);
+    const existingSubmissions = { ...(project.submissions || {}) };
+    const mySub = existingSubmissions[user.userId];
+    if (mySub && mySub.reviewStatus === "accepted") {
+      return json({ error: "Your submission has already been accepted." }, 400);
     }
 
     const body = await parseJson<{ deployedUrl: string }>(request);
     if (!body.deployedUrl?.trim()) return json({ error: "Deployed URL is required." }, 400);
 
     const deployedUrl = normalizeUrl(body.deployedUrl);
-
     const submittedAt = new Date().toISOString();
 
-    const updated = await data.update<any>(COLLECTIONS.projects, project.id, {
-      status: "completed",
+    const submission = {
+      studentId: user.userId,
+      studentName: user.fullName,
+      studentEmail: user.email,
       deployedUrl,
       submittedAt,
       reviewStatus: null,
       reviewComment: null,
-    });
+    };
+
+    existingSubmissions[user.userId] = submission;
+
+    const allSubmitted = project.studentIds?.length > 0 &&
+      project.studentIds.every((id: string) => !!existingSubmissions[id]);
+
+    const updatePayload: Record<string, unknown> = {
+      submissions: existingSubmissions,
+      deployedUrl,
+      submittedAt,
+      submittedBy: user.userId,
+      reviewStatus: null,
+      reviewComment: null,
+    };
+
+    if (allSubmitted || (project.studentIds || []).length <= 1) {
+      updatePayload.status = "completed";
+    }
+
+    const updated = await data.update<any>(COLLECTIONS.projects, project.id, updatePayload);
 
     // Notify staff via email
     const allUsers = await data.findMany<any>(COLLECTIONS.users, {});
@@ -388,20 +441,20 @@ export const projectRoutes = {
       });
     }
 
-    // Create in-app notifications for all staff
+    // Create in-app notifications for all staff with direct link to student's submission
     const notificationId = randomUUID();
     await data.insert(COLLECTIONS.inAppNotifications, notificationId, {
       recipientId: null, // null = all staff; could expand to per-user later
       type: "project_submission",
       title: "Project submitted",
       body: `${user.fullName} submitted "${project.title}"`,
-      link: `/teacher/projects/${project.id}`,
+      link: `/teacher/projects/${project.id}?studentId=${user.userId}`,
       read: false,
       forRole: "staff",
     });
 
     await withStudents(updated);
-    audit({ actorId: user.userId, actorEmail: user.email, action: "project.submit", targetType: "project", targetId: project.id, details: { deployedUrl } });
+    audit({ actorId: user.userId, actorEmail: user.email, action: "project.submit", targetType: "project", targetId: project.id, details: { studentId: user.userId, deployedUrl } });
     return json(updated);
   },
 
@@ -412,37 +465,68 @@ export const projectRoutes = {
     const project = await data.getById<any>(COLLECTIONS.projects, params.id);
     if (!project) return json({ error: "Project not found." }, 404);
 
-    if (project.status !== "completed") {
-      return json({ error: "Project has not been submitted yet." }, 400);
-    }
-
-    const body = await parseJson<{ action: "accepted" | "declined"; comment?: string }>(request);
+    const body = await parseJson<{ action: "accepted" | "declined"; comment?: string; studentId?: string }>(request);
     if (!["accepted", "declined"].includes(body.action)) {
       return json({ error: "Invalid action. Must be 'accepted' or 'declined'." }, 400);
     }
 
     const accepted = body.action === "accepted";
+    const submissions = { ...(project.submissions || {}) };
+
+    let targetStudentId = body.studentId;
+    if (!targetStudentId) {
+      if (project.studentIds?.length === 1) {
+        targetStudentId = project.studentIds[0];
+      } else {
+        targetStudentId = project.studentIds?.find((id: string) => submissions[id]);
+      }
+    }
+
+    if (!targetStudentId) {
+      return json({ error: "Student ID is required to review submission." }, 400);
+    }
+
+    let sub = submissions[targetStudentId];
+    if (!sub && project.deployedUrl) {
+      sub = {
+        studentId: targetStudentId,
+        deployedUrl: project.deployedUrl,
+        submittedAt: project.submittedAt || new Date().toISOString(),
+      };
+    }
+
+    if (!sub) {
+      return json({ error: "This student has not submitted yet." }, 400);
+    }
+
+    sub = {
+      ...sub,
+      reviewStatus: body.action,
+      reviewComment: body.comment ?? null,
+      reviewedBy: user.fullName,
+      reviewedAt: new Date().toISOString(),
+    };
+    submissions[targetStudentId] = sub;
 
     const update: Record<string, unknown> = {
+      submissions,
       reviewStatus: body.action,
+      reviewComment: body.comment ?? null,
     };
-    if (body.comment) update.reviewComment = body.comment;
-    if (!accepted) update.status = "active";
+
+    if (!accepted && (project.studentIds || []).length <= 1) {
+      update.status = "active";
+    }
 
     const updated = await data.update<any>(COLLECTIONS.projects, project.id, update);
     await withStudents(updated);
 
-    // Notify the project members
-    const allUsers = await data.findMany<any>(COLLECTIONS.users, {});
-    const members = allUsers.filter((u: any) => project.studentIds?.includes(u.id));
-    const recipients = members
-      .filter((u: any) => u.email && !u.email.endsWith("@historical.reviewai.local"))
-      .map((u: any) => ({ email: u.email, fullName: u.fullName }));
-
-    if (recipients.length > 0) {
+    // Notify the reviewed student
+    const studentUser = await data.getById<any>(COLLECTIONS.users, targetStudentId);
+    if (studentUser && studentUser.email && !studentUser.email.endsWith("@historical.reviewai.local")) {
       enqueueEmailJob({
         kind: "project_review",
-        recipients,
+        recipients: [{ email: studentUser.email, fullName: studentUser.fullName }],
         payload: {
           project: { id: project.id, title: project.title },
           action: body.action,
@@ -453,12 +537,12 @@ export const projectRoutes = {
       });
     }
 
-    // In-app notification for project members
-    for (const member of members) {
+    // In-app notification for the reviewed student
+    if (studentUser) {
       const notifId = randomUUID();
       const actionLabel = accepted ? "Accepted" : "Declined";
       await data.insert(COLLECTIONS.inAppNotifications, notifId, {
-        recipientId: member.id,
+        recipientId: targetStudentId,
         type: "project_review",
         title: `Project ${actionLabel.toLowerCase()}`,
         body: accepted
@@ -470,7 +554,7 @@ export const projectRoutes = {
       });
     }
 
-    audit({ actorId: user.userId, actorEmail: user.email, action: "project.review", targetType: "project", targetId: project.id, details: { action: body.action, comment: body.comment } });
+    audit({ actorId: user.userId, actorEmail: user.email, action: "project.review", targetType: "project", targetId: project.id, details: { studentId: targetStudentId, action: body.action, comment: body.comment } });
     return json(updated);
   },
 };
